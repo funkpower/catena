@@ -26,6 +26,7 @@ Each tool installs by name, so you can take one without taking the rest.
 | [`booksniff`](crates/booksniff/README.md) | What a file actually is, whatever its name claims |
 | [`pdftriage`](crates/pdftriage/README.md) | Whether a PDF's text layer is worth reading, or whether it has to be OCRed |
 | [`bibclean`](crates/bibclean/README.md) | Catalogue records audited and repaired, with a reason for every change |
+| [`vocabmerge`](crates/bibclean/README.md#vocabmerge--the-other-command) | The near-duplicate headings in a catalogue's vocabulary |
 | [`mdscrub`](crates/mdscrub/README.md) | Converted markdown in, clean markdown out |
 | [`chunkmd`](crates/chunkmd/README.md) | Markdown into passages that carry their page, chapter and role |
 | [`cuenorm`](crates/cuenorm/README.md) | Any subtitle format in, one normalised cue stream out |

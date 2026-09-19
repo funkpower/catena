@@ -37,7 +37,7 @@ cargo install --git https://git.pumpin.online/funkpower/catena booksniff
 
 ## Example
 
-Three files, one of which is not what it says it is:
+`atlas.pdf` is a DjVu that somebody renamed:
 
 ```
 $ booksniff --plain book.pdf atlas.pdf chapter.md

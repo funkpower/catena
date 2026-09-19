@@ -100,6 +100,23 @@ where
     read_with_limit(reader, MAX_LINE)
 }
 
+/// Read a stream of anything JSON, one per line, without checking a version.
+///
+/// For a stream that is not one of this suite's records — a list exported
+/// from somebody else's catalogue, say. Everything else about the reading is
+/// the same: the line limit, the blank lines, the byte-order mark, and
+/// stopping at the first line that does not parse.
+pub fn read_any<T, R>(reader: R) -> impl Iterator<Item = Result<T, Error>>
+where
+    T: serde::de::DeserializeOwned,
+    R: BufRead,
+{
+    stop_at_first_error(lines(reader, MAX_LINE).map(|line| {
+        let (at, line) = line?;
+        serde_json::from_str(&line).map_err(|source| Error::Parse { line: at, source })
+    }))
+}
+
 /// Read a stream of records, one per line, refusing any line longer than
 /// `limit` bytes.
 ///
@@ -107,11 +124,45 @@ where
 /// still reads, and a byte-order mark at the very front is ignored. The
 /// iterator ends at the first error: a bad line means the producer and the
 /// consumer disagree about the contract, and reading on would bury that.
-pub fn read_with_limit<T, R>(mut reader: R, limit: usize) -> impl Iterator<Item = Result<T, Error>>
+pub fn read_with_limit<T, R>(reader: R, limit: usize) -> impl Iterator<Item = Result<T, Error>>
 where
     T: Record,
     R: BufRead,
 {
+    stop_at_first_error(lines(reader, limit).map(|line| {
+        let (at, line) = line?;
+        match serde_json::from_str::<T>(&line) {
+            Err(source) => Err(Error::Parse { line: at, source }),
+            Ok(record) if record.version() != crate::V => Err(Error::Version {
+                line: at,
+                found: record.version(),
+                expected: crate::V,
+            }),
+            Ok(record) => Ok(record),
+        }
+    }))
+}
+
+/// End a stream at its first error.
+///
+/// A bad line means the producer and the consumer disagree about the
+/// contract, and reading on would bury that.
+fn stop_at_first_error<T>(
+    records: impl Iterator<Item = Result<T, Error>>,
+) -> impl Iterator<Item = Result<T, Error>> {
+    let mut stopped = false;
+    records.take_while(move |record| {
+        let carry_on = !stopped;
+        stopped |= record.is_err();
+        carry_on
+    })
+}
+
+/// The lines of a stream, numbered, bounded, and without the blank ones.
+fn lines<R: BufRead>(
+    mut reader: R,
+    limit: usize,
+) -> impl Iterator<Item = Result<(u64, String), Error>> {
     let mut line_no = 0u64;
     let mut buf = Vec::new();
     let mut done = false;
@@ -171,25 +222,7 @@ where
             if line.trim().is_empty() {
                 continue;
             }
-
-            return Some(match serde_json::from_str::<T>(line) {
-                Err(source) => {
-                    done = true;
-                    Err(Error::Parse {
-                        line: line_no,
-                        source,
-                    })
-                }
-                Ok(record) if record.version() != crate::V => {
-                    done = true;
-                    Err(Error::Version {
-                        line: line_no,
-                        found: record.version(),
-                        expected: crate::V,
-                    })
-                }
-                Ok(record) => Ok(record),
-            });
+            return Some(Ok((line_no, line.to_string())));
         }
     })
 }
@@ -293,6 +326,33 @@ mod tests {
             }
             other => panic!("expected a length error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_stream_that_is_not_one_of_these_records_reads_without_a_version() {
+        #[derive(Debug, PartialEq, serde::Deserialize)]
+        struct Heading {
+            name: String,
+        }
+        let input = "{\"name\":\"Philosophy\"}\n{\"name\":\"History\"}\n";
+        let headings: Vec<Heading> = read_any(input.as_bytes())
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(headings.len(), 2);
+        assert_eq!(headings[1].name, "History");
+    }
+
+    #[test]
+    fn an_unversioned_stream_still_stops_at_a_bad_line() {
+        #[derive(Debug, serde::Deserialize)]
+        struct Heading {
+            #[allow(dead_code)]
+            name: String,
+        }
+        let mut stream = read_any::<Heading, _>("{\"name\":\"x\"}\nnot json\n".as_bytes());
+        assert!(stream.next().unwrap().is_ok());
+        assert!(stream.next().unwrap().is_err());
+        assert!(stream.next().is_none());
     }
 
     #[test]

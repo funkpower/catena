@@ -2,6 +2,10 @@
 
 Catalogue records audited and repaired, with a reason for every change.
 
+Two commands: `bibclean` for the records, and
+[`vocabmerge`](#vocabmerge--the-other-command) for the headings they are filed
+under.
+
 Part of [catena](../../README.md).
 
 ## What it does
@@ -35,7 +39,7 @@ cargo install --git https://git.pumpin.online/funkpower/catena bibclean
 
 ## Example
 
-Five records, four of which have something wrong with them:
+Five records in, four of them wanting attention:
 
 ```
 $ bibclean --flagged books.ndjson
@@ -200,6 +204,90 @@ an author field is wrong while "Oxford, Michael" is a person.
 Everything else is named and left alone, because the fix needs a lookup and a
 wrong guess in a catalogue is harder to find than a missing value.
 
+## vocabmerge — the other command
+
+A catalogue's headings accumulate spellings. The same person is entered
+surname-first once and given-name-first twice; a publisher appears with and
+without its legal suffix; a subject grows a stray bracket. Each spelling is a
+separate heading, so the works under one are invisible from the others.
+
+`vocabmerge` reads a list of headings and says what should happen to them:
+
+```
+$ vocabmerge --kind author authors.ndjson
+{"kind":"author","action":"merge","keep":"Fyodor Dostoevsky","drop":"Dostoevsky, Fyodor","keep_id":3,"drop_id":1,"keep_count":11,"drop_count":3,"method":"last_first","confidence":0.9,"evidence":"3 books as 'Dostoevsky, Fyodor' → 'Fyodor Dostoevsky' (11)"}
+{"kind":"author","action":"merge","keep":"Fyodor Dostoevsky","drop":"Dostoevsky| Fyodor","keep_id":3,"drop_id":2,"keep_count":11,"drop_count":1,"method":"last_first","confidence":0.9,"evidence":"1 books as 'Dostoevsky| Fyodor' → 'Fyodor Dostoevsky' (11)"}
+```
+
+Subjects get the same treatment, plus the headings that are not subjects at
+all:
+
+```
+$ vocabmerge --kind tag tags.ndjson
+{"kind":"tag","action":"merge","keep":"Philosophy","drop":"[Philosophy]",…,"method":"tag_norm","confidence":0.9,…}
+{"kind":"tag","action":"merge","keep":"Philosophy","drop":"Philosophy.",…,"method":"tag_norm","confidence":0.9,…}
+{"kind":"tag","action":"delete","keep":null,"drop":"z-lib.org",…,"method":"junk_tag:format-or-watermark","confidence":0.92,"evidence":"format-or-watermark: 'z-lib.org' on 300 books"}
+{"kind":"tag","action":"delete","keep":null,"drop":"9780198237907",…,"method":"junk_tag:isbn","confidence":0.92,"evidence":"isbn: '9780198237907' on 1 books"}
+```
+
+`18th Century` and `Philosophy` are left alone: the deletion rules are
+high-precision on purpose, because a real subject swept up by one is a shelf
+nobody can find again.
+
+### Input
+
+One heading per line — an `id`, a `name`, and the `count` of works under it:
+
+```json
+{"id":1,"name":"Dostoevsky, Fyodor","count":3}
+```
+
+### Options
+
+| Option | Effect |
+|---|---|
+| `--kind <author\|publisher\|tag>` | What kind of heading the list holds |
+| `--rules <FILE>` | Vocabulary specific to this collection |
+
+The rules file is JSON, and today holds one thing:
+
+```json
+{"device_prefixes": ["alexskobo"]}
+```
+
+An e-reader stamps its own name onto every book it touches. The generic device
+names are built in; one named after its owner is a fact about a single
+collection, so it is supplied rather than compiled in.
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Nothing to propose |
+| `1` | Something to propose |
+| `64` | The command line was wrong |
+| `65` | A heading could not be read |
+| `74` | The input could not be read |
+
+### How headings are grouped
+
+| Kind | Joined when |
+|---|---|
+| `author` | They normalise to the same string, **or** they are the same words in a different order and both read as a person's name |
+| `publisher` | They are the same once the legal suffixes and the words `press`, `books`, `university` and the like are removed |
+| `tag` | They normalise to the same string, brackets and trailing stops ignored |
+
+Author groups join both rules at once, deliberately. Otherwise two
+surname-first spellings merge onto each other and neither ever reaches the
+given-name-first heading that most of the works are actually under.
+
+The heading kept is the one with the most works, then the cleaner spelling of
+it — shouting, a trailing separator, a legal suffix and a leading bracket all
+count against a heading, and spaced initials count for one.
+
+A respelling is trusted further than an inversion: `strict_norm` at 0.95,
+`last_first` at 0.9, a publisher family at 0.8, a junk subject at 0.92.
+
 ## As a library
 
 ```rust
@@ -213,7 +301,8 @@ if bibclean::reasons::worth_fixing(&cleaned.reasons) {
 
 The pieces are usable on their own: `bibclean::isbn::valid`,
 `bibclean::isbn::from_filename`, `bibclean::fix::title_case`,
-`bibclean::matching::same_work`, `bibclean::slug::slug_for`.
+`bibclean::matching::same_work`, `bibclean::slug::slug_for`,
+`bibclean::vocab::cluster`.
 
 `same_work` is worth knowing about separately. It compares vocabulary rather
 than characters, because character similarity is not usable for titles: "The

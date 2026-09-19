@@ -18,6 +18,7 @@ pub mod isbn;
 pub mod matching;
 pub mod reasons;
 pub mod slug;
+pub mod vocab;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

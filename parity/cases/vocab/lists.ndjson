@@ -1,0 +1,15 @@
+{"kind": "author", "items": [{"id": 1, "name": "Dostoevsky, Fyodor", "count": 3}, {"id": 2, "name": "Dostoevsky| Fyodor", "count": 1}, {"id": 3, "name": "Fyodor Dostoevsky", "count": 11}]}
+{"kind": "author", "items": [{"id": 1, "name": "Fyodor Dostoevsky", "count": 11}, {"id": 2, "name": "Fyodor Dostoëvsky", "count": 2}, {"id": 3, "name": "Dostoevsky, Fyodor", "count": 3}]}
+{"kind": "author", "items": [{"id": 1, "name": "C.S. Lewis", "count": 8}, {"id": 2, "name": "C. S. Lewis", "count": 12}, {"id": 3, "name": "Lewis, C. S.", "count": 4}, {"id": 4, "name": "CLIVE STAPLES LEWIS", "count": 1}]}
+{"kind": "author", "items": [{"id": 1, "name": "Smith, John (editor)", "count": 2}, {"id": 2, "name": "John Smith", "count": 5}, {"id": 3, "name": "Smith, John Jr.", "count": 1}]}
+{"kind": "author", "items": [{"id": 1, "name": "Plato", "count": 30}, {"id": 2, "name": "Aristotle", "count": 25}]}
+{"kind": "author", "items": [{"id": 1, "name": "Arendt, Hannah;", "count": 1}, {"id": 2, "name": "Hannah Arendt", "count": 9}]}
+{"kind": "author", "items": [{"id": 1, "name": "Étienne Gilson", "count": 4}, {"id": 2, "name": "Etienne Gilson", "count": 2}]}
+{"kind": "publisher", "items": [{"id": 1, "name": "Oxford University Press", "count": 40}, {"id": 2, "name": "Oxford University Press, Inc.", "count": 2}, {"id": 3, "name": "Oxford Univ. Press", "count": 1}, {"id": 4, "name": "Routledge", "count": 9}]}
+{"kind": "publisher", "items": [{"id": 1, "name": "Penguin Books", "count": 20}, {"id": 2, "name": "Penguin Books Ltd", "count": 3}, {"id": 3, "name": "Penguin", "count": 7}]}
+{"kind": "publisher", "items": [{"id": 1, "name": "Brill", "count": 5}]}
+{"kind": "tag", "items": [{"id": 1, "name": "Philosophy", "count": 30}, {"id": 2, "name": "[Philosophy]", "count": 1}, {"id": 3, "name": "Philosophy.", "count": 2}, {"id": 4, "name": "philosophy", "count": 4}]}
+{"kind": "tag", "items": [{"id": 1, "name": "18th Century", "count": 12}, {"id": 2, "name": "z-lib.org", "count": 300}, {"id": 3, "name": "9780198237907", "count": 1}, {"id": 4, "name": "https://example.org/x", "count": 2}, {"id": 5, "name": "1998", "count": 5}, {"id": 6, "name": "2024-01-15", "count": 1}, {"id": 7, "name": "451", "count": 2}, {"id": 8, "name": "1:23:45", "count": 1}, {"id": 9, "name": "[kobo] favourites", "count": 4}, {"id": 10, "name": "a;b;c;d", "count": 1}, {"id": 11, "name": "---", "count": 1}, {"id": 12, "name": "#genre", "count": 9}, {"id": 13, "name": "ISBN-13", "count": 3}, {"id": 14, "name": "World War, 1939-1945", "count": 40}]}
+{"kind": "tag", "items": [{"id": 1, "name": "A very long blurb used as a tag that goes on and on and on and should not be here at all really", "count": 1}, {"id": 2, "name": "Church history", "count": 8}]}
+{"kind": "tag", "items": [{"id": 1, "name": "[alexskobo] to read", "count": 6}, {"id": 2, "name": "Fiction", "count": 40}]}
+{"kind": "author", "items": []}
