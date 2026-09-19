@@ -179,9 +179,11 @@ impl<'a> ChapterIndex<'a> {
 /// per page in every chapter's span: a single mistyped marker reading
 /// `<!-- Page 20231115 -->` would ask for a gigabyte of them.
 pub fn chapter_of_page(chapters: &[Chapter], page: u32) -> Option<&str> {
+    // The last chapter that covers the page, not the first: chapters can
+    // nest, and the innermost one is the one a reader would name.
     chapters
         .iter()
-        .filter(|chapter| {
+        .rfind(|chapter| {
             let Some(start) = chapter.start_page else {
                 return false;
             };
@@ -193,7 +195,6 @@ pub fn chapter_of_page(chapters: &[Chapter], page: u32) -> Option<&str> {
             };
             (start..=end.max(start)).contains(&page) && end >= start
         })
-        .next_back()
         .map(|chapter| chapter.title.as_str())
 }
 
