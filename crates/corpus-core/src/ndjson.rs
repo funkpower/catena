@@ -329,6 +329,17 @@ mod tests {
     }
 
     #[test]
+    fn a_float_survives_the_round_trip_bit_for_bit() {
+        for score in [0.1, 0.9740932642487047, 1.0 / 3.0, f64::MIN_POSITIVE, 1e308] {
+            let hit = Hit::new("a", Channel::Vector, 1, score);
+            let mut out = Vec::new();
+            write_line(&mut out, &hit).unwrap();
+            let back: Vec<Hit> = read(out.as_slice()).collect::<Result<_, _>>().unwrap();
+            assert_eq!(back[0].score.to_bits(), score.to_bits(), "{score}");
+        }
+    }
+
+    #[test]
     fn what_is_written_reads_back_identical() {
         let hit = Hit::new("a", Channel::Vector, 3, 0.125);
         let mut out = Vec::new();

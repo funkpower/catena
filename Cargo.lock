@@ -247,8 +247,21 @@ dependencies = [
  "chunkmd",
  "corpus-core",
  "mdscrub",
+ "pdftriage",
  "serde_json",
  "textkit",
+]
+
+[[package]]
+name = "pdftriage"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "corpus-core",
+ "regex",
+ "serde_json",
+ "textkit",
+ "unicode-general-category",
 ]
 
 [[package]]
@@ -461,6 +474,12 @@ dependencies = [
  "regex",
  "rustc-hash",
 ]
+
+[[package]]
+name = "unicode-general-category"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b993bddc193ae5bd0d623b49ec06ac3e9312875fdae725a975c51db1cc1677f"
 
 [[package]]
 name = "unicode-ident"
