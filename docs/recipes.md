@@ -4,9 +4,6 @@ Each tool here does one thing, which is only useful because they compose. This
 is what the joins look like in practice — including the parts that are not in
 this suite, because a real pipeline has a database at the end of it.
 
-Every command below runs. Where a step needs something external — an OCR
-engine, an embedding server, Postgres — it says so.
-
 - [A shelf of files, sorted before anything else touches it](#a-shelf-of-files-sorted-before-anything-else-touches-it)
 - [A scanned book into searchable passages](#a-scanned-book-into-searchable-passages)
 - [A collected edition into one record per work](#a-collected-edition-into-one-record-per-work)
