@@ -143,14 +143,13 @@ nothing to do.
 ## As a library
 
 ```rust
-let mut pdf = pdfgutter::pdf::Pdf::open(std::path::Path::new("scan.pdf"))?;
+let mut pdf = pdfgutter::pdf::Pdf::open(Path::new("scan.pdf"))?;
 for index in pdfgutter::sample_indices(pdf.len()) {
     println!("page {} ratio {:.2}", index + 1, pdf.geometry(index).ratio());
 }
 let pages = pdf.split(pdfgutter::MIN_RATIO);
-pdf.save(std::path::Path::new("split.pdf"))?;
+pdf.save(Path::new("split.pdf"))?;
 println!("{pages} pages");
-# Ok::<(), pdfgutter::pdf::Error>(())
 ```
 
 `pdfgutter::has_gutter` takes a column ink profile and answers on its own, for
