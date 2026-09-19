@@ -10,8 +10,8 @@
 
 pub mod chunk;
 pub mod doc;
-mod float;
 pub mod exit;
+mod float;
 pub mod hit;
 pub mod ndjson;
 

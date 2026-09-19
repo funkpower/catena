@@ -299,7 +299,9 @@ mod tests {
     fn a_record_from_a_future_version_is_refused() {
         let input = "{\"v\":2,\"id\":\"a\",\"channel\":\"fts\",\"rank\":1,\"score\":1.0}\n";
         match read::<Hit, _>(input.as_bytes()).next().unwrap() {
-            Err(Error::Version { found, expected, .. }) => {
+            Err(Error::Version {
+                found, expected, ..
+            }) => {
                 assert_eq!((found, expected), (2, 1));
             }
             other => panic!("expected a version error, got {other:?}"),

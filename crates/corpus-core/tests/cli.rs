@@ -59,5 +59,8 @@ fn it_says_what_version_it_is() {
 
 #[test]
 fn the_same_schema_comes_out_byte_identical_every_time() {
-    assert_eq!(run(&["schema", "all"]).stdout, run(&["schema", "all"]).stdout);
+    assert_eq!(
+        run(&["schema", "all"]).stdout,
+        run(&["schema", "all"]).stdout
+    );
 }
