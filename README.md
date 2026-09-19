@@ -53,6 +53,7 @@ $ for f in *.pdf; do pdftriage --quiet "$f" && ocrmypdf "$f" "ocr/$f"; done
 
 | | |
 |---|---|
+| `booksniff` | What a file actually is, whatever its name claims |
 | `mdscrub` | Converted markdown in, clean markdown out: residual HTML, control characters, headings, page markers |
 | `chunkmd` | Markdown into passages that carry their page, chapter and role |
 | `pdftriage` | Whether a PDF's text layer is healthy, garbled, sparse, permuted, or absent — and so whether OCR is worth its cost |

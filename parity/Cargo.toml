@@ -14,6 +14,7 @@ publish = false
 python = []
 
 [dependencies]
+booksniff.workspace = true
 chunkmd.workspace = true
 cuekit.workspace = true
 cuepack.workspace = true

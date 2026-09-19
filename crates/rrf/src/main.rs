@@ -1,6 +1,5 @@
 //! Reciprocal rank fusion: several ranked lists in, one ranked list out.
 
-use std::io::{BufWriter, Read, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -49,7 +48,10 @@ struct Args {
 }
 
 fn main() -> ExitCode {
-    let args = Args::parse();
+    let args: Args = match catena_cli::parse() {
+        Ok(args) => args,
+        Err(code) => return code,
+    };
 
     let weights = match weights(&args) {
         Ok(weights) => weights,
@@ -59,24 +61,14 @@ fn main() -> ExitCode {
         }
     };
 
-    let hits: Result<Vec<Hit>, _> = match args.path.as_deref() {
-        Some(path) => match std::fs::File::open(path) {
-            Ok(file) => ndjson::read(std::io::BufReader::new(file)).collect(),
-            Err(e) => {
-                eprintln!("rrf: {}: {e}", path.display());
-                return ExitCode::from(exit::IO);
-            }
-        },
-        None => {
-            let mut text = Vec::new();
-            if let Err(e) = std::io::stdin().read_to_end(&mut text) {
-                eprintln!("rrf: {e}");
-                return ExitCode::from(exit::IO);
-            }
-            ndjson::read(text.as_slice()).collect()
+    let text = match catena_cli::read_text(args.path.as_deref()) {
+        Ok(text) => text,
+        Err((code, why)) => {
+            eprintln!("rrf: {why}");
+            return ExitCode::from(code);
         }
     };
-    let hits = match hits {
+    let hits = match ndjson::read(text.as_bytes()).collect::<Result<Vec<Hit>, _>>() {
         Ok(hits) => hits,
         Err(e) => {
             eprintln!("rrf: {e}");
@@ -91,25 +83,7 @@ fn main() -> ExitCode {
     let fused = rrf::fuse(&hits, &weights);
     let fused = &fused[..args.limit.unwrap_or(fused.len()).min(fused.len())];
 
-    let mut out = BufWriter::new(std::io::stdout().lock());
-    for hit in fused {
-        if let Err(e) = ndjson::write_line(&mut out, hit) {
-            // A consumer that stopped reading is not a failure.
-            if e.is_broken_pipe() {
-                return ExitCode::from(exit::OK);
-            }
-            eprintln!("rrf: {e}");
-            return ExitCode::from(exit::IO);
-        }
-    }
-    match out.flush() {
-        Ok(()) => ExitCode::from(exit::OK),
-        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => ExitCode::from(exit::OK),
-        Err(e) => {
-            eprintln!("rrf: {e}");
-            ExitCode::from(exit::IO)
-        }
-    }
+    catena_cli::stream("rrf", fused)
 }
 
 fn weights(args: &Args) -> Result<Weights, String> {

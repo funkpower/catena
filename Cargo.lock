@@ -89,6 +89,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
 
 [[package]]
+name = "booksniff"
+version = "0.1.0"
+dependencies = [
+ "catena-cli",
+ "clap",
+ "corpus-core",
+ "serde_json",
+ "textkit",
+]
+
+[[package]]
 name = "bstr"
 version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -100,9 +111,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "catena-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "corpus-core",
+ "serde",
+]
+
+[[package]]
 name = "chunkmd"
 version = "0.1.0"
 dependencies = [
+ "catena-cli",
  "clap",
  "corpus-core",
  "fancy-regex 0.16.2",
@@ -182,6 +203,7 @@ dependencies = [
 name = "cuenorm"
 version = "0.1.0"
 dependencies = [
+ "catena-cli",
  "clap",
  "corpus-core",
  "cuekit",
@@ -191,6 +213,7 @@ dependencies = [
 name = "cuepack"
 version = "0.1.0"
 dependencies = [
+ "catena-cli",
  "clap",
  "corpus-core",
  "cuekit",
@@ -201,6 +224,7 @@ dependencies = [
 name = "cueseg"
 version = "0.1.0"
 dependencies = [
+ "catena-cli",
  "clap",
  "corpus-core",
  "cuekit",
@@ -268,6 +292,7 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 name = "mdscrub"
 version = "0.1.0"
 dependencies = [
+ "catena-cli",
  "clap",
  "corpus-core",
  "regex",
@@ -290,6 +315,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 name = "parity"
 version = "0.1.0"
 dependencies = [
+ "booksniff",
  "chunkmd",
  "corpus-core",
  "cuekit",
@@ -306,6 +332,7 @@ dependencies = [
 name = "pdftriage"
 version = "0.1.0"
 dependencies = [
+ "catena-cli",
  "clap",
  "corpus-core",
  "regex",
@@ -385,6 +412,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 name = "rrf"
 version = "0.1.0"
 dependencies = [
+ "catena-cli",
  "clap",
  "corpus-core",
  "serde_json",

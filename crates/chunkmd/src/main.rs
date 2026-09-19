@@ -1,13 +1,12 @@
 //! Cuts markdown into retrievable passages that carry their page, chapter
 //! and role.
 
-use std::io::{BufWriter, Read, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use chunkmd::Budgets;
 use clap::Parser;
-use corpus_core::{exit, ndjson};
+use corpus_core::exit;
 
 /// Cut markdown into chunks, one JSON record per line.
 ///
@@ -48,7 +47,10 @@ struct Args {
 }
 
 fn main() -> ExitCode {
-    let args = Args::parse();
+    let args: Args = match catena_cli::parse() {
+        Ok(args) => args,
+        Err(code) => return code,
+    };
     let budgets = Budgets {
         target: args.target,
         overlap: args.overlap,
@@ -60,7 +62,7 @@ fn main() -> ExitCode {
         return ExitCode::from(exit::USAGE);
     }
 
-    let markdown = match read(args.path.as_deref()) {
+    let markdown = match catena_cli::read_text(args.path.as_deref()) {
         Ok(markdown) => markdown,
         Err((code, why)) => {
             eprintln!("chunkmd: {why}");
@@ -68,26 +70,7 @@ fn main() -> ExitCode {
         }
     };
 
-    let mut out = BufWriter::new(std::io::stdout().lock());
-    for chunk in chunkmd::chunk(&markdown, &budgets) {
-        if let Err(e) = ndjson::write_line(&mut out, &chunk) {
-            // A consumer that stopped reading is not a failure: `| head` is a
-            // normal way to look at a stream.
-            if e.is_broken_pipe() {
-                return ExitCode::from(exit::OK);
-            }
-            eprintln!("chunkmd: {e}");
-            return ExitCode::from(exit::IO);
-        }
-    }
-    match out.flush() {
-        Ok(()) => ExitCode::from(exit::OK),
-        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => ExitCode::from(exit::OK),
-        Err(e) => {
-            eprintln!("chunkmd: {e}");
-            ExitCode::from(exit::IO)
-        }
-    }
+    catena_cli::stream("chunkmd", &chunkmd::chunk(&markdown, &budgets))
 }
 
 /// Budgets that cannot produce anything sensible, rejected before reading
@@ -115,23 +98,4 @@ fn sane(budgets: &Budgets) -> Result<(), String> {
         ));
     }
     Ok(())
-}
-
-/// Read the input, distinguishing a file that cannot be read from one that
-/// is not text: the first is an I/O failure and the second is bad input, and
-/// a caller routing on the exit code needs to tell them apart.
-fn read(path: Option<&std::path::Path>) -> Result<String, (u8, String)> {
-    let bytes = match path {
-        Some(path) => {
-            std::fs::read(path).map_err(|e| (exit::IO, format!("{}: {e}", path.display())))
-        }
-        None => {
-            let mut bytes = Vec::new();
-            std::io::stdin()
-                .read_to_end(&mut bytes)
-                .map(|_| bytes)
-                .map_err(|e| (exit::IO, e.to_string()))
-        }
-    }?;
-    String::from_utf8(bytes).map_err(|e| (exit::DATA, format!("input is not UTF-8: {e}")))
 }

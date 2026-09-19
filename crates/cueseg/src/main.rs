@@ -1,7 +1,6 @@
 //! Turns a timed transcript into topic chapters.
 
-use std::io::{BufWriter, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
@@ -38,13 +37,16 @@ struct Args {
 }
 
 fn main() -> ExitCode {
-    let args = Args::parse();
+    let args: Args = match catena_cli::parse() {
+        Ok(args) => args,
+        Err(code) => return code,
+    };
 
-    let content = match read(args.path.as_deref()) {
+    let content = match catena_cli::read_lossy(args.path.as_deref()) {
         Ok(content) => content,
-        Err(e) => {
-            eprintln!("cueseg: {e}");
-            return ExitCode::from(exit::IO);
+        Err((code, why)) => {
+            eprintln!("cueseg: {why}");
+            return ExitCode::from(code);
         }
     };
 
@@ -65,25 +67,7 @@ fn main() -> ExitCode {
         None => cues.iter().map(|cue| cue.end).fold(0.0, f64::max),
     };
 
-    let mut out = BufWriter::new(std::io::stdout().lock());
-    for chapter in cueseg::segment(&cues, duration) {
-        if let Err(e) = ndjson::write_line(&mut out, &chapter) {
-            // A consumer that stopped reading is not a failure.
-            if e.is_broken_pipe() {
-                return ExitCode::from(exit::OK);
-            }
-            eprintln!("cueseg: {e}");
-            return ExitCode::from(exit::IO);
-        }
-    }
-    match out.flush() {
-        Ok(()) => ExitCode::from(exit::OK),
-        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => ExitCode::from(exit::OK),
-        Err(e) => {
-            eprintln!("cueseg: {e}");
-            ExitCode::from(exit::IO)
-        }
-    }
+    catena_cli::stream("cueseg", &cueseg::segment(&cues, duration))
 }
 
 /// Read cues from either encoding.
@@ -100,16 +84,4 @@ fn cues(content: &str) -> Result<Vec<Cue>, ndjson::Error> {
         return ndjson::read(content.as_bytes()).collect();
     }
     Ok(cuekit::parse(content))
-}
-
-fn read(path: Option<&Path>) -> std::io::Result<String> {
-    let bytes = match path {
-        Some(path) => std::fs::read(path)?,
-        None => {
-            let mut bytes = Vec::new();
-            std::io::stdin().read_to_end(&mut bytes)?;
-            bytes
-        }
-    };
-    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }

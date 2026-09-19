@@ -1,0 +1,16 @@
+[package]
+name = "catena-cli"
+description = "The parts of a filter that every tool in this workspace does the same way."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+clap.workspace = true
+corpus-core.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true

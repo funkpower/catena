@@ -19,7 +19,7 @@ type Written = Result<Vec<String>, String>;
 type Job = (&'static str, fn() -> Written);
 
 fn main() -> ExitCode {
-    let jobs: [Job; 9] = [
+    let jobs: [Job; 10] = [
         ("tokens", tokens),
         ("unescape", unescape),
         ("chunkmd", chunkmd),
@@ -29,6 +29,7 @@ fn main() -> ExitCode {
         ("cueseg", cueseg),
         ("rrf", rrf),
         ("cuepack", cuepack),
+        ("booksniff", booksniff),
     ];
 
     for (name, job) in jobs {
@@ -69,6 +70,18 @@ fn unescape() -> Written {
     let decoded = parity::run_oracle("unescape.py", &text)?;
     let path = dir.join("entities.jsonl");
     std::fs::write(&path, decoded).map_err(|e| e.to_string())?;
+    Ok(vec![path.display().to_string()])
+}
+
+fn booksniff() -> Written {
+    let dir = parity::golden("booksniff");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let cases = parity::dir().join("cases/booksniff/files.ndjson");
+    let cases = std::fs::read_to_string(&cases).map_err(|e| e.to_string())?;
+    let verdicts = parity::run_oracle("booksniff.py", &cases)?;
+    let path = dir.join("files.ndjson");
+    std::fs::write(&path, verdicts).map_err(|e| e.to_string())?;
     Ok(vec![path.display().to_string()])
 }
 

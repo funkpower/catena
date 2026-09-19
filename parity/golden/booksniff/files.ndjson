@@ -1,0 +1,20 @@
+{"djvu": false, "name": "plain.pdf", "ole2": false, "sole_pdf": null, "zip": false, "zip_kind": null}
+{"djvu": true, "name": "scan.pdf", "ole2": false, "sole_pdf": null, "zip": false, "zip_kind": null}
+{"djvu": false, "name": "book.epub", "ole2": true, "sole_pdf": null, "zip": false, "zip_kind": null}
+{"djvu": false, "name": "notes.doc", "ole2": false, "sole_pdf": null, "zip": false, "zip_kind": null}
+{"djvu": false, "name": "empty.pdf", "ole2": false, "sole_pdf": null, "zip": false, "zip_kind": null}
+{"djvu": false, "name": "tiny.txt", "ole2": false, "sole_pdf": null, "zip": false, "zip_kind": null}
+{"djvu": false, "name": "prose.txt", "ole2": false, "sole_pdf": null, "zip": false, "zip_kind": null}
+{"djvu": false, "name": "page.html", "ole2": false, "sole_pdf": null, "zip": false, "zip_kind": null}
+{"djvu": false, "name": "spine.xhtml", "ole2": false, "sole_pdf": null, "zip": false, "zip_kind": null}
+{"djvu": false, "name": "real.epub", "ole2": false, "sole_pdf": null, "zip": true, "zip_kind": "epub"}
+{"djvu": false, "name": "saved.zip", "ole2": false, "sole_pdf": null, "zip": true, "zip_kind": "epub"}
+{"djvu": false, "name": "wrapped.pdf", "ole2": false, "sole_pdf": "book.pdf", "zip": true, "zip_kind": "pdf"}
+{"djvu": false, "name": "wrapped-noisy.zip", "ole2": false, "sole_pdf": "book.pdf", "zip": true, "zip_kind": "pdf"}
+{"djvu": false, "name": "collection.zip", "ole2": false, "sole_pdf": null, "zip": true, "zip_kind": "other"}
+{"djvu": false, "name": "pages.zip", "ole2": false, "sole_pdf": null, "zip": true, "zip_kind": "htmlz"}
+{"djvu": false, "name": "nothing.zip", "ole2": false, "sole_pdf": null, "zip": true, "zip_kind": "other"}
+{"djvu": false, "name": "uppercase.zip", "ole2": false, "sole_pdf": "BOOK.PDF", "zip": true, "zip_kind": "pdf"}
+{"djvu": false, "name": "subdir.zip", "ole2": false, "sole_pdf": "dir/book.pdf", "zip": true, "zip_kind": "pdf"}
+{"djvu": false, "name": "truncated.zip", "ole2": false, "sole_pdf": null, "zip": true, "zip_kind": "other"}
+{"djvu": false, "name": "Book - Sample Chapter.pdf", "ole2": false, "sole_pdf": null, "zip": false, "zip_kind": null}

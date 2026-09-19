@@ -1,0 +1,20 @@
+[package]
+name = "booksniff"
+description = "Says what a file actually is, whatever its name claims."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+catena-cli.workspace = true
+clap.workspace = true
+corpus-core.workspace = true
+textkit.workspace = true
+
+[dependencies.serde_json]
+workspace = true
+
+[lints]
+workspace = true

@@ -1,11 +1,9 @@
 //! Cleans converted markdown.
 
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
-use corpus_core::exit;
 
 /// Clean converted markdown: drop residual HTML and control characters,
 /// make headings readable, and spell every page boundary the same way.
@@ -27,9 +25,12 @@ struct Args {
 }
 
 fn main() -> ExitCode {
-    let args = Args::parse();
+    let args: Args = match catena_cli::parse() {
+        Ok(args) => args,
+        Err(code) => return code,
+    };
 
-    let markdown = match read(args.path.as_deref()) {
+    let markdown = match catena_cli::read_text(args.path.as_deref()) {
         Ok(markdown) => markdown,
         Err((code, why)) => {
             eprintln!("mdscrub: {why}");
@@ -37,33 +38,5 @@ fn main() -> ExitCode {
         }
     };
 
-    let cleaned = mdscrub::scrub(&markdown);
-    match std::io::stdout().write_all(cleaned.as_bytes()) {
-        Ok(()) => ExitCode::from(exit::OK),
-        // A consumer that stopped reading is not a failure.
-        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => ExitCode::from(exit::OK),
-        Err(e) => {
-            eprintln!("mdscrub: {e}");
-            ExitCode::from(exit::IO)
-        }
-    }
-}
-
-/// Read the input, distinguishing a file that cannot be read from one that
-/// is not text: the first is an I/O failure and the second is bad input, and
-/// a caller routing on the exit code needs to tell them apart.
-fn read(path: Option<&Path>) -> Result<String, (u8, String)> {
-    let bytes = match path {
-        Some(path) => {
-            std::fs::read(path).map_err(|e| (exit::IO, format!("{}: {e}", path.display())))
-        }
-        None => {
-            let mut bytes = Vec::new();
-            std::io::stdin()
-                .read_to_end(&mut bytes)
-                .map(|_| bytes)
-                .map_err(|e| (exit::IO, e.to_string()))
-        }
-    }?;
-    String::from_utf8(bytes).map_err(|e| (exit::DATA, format!("input is not UTF-8: {e}")))
+    catena_cli::text("mdscrub", &mdscrub::scrub(&markdown))
 }

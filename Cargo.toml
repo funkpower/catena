@@ -10,6 +10,7 @@ license = "MPL-2.0"
 repository = "https://git.pumpin.online/funkpower/catena"
 
 [workspace.dependencies]
+catena-cli = { path = "crates/catena-cli", version = "0.1.0" }
 corpus-core = { path = "crates/corpus-core", version = "0.1.0" }
 cuekit = { path = "crates/cuekit", version = "0.1.0" }
 textkit = { path = "crates/textkit", version = "0.1.0" }
@@ -20,6 +21,7 @@ cuenorm = { path = "crates/cuenorm", version = "0.1.0" }
 cueseg = { path = "crates/cueseg", version = "0.1.0" }
 rrf = { path = "crates/rrf", version = "0.1.0" }
 cuepack = { path = "crates/cuepack", version = "0.1.0" }
+booksniff = { path = "crates/booksniff", version = "0.1.0" }
 
 clap = { version = "4", features = ["derive"] }
 fancy-regex = "0.16"

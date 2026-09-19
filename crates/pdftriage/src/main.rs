@@ -49,7 +49,10 @@ struct Args {
 }
 
 fn main() -> ExitCode {
-    let args = Args::parse();
+    let args: Args = match catena_cli::parse() {
+        Ok(args) => args,
+        Err(code) => return code,
+    };
 
     let bytes = match std::fs::metadata(&args.path) {
         Ok(meta) => meta.len() as i64,
