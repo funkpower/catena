@@ -251,7 +251,7 @@ One heading per line — an `id`, a `name`, and the `count` of works under it:
 | `--rules <FILE>` | Vocabulary specific to this collection |
 | `--man` | Write this page as a manual page, in roff |
 
-The rules file is JSON, and today holds one thing:
+The rules file is JSON and holds two things.
 
 ```json
 {"device_prefixes": ["alexskobo"]}
@@ -260,6 +260,57 @@ The rules file is JSON, and today holds one thing:
 An e-reader stamps its own name onto every book it touches. The generic device
 names are built in; one named after its owner is a fact about a single
 collection, so it is supplied rather than compiled in.
+
+### A subject scheme
+
+The other thing is a closed list of subjects to file under. A catalogue that
+lets anything be a subject ends up with forty thousand of them and no way to
+browse; a scheme is the other approach.
+
+```json
+{
+  "scheme": {
+    "subjects": ["Philosophy", "Phenomenology", "Theology", "History", "Fiction"],
+    "aliases": {"Philosophie": "Philosophy", "Church History": "History"},
+    "drop": ["General", "Humanities", "Non-Fiction"],
+    "parents": {"Phenomenology": "Philosophy"},
+    "blocks_fiction": ["Biography"],
+    "fiction_genres": ["Fiction"]
+  }
+}
+```
+
+Which subjects a collection uses is the most collection-specific thing there
+is — a theology library and a science library agree on none of them — so it
+arrives in the file rather than compiled in.
+
+With one, every heading nothing else has already claimed gets an answer: a
+spelling the scheme knows is a merge onto the spelling it uses, and a heading
+the scheme does not have at all is a delete.
+
+```
+$ vocabmerge --kind tag --rules scheme.json tags.ndjson
+{"kind":"tag","action":"merge","keep":"Philosophy","drop":"Philosophie",…,"method":"scheme_alias","confidence":0.95,"evidence":"the scheme files \"Philosophie\" under \"Philosophy\""}
+{"kind":"tag","action":"delete","keep":null,"drop":"General",…,"method":"scheme_absent","confidence":0.8,"evidence":"\"General\" is not in the scheme, on 88 books"}
+{"kind":"tag","action":"delete","keep":null,"drop":"Underwater Basketry",…,"method":"scheme_absent","confidence":0.8,"evidence":"\"Underwater Basketry\" is not in the scheme, on 1 books"}
+{"kind":"tag","action":"merge","keep":"History","drop":"Church History",…,"method":"scheme_alias","confidence":0.95,"evidence":"the scheme files \"Church History\" under \"History\""}
+```
+
+The deletes are the lower confidence of the two on purpose: an alias is a
+statement the scheme makes, while an absence only says the scheme does not
+list it — which may equally mean the scheme is short a heading.
+
+Four rules the scheme applies, for anything using it as a library:
+
+- **Parents come along.** Phenomenology files under Philosophy and
+  Phenomenology, so a shelf browsed by the parent still finds the child.
+- **Order is scheme order**, not the order the headings arrived in.
+- **A study is not a novel.** A work already under a heading in
+  `blocks_fiction` — or whose title says "Companion to", "A Life of", "Diary",
+  "Very Short Introduction" — loses the `fiction_genres`. A historical novel
+  may still be both.
+- **A book tagged only with headings the scheme rejects has no subject yet**,
+  which is what a catalogue built from filenames looks like.
 
 ### Exit codes
 

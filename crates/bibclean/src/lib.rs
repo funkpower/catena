@@ -17,6 +17,7 @@ pub mod fix;
 pub mod isbn;
 pub mod matching;
 pub mod reasons;
+pub mod scheme;
 pub mod slug;
 pub mod vocab;
 

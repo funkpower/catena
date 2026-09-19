@@ -163,6 +163,13 @@ pub struct Rules {
     /// A device named after its owner belongs here and not in the program.
     #[serde(default)]
     pub device_prefixes: Vec<String>,
+    /// The closed subject scheme this collection files under, if it has one.
+    ///
+    /// Which subjects a collection uses is the most collection-specific thing
+    /// there is — a theology library and a science library agree on none of
+    /// them — so it arrives here rather than being compiled in.
+    #[serde(default)]
+    pub scheme: crate::scheme::Scheme,
 }
 
 /// Every proposal a list of headings suggests.
@@ -179,6 +186,68 @@ pub fn cluster(kind: Kind, items: &[Item], rules: &Rules) -> Vec<Proposal> {
     }
     if kind == Kind::Tag {
         out.extend(junk_deletes(items, &grouped, rules));
+        out.extend(scheme_proposals(items, &out, &rules.scheme));
+    }
+    out
+}
+
+/// What a subject scheme says about the headings nothing else has claimed.
+///
+/// A heading the scheme spells differently is a merge onto the spelling it
+/// uses; a heading the scheme does not have at all is a delete. Headings
+/// already spoken for by a near-duplicate group or by the junk rules are left
+/// alone, so nothing gets two proposals.
+fn scheme_proposals(
+    items: &[Item],
+    already: &[Proposal],
+    scheme: &crate::scheme::Scheme,
+) -> Vec<Proposal> {
+    if scheme.is_empty() {
+        return Vec::new();
+    }
+    let spoken_for: Vec<i64> = already.iter().map(|proposal| proposal.drop_id).collect();
+    let mut out = Vec::new();
+
+    for item in items {
+        if spoken_for.contains(&item.id) {
+            continue;
+        }
+        match scheme.canonical(&item.name) {
+            // Already the scheme's own spelling: nothing to say.
+            Some(subject) if subject == item.name => {}
+            Some(subject) => {
+                let keep = items.iter().find(|other| other.name == subject);
+                out.push(Proposal {
+                    kind: Kind::Tag.name().to_string(),
+                    action: "merge".to_string(),
+                    keep: Some(subject.to_string()),
+                    drop: item.name.clone(),
+                    keep_id: keep.map(|keep| keep.id),
+                    drop_id: item.id,
+                    keep_count: keep.map_or(0, |keep| keep.count),
+                    drop_count: item.count,
+                    method: "scheme_alias".to_string(),
+                    confidence: 0.95,
+                    evidence: format!("the scheme files {:?} under {subject:?}", item.name),
+                });
+            }
+            None => out.push(Proposal {
+                kind: Kind::Tag.name().to_string(),
+                action: "delete".to_string(),
+                keep: None,
+                drop: item.name.clone(),
+                keep_id: None,
+                drop_id: item.id,
+                keep_count: 0,
+                drop_count: item.count,
+                method: "scheme_absent".to_string(),
+                confidence: 0.8,
+                evidence: format!(
+                    "{:?} is not in the scheme, on {} books",
+                    item.name, item.count
+                ),
+            }),
+        }
     }
     out
 }
@@ -730,6 +799,7 @@ mod tests {
     fn a_device_named_after_its_owner_comes_from_the_rules() {
         let rules = Rules {
             device_prefixes: vec!["alexskobo".into()],
+            ..Rules::default()
         };
         assert_eq!(junk_reason("[alexskobo] to read", &Rules::default()), None);
         assert_eq!(
