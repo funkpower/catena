@@ -4,24 +4,40 @@
 //! it fails is a test that cannot fail. Run it deliberately, read the diff,
 //! and commit the change with the reason.
 //!
+//! ```text
+//! CATENA_PARITY_PYTHON=... CATENA_PARITY_PYTHONPATH=... \
 //!     cargo run -p parity --bin regen
+//! ```
 
 use std::process::ExitCode;
 
+/// What one oracle run produces: the golden files it wrote, or why it could
+/// not.
+type Written = Result<Vec<String>, String>;
+
+/// One oracle and the name it is reported under.
+type Job = (&'static str, fn() -> Written);
+
 fn main() -> ExitCode {
-    match regen_tokens() {
-        Ok(path) => {
-            eprintln!("wrote {path}");
-            ExitCode::SUCCESS
-        }
-        Err(e) => {
-            eprintln!("regen: {e}");
-            ExitCode::FAILURE
+    let jobs: [Job; 2] = [("tokens", tokens), ("chunkmd", chunkmd)];
+
+    for (name, job) in jobs {
+        match job() {
+            Ok(written) => {
+                for path in written {
+                    eprintln!("wrote {path}");
+                }
+            }
+            Err(e) => {
+                eprintln!("regen {name}: {e}");
+                return ExitCode::FAILURE;
+            }
         }
     }
+    ExitCode::SUCCESS
 }
 
-fn regen_tokens() -> Result<String, String> {
+fn tokens() -> Written {
     let header = format!(
         "# cl100k_base token counts, one per line of parity::sample::standard()\n\
          # seed={:#018x} lines={}\n",
@@ -31,5 +47,26 @@ fn regen_tokens() -> Result<String, String> {
     let counts = parity::run_oracle("tokens.py", &parity::sample::standard())?;
     let path = parity::golden("tokens.counts");
     std::fs::write(&path, format!("{header}{counts}")).map_err(|e| e.to_string())?;
-    Ok(path.display().to_string())
+    Ok(vec![path.display().to_string()])
+}
+
+fn chunkmd() -> Written {
+    let dir = parity::golden("chunkmd");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let mut written = Vec::new();
+    for case in parity::cases("chunkmd") {
+        let markdown = std::fs::read_to_string(&case).map_err(|e| e.to_string())?;
+        for (set, budgets) in parity::budgets::SETS {
+            let records = parity::run_oracle_with(
+                "chunkmd.py",
+                &parity::budgets::as_args(budgets),
+                &markdown,
+            )?;
+            let path = dir.join(format!("{}.{set}.ndjson", parity::case_name(&case)));
+            std::fs::write(&path, records).map_err(|e| e.to_string())?;
+            written.push(path.display().to_string());
+        }
+    }
+    Ok(written)
 }

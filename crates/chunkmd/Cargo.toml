@@ -1,0 +1,18 @@
+[package]
+name = "chunkmd"
+description = "Cuts markdown into retrievable passages that carry their page, chapter and role."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+clap.workspace = true
+corpus-core.workspace = true
+fancy-regex.workspace = true
+regex.workspace = true
+textkit.workspace = true
+
+[lints]
+workspace = true

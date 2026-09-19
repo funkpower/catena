@@ -15,6 +15,7 @@
 //! committed here, and for copyrighted sources only the derived signal — the
 //! scores, the counts, the timings — is ever checked in.
 
+pub mod budgets;
 pub mod sample;
 
 use std::path::{Path, PathBuf};
@@ -49,12 +50,18 @@ pub fn python() -> String {
 /// directory, so nothing about where a Python pipeline lives on a particular
 /// machine is compiled in.
 pub fn run_oracle(script: &str, input: &str) -> Result<String, String> {
+    run_oracle_with(script, &[], input)
+}
+
+/// Run an oracle script with arguments.
+pub fn run_oracle_with(script: &str, args: &[String], input: &str) -> Result<String, String> {
     use std::io::Write as _;
     use std::process::{Command, Stdio};
 
     let script = oracle(script);
     let mut child = Command::new(python())
         .arg(&script)
+        .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -74,6 +81,33 @@ pub fn run_oracle(script: &str, input: &str) -> Result<String, String> {
     }
     String::from_utf8(out.stdout)
         .map_err(|e| format!("{} wrote invalid UTF-8: {e}", script.display()))
+}
+
+/// Every case file for a tool, in a fixed order.
+pub fn cases(tool: &str) -> Vec<PathBuf> {
+    let dir = dir().join("cases").join(tool);
+    let mut found: Vec<PathBuf> = std::fs::read_dir(&dir)
+        .unwrap_or_else(|e| panic!("reading {}: {e}", dir.display()))
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "md"))
+        .collect();
+    found.sort();
+    found
+}
+
+/// The stem of a case path, which names its golden file.
+pub fn case_name(path: &Path) -> String {
+    path.file_stem()
+        .expect("a case file has a name")
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// Read a golden file whole.
+pub fn read_golden_text(name: &str) -> String {
+    let path = golden(name);
+    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("reading {}: {e}", path.display()))
 }
 
 /// Read a golden file, dropping its `#` header lines.
