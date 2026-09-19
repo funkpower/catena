@@ -28,11 +28,20 @@ jobs:
       # Not actions/checkout. That is a JavaScript action: the runner executes
       # it with `node` inside this container, and a Rust image carries no node,
       # so the job dies at the first step with "node: executable file not found
-      # in $PATH". actions/cache is the same. Cloning by hand costs four lines
+      # in $PATH". actions/cache is the same. Cloning by hand costs a few lines
       # and keeps the lean image.
+      #
+      # The repository is private, so the clone has to authenticate or git
+      # stops to ask for a username at a terminal that is not there. The token
+      # goes in a header rather than in the remote URL, so it is not written
+      # into .git/config where a later step could print it.
       - name: Checkout
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git init -q .
+          git config --local "http.$GITHUB_SERVER_URL/.extraheader" \
+            "Authorization: Basic $(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')"
           git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
           git fetch -q --depth 1 origin "$GITHUB_SHA"
           git checkout -q FETCH_HEAD
