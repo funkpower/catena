@@ -9,10 +9,56 @@
 //! out is the original with its punctuation and spacing intact, because those
 //! travelled attached to the words.
 
-use std::collections::HashMap;
-
 /// An abstract as its catalogue publishes it: word to the positions it holds.
-pub type Inverted = HashMap<String, Vec<i64>>;
+///
+/// A list of pairs rather than a map, so that the order the catalogue listed
+/// the words in survives. It matters exactly once — when two words claim the
+/// same position — and a map would settle that tie by hash order, which is a
+/// different answer on every run.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Inverted(pub Vec<(String, Vec<i64>)>);
+
+impl Inverted {
+    /// The pairs, in the order they were written.
+    pub fn pairs(&self) -> &[(String, Vec<i64>)] {
+        &self.0
+    }
+}
+
+impl FromIterator<(String, Vec<i64>)> for Inverted {
+    fn from_iter<T: IntoIterator<Item = (String, Vec<i64>)>>(pairs: T) -> Self {
+        Inverted(pairs.into_iter().collect())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Inverted {
+    /// Read the object entry by entry rather than through a map, which is
+    /// what keeps the document's own order.
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct InOrder;
+
+        impl<'de> serde::de::Visitor<'de> for InOrder {
+            type Value = Inverted;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("an object of words to the positions they hold")
+            }
+
+            fn visit_map<M: serde::de::MapAccess<'de>>(
+                self,
+                mut map: M,
+            ) -> Result<Inverted, M::Error> {
+                let mut pairs = Vec::with_capacity(map.size_hint().unwrap_or(0));
+                while let Some((word, at)) = map.next_entry::<String, Vec<i64>>()? {
+                    pairs.push((word, at));
+                }
+                Ok(Inverted(pairs))
+            }
+        }
+
+        deserializer.deserialize_map(InOrder)
+    }
+}
 
 /// Put an inverted abstract back in order.
 ///
@@ -24,6 +70,7 @@ pub type Inverted = HashMap<String, Vec<i64>>;
 /// not the exact offsets.
 pub fn from_inverted(index: &Inverted) -> Option<String> {
     let mut positions: Vec<(i64, &str)> = index
+        .pairs()
         .iter()
         .flat_map(|(word, at)| at.iter().map(move |at| (*at, word.as_str())))
         .collect();
@@ -55,6 +102,17 @@ mod tests {
     }
 
     #[test]
+    fn two_words_at_one_position_keep_the_order_they_were_listed_in() {
+        // The only place the catalogue's own ordering matters, and the only
+        // reason this is a list of pairs rather than a map.
+        let index = inverted(&[("alpha", &[1]), ("beta", &[1])]);
+        assert_eq!(from_inverted(&index).as_deref(), Some("alpha beta"));
+
+        let other_way = inverted(&[("beta", &[1]), ("alpha", &[1])]);
+        assert_eq!(from_inverted(&other_way).as_deref(), Some("beta alpha"));
+    }
+
+    #[test]
     fn words_come_back_in_the_order_their_positions_give() {
         let index = inverted(&[("obligation", &[1]), ("The", &[0]), ("ran", &[2])]);
         assert_eq!(from_inverted(&index).as_deref(), Some("The obligation ran"));
@@ -77,7 +135,7 @@ mod tests {
 
     #[test]
     fn an_index_with_nothing_in_it_is_no_abstract() {
-        assert_eq!(from_inverted(&Inverted::new()), None);
+        assert_eq!(from_inverted(&Inverted::default()), None);
         assert_eq!(from_inverted(&inverted(&[("word", &[])])), None);
     }
 

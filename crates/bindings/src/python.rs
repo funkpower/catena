@@ -208,6 +208,17 @@ fn series_of<'py>(
     }
 }
 
+/// Read an identifier out of whatever it arrived wrapped in.
+///
+/// `None` when the string is not one.
+#[pyfunction]
+fn parse_identifier<'py>(py: Python<'py>, text: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
+    match crate::parse_identifier(text) {
+        Some(found) => Ok(Some(to_py(py, &found)?)),
+        None => Ok(None),
+    }
+}
+
 /// The module Python imports.
 #[pymodule]
 fn _catena(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -221,5 +232,6 @@ fn _catena(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(fuse_hits, module)?)?;
     module.add_function(wrap_pyfunction!(identify, module)?)?;
     module.add_function(wrap_pyfunction!(series_of, module)?)?;
+    module.add_function(wrap_pyfunction!(parse_identifier, module)?)?;
     Ok(())
 }

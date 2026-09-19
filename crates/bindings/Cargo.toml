@@ -31,6 +31,7 @@ crate-type = ["cdylib", "rlib"]
 booksniff.workspace = true
 chunkmd.workspace = true
 corpus-core.workspace = true
+idnorm.workspace = true
 cuekit.workspace = true
 cuepack.workspace = true
 mdscrub.workspace = true

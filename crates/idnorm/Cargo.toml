@@ -1,0 +1,21 @@
+[package]
+name = "idnorm"
+description = "The identifiers a bibliography is held together by, read and checked."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+bibclean.workspace = true
+catena-cli.workspace = true
+clap.workspace = true
+corpus-core.workspace = true
+fancy-regex.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

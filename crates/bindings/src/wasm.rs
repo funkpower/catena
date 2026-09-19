@@ -70,6 +70,21 @@ export interface Hit {
   payload: unknown;
 }
 
+/** A DOI, ISSN, ISBN or arXiv identifier, read and checked. */
+export interface Identifier {
+  v: number;
+  /** The text it was read from. */
+  input: string;
+  /** "doi", "issn", "isbn" or "arxiv". */
+  kind: string;
+  /** The identifier, in the form it should be stored and compared in. */
+  id: string;
+  /** Whether the check digit agrees, or null where the kind carries none. */
+  checksum: boolean | null;
+  /** A URL that resolves it. */
+  url?: string;
+}
+
 /** What a title says about its series. */
 export interface SeriesProposal {
   v: number;
@@ -233,6 +248,17 @@ pub fn series_of(title: &str, author: Option<String>) -> Result<JsValue, JsValue
     }
 }
 
+/// Read an identifier out of whatever it arrived wrapped in.
+///
+/// `undefined` when the string is not one.
+#[wasm_bindgen(js_name = parseIdentifier, skip_typescript)]
+pub fn parse_identifier(text: &str) -> Result<JsValue, JsValue> {
+    match crate::parse_identifier(text) {
+        Some(found) => to_js(&found),
+        None => Ok(JsValue::UNDEFINED),
+    }
+}
+
 /// Declarations for the functions whose return type the generator cannot
 /// infer, so a caller gets `Chunk[]` rather than `any`.
 #[wasm_bindgen(typescript_custom_section)]
@@ -244,4 +270,5 @@ export function splitCollection(markdown: string): Section[];
 export function fuseHits(hits: Hit[], k?: number, weights?: Record<string, number>, limit?: number): Hit[];
 export function identify(name: string, data: Uint8Array): Doc;
 export function seriesOf(title: string, author?: string): SeriesProposal | undefined;
+export function parseIdentifier(text: string): Identifier | undefined;
 "#;

@@ -15,6 +15,10 @@ fn records(text: &str) -> Vec<Value> {
         .collect()
 }
 
+/// The cases, as text, so the index keeps the order it was written in.
+///
+/// Reading through `Value` would sort the keys, and which of two words at one
+/// position comes first is exactly what that order decides.
 fn cases() -> Vec<Value> {
     let text = std::fs::read_to_string(parity::dir().join("cases/abstracts/cases.ndjson"))
         .expect("a readable case file");
@@ -33,7 +37,7 @@ fn every_abstract_reads_back_the_same_as_python() {
         assert_eq!(theirs["name"].as_str(), Some(name), "cases out of order");
 
         let index: Inverted =
-            serde_json::from_value(case["index"].clone()).expect("an index of positions");
+            serde_json::from_str(&case["index"].to_string()).expect("an index of positions");
         let ours = abstracts::from_inverted(&index);
         if ours.as_deref() != theirs["abstract"].as_str() {
             wrong.push(format!(

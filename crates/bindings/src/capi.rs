@@ -385,6 +385,24 @@ pub unsafe extern "C" fn catena_series_of(
     }
 }
 
+/// Read an identifier out of whatever it arrived wrapped in. Returns a JSON
+/// record, or NULL when the string is not one — an answer, not an error.
+///
+/// # Safety
+///
+/// `text` must be NUL-terminated UTF-8.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn catena_parse_identifier(text: *const c_char) -> *mut c_char {
+    clear_error();
+    let Some(text) = (unsafe { borrow(text, "text") }) else {
+        return ptr::null_mut();
+    };
+    match crate::parse_identifier(text) {
+        Some(found) => give_json(&found),
+        None => ptr::null_mut(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -494,6 +512,17 @@ mod tests {
         let json = through(|| unsafe { catena_series_of(series.as_ptr(), ptr::null()) })
             .expect("a proposal");
         assert!(json.contains("\"volume\":3"));
+    }
+
+    #[test]
+    fn an_identifier_is_normalised_across_the_boundary() {
+        let text = c"https://doi.org/10.1000/182";
+        let json = through(|| unsafe { catena_parse_identifier(text.as_ptr()) }).expect("a record");
+        assert!(json.contains("\"id\":\"10.1000/182\""), "{json}");
+
+        let nope = c"hello";
+        assert!(through(|| unsafe { catena_parse_identifier(nope.as_ptr()) }).is_none());
+        assert_eq!(error(), None, "not an identifier is an answer");
     }
 
     #[test]

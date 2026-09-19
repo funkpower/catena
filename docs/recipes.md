@@ -12,6 +12,7 @@ this suite, because a real pipeline has a database at the end of it.
 - [Passages into pgvector](#passages-into-pgvector)
 - [Hybrid search, fused](#hybrid-search-fused)
 - [A catalogue that has drifted](#a-catalogue-that-has-drifted)
+- [A bibliography that has been copied between formats](#a-bibliography-that-has-been-copied-between-formats)
 - [A video library that plays on the thing you carry](#a-video-library-that-plays-on-the-thing-you-carry)
 - [Notes on composing these](#notes-on-composing-these)
 
@@ -267,12 +268,53 @@ vocabmerge --kind author authors.ndjson > merges.ndjson
 vocabmerge --kind tag    tags.ndjson    >> merges.ndjson
 ```
 
+Series and volume, which most catalogues have on almost nothing:
+
+```sh
+seriesof catalogue.ndjson \
+  | jq -r 'select(.volume) | "UPDATE book SET series = \(.series|@json), series_index = \(.volume) WHERE title = \(.title|@json);"' \
+  | psql
+```
+
 Apply only what you believe:
 
 ```sh
 jq -r 'select(.action == "merge" and .confidence >= 0.9)
        | "UPDATE book SET author_id = \(.keep_id) WHERE author_id = \(.drop_id);"' \
   merges.ndjson | psql
+```
+
+## A bibliography that has been copied between formats
+
+Identifiers arrive wrapped in whatever the last tool left on them, and a
+catalogue that stores them as they came cannot tell two spellings of one DOI
+apart.
+
+```sh
+idnorm --quiet refs.txt > ids.ndjson
+```
+
+The ones that cannot be right — an ISBN or an ISSN whose check digit fails:
+
+```sh
+jq -r 'select(.checksum == false) | .input' ids.ndjson
+```
+
+The ones that are well formed and still wrong, which needs a register:
+
+```sh
+bibfetch --polite you@example.org ids.ndjson \
+  | jq -r 'select(.found | not) | "missing: \(.id)"'
+```
+
+That second question is a different one, which is why it is a different tool:
+`idnorm` never touches the network and `bibfetch` does nothing else.
+
+Filling in what you only had the identifier for:
+
+```sh
+idnorm --quiet refs.txt | bibfetch \
+  | jq -r 'select(.found) | "\(.year)\t\(.authors | join(", "))\t\(.title)"'
 ```
 
 ## A video library that plays on the thing you carry

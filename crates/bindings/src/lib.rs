@@ -176,6 +176,12 @@ pub fn identify(name: &str, bytes: &[u8]) -> Doc {
     booksniff::sniff(&bytes, name)
 }
 
+/// Read an identifier — a DOI, ISSN, ISBN or arXiv id — out of whatever it
+/// arrived wrapped in.
+pub fn parse_identifier(text: &str) -> Option<idnorm::Identifier> {
+    idnorm::parse(text)
+}
+
 /// The series a title belongs to, and which volume of it this is.
 pub fn series_of(title: &str, author: Option<&str>) -> Option<seriesof::Proposal> {
     seriesof::series_of(title, author)
@@ -235,6 +241,13 @@ mod tests {
     fn a_channel_nobody_here_knows_is_ignored_rather_than_refused() {
         assert_eq!(channel_named("vec"), Some(corpus_core::Channel::Vector));
         assert_eq!(channel_named("lexical"), None);
+    }
+
+    #[test]
+    fn an_identifier_comes_back_normalised() {
+        let found = parse_identifier("https://doi.org/10.1000/182").expect("an identifier");
+        assert_eq!(found.id, "10.1000/182");
+        assert_eq!(parse_identifier("hello"), None);
     }
 
     #[test]

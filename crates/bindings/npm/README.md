@@ -49,6 +49,7 @@ try {
 | `fuseHits` | Several ranked lists into one |
 | `identify` | What a file is, from its first bytes |
 | `seriesOf` | The series a book belongs to, and which volume this is |
+| `parseIdentifier` | A DOI, ISSN, ISBN or arXiv id, read and checked |
 
 The tools that read files or call another program are not here: a browser has
 neither, and a binding that pretends otherwise fails at run time rather than

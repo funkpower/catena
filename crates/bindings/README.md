@@ -68,6 +68,7 @@ except ValueError as why:
 | `fuse_hits` | [`rrf`](../rrf/README.md) |
 | `identify` | [`booksniff`](../booksniff/README.md) |
 | `series_of` | [`seriesof`](../seriesof/README.md) |
+| `parse_identifier` | [`idnorm`](../idnorm/README.md) |
 
 The tools that are not here are the ones a binding would gain nothing over a
 subprocess for: they read files, shell out to another program, or talk to a

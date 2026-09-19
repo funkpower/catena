@@ -133,6 +133,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "bibfetch"
+version = "0.1.0"
+dependencies = [
+ "catena-cli",
+ "clap",
+ "corpus-core",
+ "idnorm",
+ "schemars",
+ "serde",
+ "serde_json",
+ "ureq",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -220,6 +234,7 @@ dependencies = [
  "corpus-core",
  "cuekit",
  "cuepack",
+ "idnorm",
  "mdscrub",
  "mdsplit",
  "pyo3",
@@ -783,6 +798,20 @@ checksum = "3acae9609540aa318d1bc588455225fb2085b9ed0c4f6bd0d9d5bcd86f1a0344"
 dependencies = [
  "icu_normalizer",
  "icu_properties",
+]
+
+[[package]]
+name = "idnorm"
+version = "0.1.0"
+dependencies = [
+ "bibclean",
+ "catena-cli",
+ "clap",
+ "corpus-core",
+ "fancy-regex 0.16.2",
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
