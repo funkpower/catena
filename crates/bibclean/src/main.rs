@@ -39,6 +39,15 @@ struct Args {
     flagged: bool,
 }
 
+/// Whether anything about a record wants a person's attention.
+///
+/// A missing ISBN alone does not: nearly every book lacks one. A slug that
+/// should be replaced does, even when nothing else is wrong, because the
+/// identifier is the part other things have written down.
+fn needs_attention(cleaned: &bibclean::Cleaned) -> bool {
+    bibclean::reasons::worth_fixing(&cleaned.reasons) || cleaned.slug_proposal.is_some()
+}
+
 fn main() -> ExitCode {
     let args: Args = match catena_cli::parse() {
         Ok(args) => args,
@@ -65,8 +74,8 @@ fn main() -> ExitCode {
     let cleaned: Vec<bibclean::Cleaned> = books
         .iter()
         .map(bibclean::clean)
-        .inspect(|cleaned| flagged |= bibclean::reasons::worth_fixing(&cleaned.reasons))
-        .filter(|cleaned| !args.flagged || bibclean::reasons::worth_fixing(&cleaned.reasons))
+        .inspect(|cleaned| flagged |= needs_attention(cleaned))
+        .filter(|cleaned| !args.flagged || needs_attention(cleaned))
         .collect();
 
     let wrote = catena_cli::stream("bibclean", &cleaned);

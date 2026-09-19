@@ -11,10 +11,12 @@
 //! which is the difference between a tool that cleans a catalogue and one
 //! that damages it in a new way.
 
+mod entities4;
 pub mod fix;
 pub mod isbn;
 pub mod matching;
 pub mod reasons;
+pub mod slug;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -41,6 +43,12 @@ pub struct Book {
     /// Where the file is, which is often where a missing ISBN is hiding.
     #[serde(default)]
     pub path: Option<String>,
+    /// The public identifier the record already has, if it has one.
+    #[serde(default)]
+    pub slug: Option<String>,
+    /// A number that makes a slug unique. Needed to judge or regenerate one.
+    #[serde(default)]
+    pub id: Option<i64>,
     /// Everything else the record carried.
     #[serde(flatten)]
     #[schemars(with = "Map<String, Value>")]
@@ -82,6 +90,17 @@ pub struct Cleaned {
     pub severity: u32,
     /// What was changed, and why.
     pub changes: Vec<Change>,
+    /// What should happen to the record's slug, when it has one to judge.
+    ///
+    /// Named apart from the record's own `slug`, which is carried through
+    /// beside it — the two would otherwise be one field and the proposal
+    /// would quietly replace the fact.
+    ///
+    /// Never applied as a change: a slug is a public identifier that other
+    /// things have already written down, so moving one is a decision with
+    /// consequences outside this record.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slug_proposal: Option<slug::Proposal>,
 }
 
 /// Audit a record and make the repairs that need no lookup.
@@ -143,10 +162,21 @@ pub fn clean(book: &Book) -> Cleaned {
         cleaned.isbn = Some(found);
     }
 
+    // Judged against the record as it arrived, not as it was repaired: the
+    // question is whether the slug describes the book, and a title this just
+    // title-cased describes the same book either way.
+    let proposal = match (book.slug.as_deref(), book.id) {
+        (Some(slug), Some(id)) => {
+            slug::evaluate(slug, book.author.as_deref(), book.title.as_deref(), id)
+        }
+        _ => None,
+    };
+
     Cleaned {
         severity: reasons::severity(&reasons),
         reasons,
         changes,
+        slug_proposal: proposal,
         book: cleaned,
     }
 }
@@ -162,6 +192,8 @@ mod tests {
             author: Some(author.into()),
             isbn: None,
             path: None,
+            slug: None,
+            id: None,
             extra: Map::new(),
         }
     }
@@ -213,6 +245,42 @@ mod tests {
         let mut book = book("The Human Condition", "Arendt, Hannah");
         book.path = Some("/library/20231115123456.pdf".into());
         assert_eq!(clean(&book).book.isbn, None);
+    }
+
+    #[test]
+    fn a_slug_is_judged_when_there_is_one_to_judge() {
+        let mut book = book("Weaponizing Anthropology", "Laura Nader");
+        book.slug = Some("william-zinsser-on-writing-well-3450".into());
+        book.id = Some(3450);
+
+        let cleaned = clean(&book);
+        let proposal = cleaned.slug_proposal.expect("a proposal");
+        assert_eq!(proposal.tier, "wrong-book");
+        assert_eq!(
+            proposal.proposed,
+            "laura-nader-weaponizing-anthropology-3450"
+        );
+        // Proposed, never applied.
+        assert_eq!(
+            cleaned.book.slug.as_deref(),
+            Some("william-zinsser-on-writing-well-3450")
+        );
+    }
+
+    #[test]
+    fn the_record_keeps_its_own_slug_beside_the_proposal() {
+        let mut book = book("Weaponizing Anthropology", "Laura Nader");
+        book.slug = Some("william-zinsser-on-writing-well-3450".into());
+        book.id = Some(3450);
+
+        let json = serde_json::to_value(clean(&book)).expect("a record serialises");
+        assert_eq!(json["slug"], "william-zinsser-on-writing-well-3450");
+        assert_eq!(json["slug_proposal"]["tier"], "wrong-book");
+    }
+
+    #[test]
+    fn a_record_with_no_slug_gets_no_proposal() {
+        assert!(clean(&book("A Book", "An Author")).slug_proposal.is_none());
     }
 
     #[test]

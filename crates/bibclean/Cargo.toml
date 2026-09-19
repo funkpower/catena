@@ -11,12 +11,14 @@ repository.workspace = true
 catena-cli.workspace = true
 clap.workspace = true
 corpus-core.workspace = true
+deunicode.workspace = true
 fancy-regex.workspace = true
 regex.workspace = true
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 textkit.workspace = true
+unicode-normalization.workspace = true
 
 [lints]
 workspace = true

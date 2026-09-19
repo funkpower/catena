@@ -47,6 +47,28 @@ fn digit_value(c: char) -> Option<u32> {
     ten.then_some(value)
 }
 
+/// Round half to even, which is what Python's `round` does and what Rust's
+/// does not: `round(2.5)` is 2 there and 3 here.
+///
+/// It matters wherever a rounded number decides something — how many
+/// chapters a recording gets, what a percentage in a report reads as — and
+/// the two rules disagree exactly on the values that land on a boundary,
+/// which is where a disagreement is most likely to be noticed.
+pub fn round_half_to_even(value: f64) -> f64 {
+    let rounded = value.round();
+    if (value - value.trunc()).abs() == 0.5 && rounded % 2.0 != 0.0 {
+        rounded - value.signum()
+    } else {
+        rounded
+    }
+}
+
+/// A fraction as a whole-number percentage, rounded the same way Python
+/// rounds it.
+pub fn percent(fraction: f64) -> String {
+    format!("{}%", round_half_to_even(fraction * 100.0))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -82,6 +104,25 @@ mod tests {
     #[test]
     fn nothing_reads_as_zero() {
         assert_eq!(decimal("page"), 0);
+    }
+
+    #[test]
+    fn rounding_goes_to_even_on_a_half() {
+        assert_eq!(round_half_to_even(0.5), 0.0);
+        assert_eq!(round_half_to_even(1.5), 2.0);
+        assert_eq!(round_half_to_even(2.5), 2.0);
+        assert_eq!(round_half_to_even(-2.5), -2.0);
+        assert_eq!(round_half_to_even(2.4), 2.0);
+    }
+
+    #[test]
+    fn a_percentage_reads_as_a_whole_number() {
+        assert_eq!(percent(0.0), "0%");
+        // Not 33: a third of a percent is a hair above the halfway point
+        // once it is a binary float, so it rounds up rather than to even.
+        assert_eq!(percent(0.335), "34%");
+        assert_eq!(percent(1.0), "100%");
+        assert_eq!(percent(0.125), "12%");
     }
 
     #[test]

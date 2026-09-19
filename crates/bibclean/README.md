@@ -76,19 +76,55 @@ lacks one.
 | Code | Meaning |
 |---|---|
 | `0` | Nothing needed attention |
-| `1` | Something did |
+| `1` | Something did — a fault worth fixing, or a slug worth replacing |
 | `64` | The command line was wrong |
 | `65` | A record could not be read |
 | `74` | The file could not be read |
 
 ## Input
 
-One JSON record per line. `title`, `author`, `isbn` and `path` are read;
-everything else is carried through untouched, so a record can go through this
-and back into whatever it came from.
+One JSON record per line. `title`, `author`, `isbn`, `path`, `slug` and `id`
+are read; everything else is carried through untouched, so a record can go
+through this and back into whatever it came from.
 
 ```json
 {"title":"THE HUMAN CONDITION","author":"Arendt, Hannah","path":"/library/9780226586601.pdf"}
+```
+
+## Slugs
+
+A slug is a public identifier — it reaches citations and notes, and outlives
+whatever produced it. When a record carries one, along with the `id` that
+makes it unique, its slug is judged too:
+
+```
+$ bibclean slugs.ndjson
+{"v":1,"title":"Weaponizing Anthropology","author":"Laura Nader",…,"slug":"william-zinsser-on-writing-well-3451","id":3451,"reasons":[],"severity":0,"changes":[],"slug_proposal":{"current":"william-zinsser-on-writing-well-3451","proposed":"laura-nader-weaponizing-anthropology-3451","tier":"wrong-book","reasons":["only 0% of slug tokens appear in the current title/author — slug and metadata disagree"]}}
+{"v":1,"title":"Mind and Brain","author":"Zinsser, William",…,"slug":"unknown-mind-and-brain-1234","id":1234,"reasons":[],"severity":0,"changes":[],"slug_proposal":{"current":"unknown-mind-and-brain-1234","proposed":"zinsser-william-mind-and-brain-1234","tier":"placeholder-author","reasons":["slug opens with placeholder author 'unknown'"]}}
+```
+
+Nothing is renamed. A proposal comes back beside the slug the record has, and
+the **tier** says how much the evidence is worth:
+
+| Tier | Evidence | Safe to apply in bulk? |
+|---|---|---|
+| `placeholder-author` | The slug opens with a placeholder, so it was minted without an author | yes |
+| `filename-artefact` | The slug carries a mirror suffix, a wrapper format or a path | yes |
+| `wrong-book` | Too few of the slug's words appear in the record at all | no |
+| `noop-metadata-junk` | Regenerating gives the same slug: the record is the problem | no |
+| `defer-new-slug-junk` | The new slug would be no better than the old one | no |
+| `review-loses-volume` | The current slug names a volume the new one would lose | no |
+| `review-low-recall` | The new slug recovers too little of the title | no |
+
+The first two rest on evidence inside the slug itself and cannot be wrong
+about it. The rest are *disagreements* between the slug and the record, and a
+disagreement does not say which side is at fault — which is exactly the case
+where renaming automatically makes things worse.
+
+Only the safe tiers:
+
+```sh
+bibclean books.ndjson | jq -c 'select(.slug_proposal.tier | IN("placeholder-author","filename-artefact"))'
 ```
 
 ## The faults it names
@@ -140,7 +176,7 @@ if bibclean::reasons::worth_fixing(&cleaned.reasons) {
 
 The pieces are usable on their own: `bibclean::isbn::valid`,
 `bibclean::isbn::from_filename`, `bibclean::fix::title_case`,
-`bibclean::matching::same_work`.
+`bibclean::matching::same_work`, `bibclean::slug::slug_for`.
 
 `same_work` is worth knowing about separately. It compares vocabulary rather
 than characters, because character similarity is not usable for titles: "The

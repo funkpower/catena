@@ -64,37 +64,13 @@ pub fn segment(cues: &[Cue], duration: f64) -> Vec<Segment> {
 
 /// How many chapters a recording of this length should have.
 pub fn target_chapter_count(duration: f64) -> usize {
-    let target = round_half_to_even(duration / TARGET_SECONDS_PER_CHAPTER);
+    let target = textkit::round_half_to_even(duration / TARGET_SECONDS_PER_CHAPTER);
     (target as usize).clamp(MIN_CHAPTERS, MAX_CHAPTERS)
-}
-
-/// Round half to even, which is what the Python this was ported from does
-/// and what Rust's own `round` does not: `round(2.5)` is 2 there and 3 here,
-/// and a recording exactly two and a half chapters long would otherwise get a
-/// different number of them.
-fn round_half_to_even(value: f64) -> f64 {
-    let rounded = value.round();
-    if (value - value.trunc()).abs() == 0.5 && rounded % 2.0 != 0.0 {
-        rounded - value.signum()
-    } else {
-        rounded
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn rounding_goes_to_even_on_a_half() {
-        assert_eq!(round_half_to_even(0.5), 0.0);
-        assert_eq!(round_half_to_even(1.5), 2.0);
-        assert_eq!(round_half_to_even(2.5), 2.0);
-        assert_eq!(round_half_to_even(3.5), 4.0);
-        assert_eq!(round_half_to_even(-2.5), -2.0);
-        assert_eq!(round_half_to_even(2.4), 2.0);
-        assert_eq!(round_half_to_even(2.6), 3.0);
-    }
 
     #[test]
     fn the_chapter_count_follows_the_length_within_bounds() {

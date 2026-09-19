@@ -15,6 +15,6 @@ pub mod pattern;
 pub mod segment;
 pub mod tokens;
 
-pub use number::decimal;
+pub use number::{decimal, percent, round_half_to_even};
 pub use segment::{is_space, paragraphs, sentences};
 pub use tokens::{count, decode_lossy, encode, split_at_token_limit};
