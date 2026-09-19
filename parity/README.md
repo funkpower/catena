@@ -23,8 +23,13 @@ can be re-run live, which catches a golden file drifting away from a Python
 implementation that has moved on:
 
 ```sh
-CATENA_PARITY_PYTHON=/path/to/venv/bin/python cargo test -p parity --features python
+CATENA_PARITY_PYTHON=/path/to/venv/bin/python \
+CATENA_PARITY_PYTHONPATH=/path/to/book-pipeline/src \
+    cargo test -p parity --features python
 ```
+
+`SOURCE.md` records which commit of that source the golden files came from.
+Pointing the oracles at an older checkout will fail, and should.
 
 ## Regenerating
 
@@ -33,7 +38,9 @@ itself when it fails is a test that cannot fail. Regenerate deliberately,
 read the diff, and commit it with the reason:
 
 ```sh
-CATENA_PARITY_PYTHON=/path/to/venv/bin/python cargo run -p parity --bin regen
+CATENA_PARITY_PYTHON=/path/to/venv/bin/python \
+CATENA_PARITY_PYTHONPATH=/path/to/book-pipeline/src \
+    cargo run -p parity --bin regen
 ```
 
 ## Fixtures

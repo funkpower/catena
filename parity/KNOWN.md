@@ -18,25 +18,6 @@ affected and how often it occurs in practice.
 
 ---
 
-## mdscrub — a line-break tag becomes a line break, not nothing
-
-**Python:** `strip_residual_html` removes every inline tag, `<br>` included,
-so `the<br>northern end` becomes `thenorthern end`.
-
-**Rust:** `<br>`, `<br/>` and `<br />` become a newline; every other tag is
-still removed.
-
-**Why this is acceptable:** the welded word is not a formatting difference,
-it is a word that does not exist. It cannot be searched for, it embeds as a
-token sequence no query will produce, and it is invisible in a result because
-the surrounding sentence reads normally. The divergence only affects
-documents that use `<br>` at all — mostly verse, addresses and tables of
-contents converted out of HTML — and within those, only the joins.
-
-**Measured:** `parity/cases/mdscrub/breaks.md`; both answers are committed as
-`golden/mdscrub/breaks.md` and `golden/mdscrub/breaks.rust.md`. Three welds
-in eight lines.
-
 ## mdscrub — un-paginated text is not given a page 1 marker
 
 **Python:** `_normalize_marker_pages` ends by wrapping any text it found no

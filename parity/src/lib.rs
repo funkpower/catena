@@ -83,10 +83,6 @@ pub fn run_oracle_with(script: &str, args: &[String], input: &str) -> Result<Str
         .map_err(|e| format!("{} wrote invalid UTF-8: {e}", script.display()))
 }
 
-/// Cases where `mdscrub` is meant to differ from the Python, each one
-/// argued for in `KNOWN.md`.
-pub const DIVERGENT_MDSCRUB: &[&str] = &["breaks"];
-
 /// Every case file for a tool, in a fixed order.
 pub fn cases(tool: &str) -> Vec<PathBuf> {
     let dir = dir().join("cases").join(tool);

@@ -10,9 +10,11 @@
 //! because one of the things that marks a page boundary — a form feed — is
 //! also a control character that the later pass deletes.
 
+mod entities;
 pub mod heading;
 pub mod html;
 pub mod pages;
+pub mod unescape;
 
 /// Clean a converted markdown document.
 ///

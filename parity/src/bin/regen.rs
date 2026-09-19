@@ -19,8 +19,9 @@ type Written = Result<Vec<String>, String>;
 type Job = (&'static str, fn() -> Written);
 
 fn main() -> ExitCode {
-    let jobs: [Job; 3] = [
+    let jobs: [Job; 4] = [
         ("tokens", tokens),
+        ("unescape", unescape),
         ("chunkmd", chunkmd),
         ("mdscrub", mdscrub),
     ];
@@ -54,6 +55,18 @@ fn tokens() -> Written {
     Ok(vec![path.display().to_string()])
 }
 
+fn unescape() -> Written {
+    let dir = parity::golden("unescape");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let cases = parity::dir().join("cases/unescape/entities.txt");
+    let text = std::fs::read_to_string(&cases).map_err(|e| e.to_string())?;
+    let decoded = parity::run_oracle("unescape.py", &text)?;
+    let path = dir.join("entities.jsonl");
+    std::fs::write(&path, decoded).map_err(|e| e.to_string())?;
+    Ok(vec![path.display().to_string()])
+}
+
 fn mdscrub() -> Written {
     let dir = parity::golden("mdscrub");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -66,15 +79,6 @@ fn mdscrub() -> Written {
         let path = dir.join(format!("{name}.md"));
         std::fs::write(&path, cleaned).map_err(|e| e.to_string())?;
         written.push(path.display().to_string());
-
-        // Where the Rust deliberately differs, its own answer is committed
-        // too, so the difference is visible in a review rather than only in
-        // a test failure. See parity/KNOWN.md.
-        if parity::DIVERGENT_MDSCRUB.contains(&name.as_str()) {
-            let path = dir.join(format!("{name}.rust.md"));
-            std::fs::write(&path, ::mdscrub::scrub(&markdown)).map_err(|e| e.to_string())?;
-            written.push(path.display().to_string());
-        }
     }
     Ok(written)
 }

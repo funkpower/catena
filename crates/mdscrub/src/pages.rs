@@ -7,7 +7,7 @@ use regex::Regex;
 /// The separator a paginating PDF converter writes between pages, like
 /// `{0}------------------------------`. Its numbering is zero-based.
 static SEPARATOR: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\{(\d+)\}-{20,}[^\S\n]*\n").expect("a valid pattern"));
+    LazyLock::new(|| Regex::new(r"\{(\d+)\}-{20,}[\s\x{1c}-\x{1f}]*\n").expect("a valid pattern"));
 
 /// A form feed, which is what a plain text extractor leaves between pages.
 const FORM_FEED: char = '\u{c}';
