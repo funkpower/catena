@@ -2,13 +2,13 @@
 
 Cues into passages worth embedding, keeping the times they were said at.
 
-Back to [the index](README.md).
+Part of [catena](../../README.md).
 
 ## What it does
 
 Packs consecutive cues into passages of about a minute of continuous speech,
 and writes each one as a [`chunk`
-record](records.md#chunk--a-retrievable-passage) carrying the start of its
+record](../../docs/records.md#chunk--a-retrievable-passage) carrying the start of its
 first cue and the end of its last.
 
 ## When you would use it
@@ -20,7 +20,7 @@ first cue and the end of its last.
   first cue's start and the last cue's end, a hit can be cited to the second
   and a player can jump to it.
 - **To index recordings and books together.** The record is the same one
-  [`chunkmd`](chunkmd.md) writes, so one index answers across both and returns
+  [`chunkmd`](../chunkmd/README.md) writes, so one index answers across both and returns
   each with a location: a page number for one, a timestamp for the other.
 
 ## Install
@@ -84,7 +84,7 @@ with its own echo embeds as something nobody said.
 
 ## Input
 
-Either the cue stream [`cuenorm`](cuenorm.md) writes, or a subtitle file. A
+Either the cue stream [`cuenorm`](../cuenorm/README.md) writes, or a subtitle file. A
 cue stream begins with a JSON object and a subtitle file does not, which is
 enough to tell them apart.
 
@@ -100,6 +100,6 @@ for passage in cuepack::pack(&cues, &Budgets::default()) {
 
 ## See also
 
-- [`cuenorm`](cuenorm.md) — what to run before this.
-- [`cueseg`](cueseg.md) — the other thing to do with a cue stream.
-- [`chunkmd`](chunkmd.md) — the same record, from a book.
+- [`cuenorm`](../cuenorm/README.md) — what to run before this.
+- [`cueseg`](../cueseg/README.md) — the other thing to do with a cue stream.
+- [`chunkmd`](../chunkmd/README.md) — the same record, from a book.

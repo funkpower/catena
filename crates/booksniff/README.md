@@ -2,7 +2,7 @@
 
 What a file actually is, whatever its name claims.
 
-Back to [the index](README.md).
+Part of [catena](../../README.md).
 
 ## What it does
 
@@ -11,7 +11,7 @@ and says what format it really is. It never reads the whole file, so a
 directory of nine-hundred-megabyte scans costs the same as a directory of
 anything else.
 
-Writes one [`doc` record](records.md#doc--what-a-file-is) per file, with a
+Writes one [`doc` record](../../docs/records.md#doc--what-a-file-is) per file, with a
 note for anything worth remarking on: a name that disagrees with the bytes, a
 file too small to be a book, a name that says "sample".
 
@@ -113,6 +113,6 @@ the bytes need not write them to disk first.
 
 ## See also
 
-- [`pdftriage`](pdftriage.md) — once you know it is a PDF, whether its text is
+- [`pdftriage`](../pdftriage/README.md) — once you know it is a PDF, whether its text is
   worth reading.
-- [The records](records.md) — the shape this writes.
+- [The records](../../docs/records.md) — the shape this writes.

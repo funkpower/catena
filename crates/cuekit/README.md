@@ -2,16 +2,16 @@
 
 The cue model, and the three subtitle formats it is read from.
 
-Back to [the index](README.md).
+Part of [catena](../../README.md).
 
 ## What it is
 
 A library. Three formats go in — SubRip, WebVTT and SubStation Alpha — and
-one [`cue`](records.md#cue--one-line-of-a-transcript) stream comes out.
+one [`cue`](../../docs/records.md#cue--one-line-of-a-transcript) stream comes out.
 Everything downstream works on cues and never has to know which of the three a
 recording arrived with.
 
-[`cuenorm`](cuenorm.md) is a command over this.
+[`cuenorm`](../cuenorm/README.md) is a command over this.
 
 ## When you would use it
 
@@ -49,7 +49,7 @@ let cue = Cue::new(12.5, 15.0, "the mill stood at the northern end");
 assert_eq!(cue.seconds(), 2.5);
 ```
 
-Deliberately smaller than a [chunk](records.md#chunk--a-retrievable-passage).
+Deliberately smaller than a [chunk](../../docs/records.md#chunk--a-retrievable-passage).
 A cue is what a subtitle file holds — a few seconds, often half a sentence —
 and turning cues into passages worth retrieving is a later stage's job.
 
@@ -99,6 +99,6 @@ makes a malformed file drop the same cues here as there.
 
 ## See also
 
-- [`cuenorm`](cuenorm.md) — the command over this.
-- [`cuepack`](cuepack.md) and [`cueseg`](cueseg.md) — what reads cues.
-- [The records](records.md) — the cue shape on the wire.
+- [`cuenorm`](../cuenorm/README.md) — the command over this.
+- [`cuepack`](../cuepack/README.md) and [`cueseg`](../cueseg/README.md) — what reads cues.
+- [The records](../../docs/records.md) — the cue shape on the wire.

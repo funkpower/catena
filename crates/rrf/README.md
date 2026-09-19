@@ -2,12 +2,12 @@
 
 Several ranked lists into one, without the database.
 
-Back to [the index](README.md).
+Part of [catena](../../README.md).
 
 ## What it does
 
 Reciprocal rank fusion. Reads [`hit`
-records](records.md#hit--one-scored-candidate) from any number of retrieval
+records](../../docs/records.md#hit--one-scored-candidate) from any number of retrieval
 channels and writes one ranked list, best first.
 
 ## When you would use it
@@ -88,7 +88,7 @@ it.
 
 ## Input and output
 
-One [`hit`](records.md#hit--one-scored-candidate) per line, in any order and
+One [`hit`](../../docs/records.md#hit--one-scored-candidate) per line, in any order and
 interleaved if you like — each carries the rank its own channel gave it, so
 the stream does not have to be grouped.
 
@@ -110,5 +110,5 @@ let fused = rrf::fuse(&hits, &rrf::Weights::default());
 
 ## See also
 
-- [`emb`](emb.md) — producing the vectors one of the channels searches.
-- [The records](records.md) — the shape this reads and writes.
+- [`emb`](../emb/README.md) — producing the vectors one of the channels searches.
+- [The records](../../docs/records.md) — the shape this reads and writes.

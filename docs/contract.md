@@ -1,33 +1,41 @@
-# The contract
+# What these programs promise
 
-Every program here obeys all of this, or it does not ship. It is worth reading
-once, because it is what lets these be used together without reading any of
-them.
+Eight things hold for every program here. Together they are what lets a person
+put any of them in a pipeline without first reading how it works.
 
-Back to [the index](README.md).
+Part of [catena](../README.md).
 
-## One job
+## Each one does a single job
 
-A tool that needs a `--mode` flag to change what it *is* is two tools.
+No program here has a mode switch that changes what it is. Where two jobs
+would otherwise share a name, there are two programs — which is why
+[`cuenorm`](../crates/cuenorm/README.md), [`cuepack`](../crates/cuepack/README.md) and [`cueseg`](../crates/cueseg/README.md) are
+separate commands rather than one command with a flag.
 
-## stdin to stdout
+## Input on stdin, results on stdout, diagnostics on stderr
 
-Input on stdin or a path argument, result on stdout, diagnostics on stderr
-only — never content and chatter on the same stream. A tool that takes a path
-instead of a stream says why in its `--help`; [`pdftriage`](pdftriage.md) does,
-because it reads two specific page ranges rather than the whole file.
+Output and commentary never share a stream, so a result can always be piped
+somewhere without filtering anything out of it.
 
-## Streams, not documents
+Almost all of them read stdin or a path. Where one takes a path only, it says
+so in `--help` and says why: [`pdftriage`](../crates/pdftriage/README.md) reads two specific
+page ranges rather than the whole file, which a stream cannot offer.
 
-Anything list-shaped is NDJSON: one [record](records.md) per line, flushed as
-it is produced, so a slow stage never blocks the pipe behind it.
+## Anything list-shaped is NDJSON
 
-The reader is strict on purpose. It refuses a record whose version it does not
-know, it stops at the first bad line rather than reading past a disagreement
-about the format, and it bounds how much one line may cost — a filter pointed
-at a binary file should fail, not allocate the file.
+One [record](records.md) per line, flushed as it is produced — so a slow stage
+downstream sees each record as it appears rather than when the producer
+finishes.
 
-## Predicates answer with exit codes
+Readers are strict, and each strictness prevents a failure that would
+otherwise be silent. A record from a version the reader does not know is
+refused rather than parsed into whatever lines up. A bad line ends the stream
+instead of being skipped, because it means the two ends disagree about the
+format. Lines are bounded, so a program pointed at a binary file fails instead
+of allocating it. A byte-order mark and blank lines are ignored, so a stream
+that was concatenated or written on Windows still reads.
+
+## Exit codes carry the answer
 
 | Code | Meaning |
 |---|---|
@@ -35,44 +43,47 @@ at a binary file should fail, not allocate the file.
 | `1` | No |
 | `2` | Could not tell |
 | `64` | The command line was wrong |
-| `65` | The input was not what the tool can work on |
+| `65` | The input was not what the program can work on |
 | `69` | A program it needs is not installed |
-| `70` | The tool's own fault |
+| `70` | Its own fault |
 | `74` | Reading or writing failed |
 
-The failure codes start where `sysexits.h` puts them so that "no" and "broke"
-are never the same number. That is what makes this work:
+Failures start where `sysexits.h` puts them, so "no" and "broke" are never the
+same number. That is what makes this work:
 
 ```sh
 for f in *.pdf; do pdftriage --quiet "$f" && ocrmypdf "$f" "ocr/$f"; done
 ```
 
-A consumer closing the pipe is not a failure. `… | head -1` exits `0`, like
-every other filter.
+A consumer closing the pipe is not a failure. `… | head -1` exits `0`, the
+same as any other filter.
 
-## No network, no database, no config file, no state
+## Nothing reaches outside the process
 
+No network, no database, no configuration file, no state kept between runs.
 Two exceptions, both declared in `--help`:
 
-- [`emb`](emb.md), whose whole job is an HTTP call.
-- [`pdftriage`](pdftriage.md), which shells out to `pdftotext` and `pdfinfo`
-  and exits `69` when either is missing.
+- [`emb`](../crates/emb/README.md) makes an HTTP call, which is the whole of what it does.
+- [`pdftriage`](../crates/pdftriage/README.md) runs `pdftotext` and `pdfinfo`, and exits `69`
+  when either is missing rather than guessing.
 
-## No ambient knowledge
+## Nothing is assumed about where it is running
 
-No hostnames, no local paths, no private vocabularies compiled in. General
-scheme data — ISBN check digits, the HTML character references — may be;
-anything local is a `--rules` file.
+No hostnames, no paths, no private vocabularies are built in. General
+reference data is — ISBN check digits, the HTML character references, the
+names of well-known publishers — and anything specific to one collection is
+supplied in a file rather than compiled in.
 
-## Deterministic
+## The same input gives the same output
 
-Same bytes in, same bytes out, across runs and machines. No hash-order
-dependence, no clock, no locale reads. Floats that JSON cannot carry are
-refused where they are produced rather than written as `null` and lost.
+On every run and on every machine. No dependence on hash ordering, no reading
+of the clock or the locale. Numbers that JSON cannot represent are refused
+where they are produced rather than written as `null` and lost somewhere
+downstream.
 
-## `--json` everywhere
+## `--json` is the stable form
 
-The human-readable default is for a person at a terminal; `--json` is the
-contract, and it does not change shape without a major version. Tools whose
-only sensible output is a stream of records write that stream and have no
-`--json` to add.
+Where a program prints something for a person to read, `--json` prints the
+same answer as a record, and that record does not change shape without a major
+version. Programs whose only sensible output is a stream of records write that
+stream and have no `--json` to add.

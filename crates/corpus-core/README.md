@@ -2,12 +2,12 @@
 
 The record types and the stream plumbing everything shares.
 
-Back to [the index](README.md).
+Part of [catena](../../README.md).
 
 ## What it is
 
 A library, not a command — though it carries a small one for printing
-schemas. It holds the three [record types](records.md), the NDJSON reader and
+schemas. It holds the three [record types](../../docs/records.md), the NDJSON reader and
 writer, and the exit-code conventions.
 
 Everything else in the workspace depends on it, which is what makes the tools
@@ -23,9 +23,9 @@ else.
 
 ## The records
 
-[`Doc`](records.md#doc--what-a-file-is),
-[`Chunk`](records.md#chunk--a-retrievable-passage) and
-[`Hit`](records.md#hit--one-scored-candidate). Each derives `Serialize`,
+[`Doc`](../../docs/records.md#doc--what-a-file-is),
+[`Chunk`](../../docs/records.md#chunk--a-retrievable-passage) and
+[`Hit`](../../docs/records.md#hit--one-scored-candidate). Each derives `Serialize`,
 `Deserialize` and `JsonSchema`, and implements `Record`, which is how a reader
 knows what version it is looking at.
 
@@ -122,7 +122,7 @@ let answer = Verdict::from(needs_ocr);
 std::process::ExitCode::from(answer)
 ```
 
-See [the contract](contract.md#predicates-answer-with-exit-codes) for the
+See [the contract](../../docs/contract.md#exit-codes-carry-the-answer) for the
 whole table.
 
 ## The schemas
@@ -137,6 +137,6 @@ it can be committed and diffed.
 
 ## See also
 
-- [The records](records.md) — the shapes, described.
-- [`catena-cli`](catena-cli.md) — the rest of what a filter needs.
-- [`textkit`](textkit.md) — counting and splitting text.
+- [The records](../../docs/records.md) — the shapes, described.
+- [`catena-cli`](../catena-cli/README.md) — the rest of what a filter needs.
+- [`textkit`](../textkit/README.md) — counting and splitting text.

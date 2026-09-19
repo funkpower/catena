@@ -4,10 +4,10 @@ Five shapes travel between these tools. Each carries a version field `v`, so a
 reader can refuse a stream it does not understand rather than parsing it into
 whatever happens to line up.
 
-Every list-shaped stream is [NDJSON](contract.md#streams-not-documents): one
+Every list-shaped stream is [NDJSON](contract.md#anything-list-shaped-is-ndjson): one
 record per line, flushed as it is produced.
 
-Back to [the index](README.md).
+Part of [catena](../README.md).
 
 ## `doc` — what a file is
 
@@ -31,7 +31,7 @@ Back to [the index](README.md).
 A tool fills what it can and leaves the rest null: a format sniffer fills
 `kind` and leaves `text_layer` empty, a triage tool does the reverse.
 
-Written by [`booksniff`](booksniff.md) and [`pdftriage`](pdftriage.md).
+Written by [`booksniff`](../crates/booksniff/README.md) and [`pdftriage`](../crates/pdftriage/README.md).
 
 ## `chunk` — a retrievable passage
 
@@ -55,7 +55,7 @@ Written by [`booksniff`](booksniff.md) and [`pdftriage`](pdftriage.md).
 recordings. One shape either way, which is what lets a single index serve a
 book and a lecture and cite both.
 
-Written by [`chunkmd`](chunkmd.md) and [`cuepack`](cuepack.md).
+Written by [`chunkmd`](../crates/chunkmd/README.md) and [`cuepack`](../crates/cuepack/README.md).
 
 ## `hit` — one scored candidate
 
@@ -74,7 +74,7 @@ Written by [`chunkmd`](chunkmd.md) and [`cuepack`](cuepack.md).
 `rank` is what fusion consumes. `score` is carried along because it is useful
 to a person reading a trace and useless for comparing across channels.
 
-Read and written by [`rrf`](rrf.md).
+Read and written by [`rrf`](../crates/rrf/README.md).
 
 ## `cue` — one line of a transcript
 
@@ -85,8 +85,8 @@ Read and written by [`rrf`](rrf.md).
 Smaller than a chunk on purpose: a cue is what a subtitle file holds, a few
 seconds and often half a sentence.
 
-Written by [`cuenorm`](cuenorm.md), read by [`cuepack`](cuepack.md) and
-[`cueseg`](cueseg.md).
+Written by [`cuenorm`](../crates/cuenorm/README.md), read by [`cuepack`](../crates/cuepack/README.md) and
+[`cueseg`](../crates/cueseg/README.md).
 
 ## `segment` — one topic chapter
 
@@ -98,7 +98,7 @@ Written by [`cuenorm`](cuenorm.md), read by [`cuepack`](cuepack.md) and
 The marks a scrubber needs, and the spans a summariser should be given one at
 a time.
 
-Written by [`cueseg`](cueseg.md).
+Written by [`cueseg`](../crates/cueseg/README.md).
 
 ## Getting the schemas
 
@@ -113,4 +113,4 @@ $ cargo run -p corpus-core -- schema chunk
 }
 ```
 
-See [`corpus-core`](corpus-core.md).
+See [`corpus-core`](../crates/corpus-core/README.md).

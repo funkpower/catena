@@ -2,7 +2,7 @@
 
 Markdown into passages that carry their page, chapter and role.
 
-Back to [the index](README.md).
+Part of [catena](../../README.md).
 
 ## What it does
 
@@ -10,7 +10,7 @@ Cuts a document into pieces of about the size an embedding model wants, and
 puts on each one the page it came from, the chapter it is in, and what part of
 the work it belongs to.
 
-Writes [`chunk` records](records.md#chunk--a-retrievable-passage), one per
+Writes [`chunk` records](../../docs/records.md#chunk--a-retrievable-passage), one per
 line.
 
 ## When you would use it
@@ -125,7 +125,7 @@ for chunk in chunkmd::chunk(&markdown, &Budgets::default()) {
 
 ## See also
 
-- [`mdscrub`](mdscrub.md) — what to run before this.
-- [`cuepack`](cuepack.md) — the same record, from a recording.
-- [`emb`](emb.md) — turning the text into vectors.
-- [The records](records.md) — the shape this writes.
+- [`mdscrub`](../mdscrub/README.md) — what to run before this.
+- [`cuepack`](../cuepack/README.md) — the same record, from a recording.
+- [`emb`](../emb/README.md) — turning the text into vectors.
+- [The records](../../docs/records.md) — the shape this writes.

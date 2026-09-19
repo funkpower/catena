@@ -2,7 +2,7 @@
 
 Lines into vectors, against an embedding server.
 
-Back to [the index](README.md).
+Part of [catena](../../README.md).
 
 ## What it does
 
@@ -124,6 +124,6 @@ let vectors = emb::embed_batch(&agent, &endpoint, &texts)?;
 
 ## See also
 
-- [`chunkmd`](chunkmd.md) and [`cuepack`](cuepack.md) — where the text comes
+- [`chunkmd`](../chunkmd/README.md) and [`cuepack`](../cuepack/README.md) — where the text comes
   from.
-- [`rrf`](rrf.md) — what to do with the results of searching those vectors.
+- [`rrf`](../rrf/README.md) — what to do with the results of searching those vectors.

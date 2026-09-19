@@ -2,7 +2,7 @@
 
 The parts of a filter every command does the same way.
 
-Back to [the index](README.md).
+Part of [catena](../../README.md).
 
 ## What it is
 
@@ -16,7 +16,7 @@ the same at the edges.
 ## When you would use it
 
 - **Writing a filter that joins this pipeline**, and wanting it to behave like
-  the others without rereading [the contract](contract.md).
+  the others without rereading [the contract](../../docs/contract.md).
 - **Anywhere a small Unix filter is wanted**, in or out of this workspace.
 
 ## Parsing a command line
@@ -117,5 +117,5 @@ code, and should stay under a hundred and fifty lines.
 
 ## See also
 
-- [The contract](contract.md) — what these functions are enforcing.
-- [`corpus-core`](corpus-core.md) — the records and the exit-code constants.
+- [The contract](../../docs/contract.md) — what these functions are enforcing.
+- [`corpus-core`](../corpus-core/README.md) — the records and the exit-code constants.

@@ -2,12 +2,12 @@
 
 Any subtitle format in, one normalised cue stream out.
 
-Back to [the index](README.md).
+Part of [catena](../../README.md).
 
 ## What it does
 
 Reads a subtitle file — SubRip, WebVTT or SubStation Alpha — and writes one
-[`cue` record](records.md#cue--one-line-of-a-transcript) per line: a start, an
+[`cue` record](../../docs/records.md#cue--one-line-of-a-transcript) per line: a start, an
 end, and what was said.
 
 The format is worked out from the content, not from the name, because a
@@ -123,10 +123,10 @@ for cue in &cues {
 }
 ```
 
-See [`cuekit`](cuekit.md) for the parsers one at a time.
+See [`cuekit`](../cuekit/README.md) for the parsers one at a time.
 
 ## See also
 
-- [`cuepack`](cuepack.md) — cues into passages worth embedding.
-- [`cueseg`](cueseg.md) — cues into topic chapters.
-- [`cuekit`](cuekit.md) — the library this is a command over.
+- [`cuepack`](../cuepack/README.md) — cues into passages worth embedding.
+- [`cueseg`](../cueseg/README.md) — cues into topic chapters.
+- [`cuekit`](../cuekit/README.md) — the library this is a command over.

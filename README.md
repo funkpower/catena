@@ -23,19 +23,31 @@ Each tool installs by name, so you can take one without taking the rest.
 
 | | |
 |---|---|
-| [`booksniff`](docs/booksniff.md) | What a file actually is, whatever its name claims |
-| [`pdftriage`](docs/pdftriage.md) | Whether a PDF's text layer is worth reading, or whether it has to be OCRed |
-| [`bibclean`](docs/bibclean.md) | Catalogue records audited and repaired, with a reason for every change |
-| [`mdscrub`](docs/mdscrub.md) | Converted markdown in, clean markdown out |
-| [`chunkmd`](docs/chunkmd.md) | Markdown into passages that carry their page, chapter and role |
-| [`cuenorm`](docs/cuenorm.md) | Any subtitle format in, one normalised cue stream out |
-| [`cuepack`](docs/cuepack.md) | Cues into passages worth embedding, keeping the times they were said at |
-| [`cueseg`](docs/cueseg.md) | A timed transcript into topic chapters |
-| [`emb`](docs/emb.md) | Lines into vectors, against an embedding server |
-| [`rrf`](docs/rrf.md) | Several ranked lists into one, without the database |
+| [`booksniff`](crates/booksniff/README.md) | What a file actually is, whatever its name claims |
+| [`pdftriage`](crates/pdftriage/README.md) | Whether a PDF's text layer is worth reading, or whether it has to be OCRed |
+| [`bibclean`](crates/bibclean/README.md) | Catalogue records audited and repaired, with a reason for every change |
+| [`mdscrub`](crates/mdscrub/README.md) | Converted markdown in, clean markdown out |
+| [`chunkmd`](crates/chunkmd/README.md) | Markdown into passages that carry their page, chapter and role |
+| [`cuenorm`](crates/cuenorm/README.md) | Any subtitle format in, one normalised cue stream out |
+| [`cuepack`](crates/cuepack/README.md) | Cues into passages worth embedding, keeping the times they were said at |
+| [`cueseg`](crates/cueseg/README.md) | A timed transcript into topic chapters |
+| [`emb`](crates/emb/README.md) | Lines into vectors, against an embedding server |
+| [`rrf`](crates/rrf/README.md) | Several ranked lists into one, without the database |
 
-Full documentation, including the libraries underneath, is in
-**[docs/](docs/README.md)**.
+Each links to its own page: what it does, when you would use it, worked
+examples, options and exit codes.
+
+## The libraries underneath
+
+Every tool is a library crate with a thin command on top, so anything a
+command does can be done in process instead.
+
+| | |
+|---|---|
+| [`corpus-core`](crates/corpus-core/README.md) | The record types and the stream plumbing everything shares |
+| [`textkit`](crates/textkit/README.md) | Token counting, sentence and paragraph splitting |
+| [`cuekit`](crates/cuekit/README.md) | The cue model, and the three subtitle formats it is read from |
+| [`catena-cli`](crates/catena-cli/README.md) | The parts of a filter every command does the same way |
 
 ## A worked pipeline
 
@@ -67,32 +79,33 @@ garbled, needs OCR
 $ for f in *.pdf; do pdftriage --quiet "$f" && ocrmypdf "$f" "ocr/$f"; done
 ```
 
-## The contract
+## What they promise
 
-Every binary in this workspace obeys all of this, or it does not ship. The
-whole of it is in [docs/contract.md](docs/contract.md).
+Eight things hold for all of them, and together they are what lets any of
+these go into a pipeline without first reading how it works:
 
-1. **One job.** A tool that needs a `--mode` flag to change what it *is* is two
-   tools.
-2. **stdin to stdout.** Input on stdin or a path argument, result on stdout,
-   diagnostics on stderr only.
-3. **Streams, not documents.** Anything list-shaped is NDJSON: one record per
-   line, flushed as it is produced.
-4. **Predicates answer with exit codes.** `0` yes, `1` no, `2` could not tell;
-   failures use the `sysexits` range, so "no" and "broke" are never the same
-   number.
-5. **No network, no database, no config file, no state**, with two declared
-   exceptions.
-6. **No ambient knowledge.** No hostnames, no local paths, no private
-   vocabularies compiled in.
-7. **Deterministic.** Same bytes in, same bytes out, across runs and machines.
-8. **`--json` everywhere.** The human-readable default is for a person at a
-   terminal; `--json` is the contract.
+- Each does a single job, with no mode switch that changes what it is.
+- Input on stdin, results on stdout, diagnostics on stderr — never mixed.
+- Anything list-shaped is NDJSON, one record per line, flushed as produced.
+- Exit codes carry the answer: `0` yes, `1` no, `2` could not tell, and
+  failures in the `sysexits` range, so "no" and "broke" are never the same
+  number.
+- Nothing reaches the network, a database, a config file or any stored state,
+  bar two exceptions that say so in `--help`.
+- Nothing is assumed about where it is running: no hostnames, no paths, no
+  private vocabularies built in.
+- The same input gives the same output, on every run and every machine.
+- `--json` is the stable form, and does not change shape without a major
+  version.
+
+The whole of it, with the reasoning: [what these programs
+promise](docs/contract.md).
 
 ## The records
 
-Three shapes travel between the tools, versioned, defined in `corpus-core` and
-described in [docs/records.md](docs/records.md).
+Five shapes travel between the tools, versioned, defined in
+[`corpus-core`](crates/corpus-core/README.md) and described in [the
+records](docs/records.md).
 
 ```
 $ cargo run -p corpus-core -- schema all

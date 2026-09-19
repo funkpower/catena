@@ -2,7 +2,7 @@
 
 Catalogue records audited and repaired, with a reason for every change.
 
-Back to [the index](README.md).
+Part of [catena](../../README.md).
 
 ## What it does
 
@@ -150,5 +150,5 @@ description to another.
 
 ## See also
 
-- [`booksniff`](booksniff.md) — what the file behind the record actually is.
-- [The records](records.md) — the shapes the rest of the suite uses.
+- [`booksniff`](../booksniff/README.md) — what the file behind the record actually is.
+- [The records](../../docs/records.md) — the shapes the rest of the suite uses.

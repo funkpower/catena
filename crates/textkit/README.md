@@ -2,7 +2,7 @@
 
 Token counting, sentence and paragraph splitting.
 
-Back to [the index](README.md).
+Part of [catena](../../README.md).
 
 ## What it is
 
@@ -14,7 +14,7 @@ and cutting text into sentences and paragraphs.
 
 - **Deciding how much text fits** in a model's context, before sending it.
 - **Writing your own chunker** that has to agree with
-  [`chunkmd`](chunkmd.md) about where a boundary is.
+  [`chunkmd`](../chunkmd/README.md) about where a boundary is.
 - **Porting anything from Python** where the exact behaviour of `\s`, `\w` or
   `\b` matters more than it looks like it should.
 
@@ -117,5 +117,5 @@ that has them.
 
 ## See also
 
-- [`corpus-core`](corpus-core.md) — the records these help produce.
-- [`chunkmd`](chunkmd.md) — the chunker built on this.
+- [`corpus-core`](../corpus-core/README.md) — the records these help produce.
+- [`chunkmd`](../chunkmd/README.md) — the chunker built on this.

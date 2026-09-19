@@ -2,12 +2,12 @@
 
 A timed transcript into topic chapters.
 
-Back to [the index](README.md).
+Part of [catena](../../README.md).
 
 ## What it does
 
 Finds where a recording changes subject, and writes one [`segment`
-record](records.md#segment--one-topic-chapter) per chapter: a start, an end, a
+record](../../docs/records.md#segment--one-topic-chapter) per chapter: a start, an end, a
 title taken from the chapter's own first sentence, and an excerpt.
 
 No model and no network. The text is hashed into a small lexical vector a
@@ -103,7 +103,7 @@ than the end of the file is a mark that lands in the wrong place.
 
 ## Input
 
-Either the cue stream [`cuenorm`](cuenorm.md) writes, or a subtitle file.
+Either the cue stream [`cuenorm`](../cuenorm/README.md) writes, or a subtitle file.
 
 ## As a library
 
@@ -115,5 +115,5 @@ for chapter in cueseg::segment(&cues, 7245.0) {
 
 ## See also
 
-- [`cuenorm`](cuenorm.md) — what to run before this.
-- [`cuepack`](cuepack.md) — the other thing to do with a cue stream.
+- [`cuenorm`](../cuenorm/README.md) — what to run before this.
+- [`cuepack`](../cuepack/README.md) — the other thing to do with a cue stream.

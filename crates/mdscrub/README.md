@@ -2,7 +2,7 @@
 
 Converted markdown in, clean markdown out.
 
-Back to [the index](README.md).
+Part of [catena](../../README.md).
 
 ## What it does
 
@@ -140,5 +140,5 @@ wants only one of them.
 
 ## See also
 
-- [`chunkmd`](chunkmd.md) — what to do with the markdown once it is clean.
-- [`pdftriage`](pdftriage.md) — whether the text was worth extracting at all.
+- [`chunkmd`](../chunkmd/README.md) — what to do with the markdown once it is clean.
+- [`pdftriage`](../pdftriage/README.md) — whether the text was worth extracting at all.

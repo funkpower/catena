@@ -2,7 +2,7 @@
 
 Whether a PDF's text layer is worth reading, or whether it has to be OCRed.
 
-Back to [the index](README.md).
+Part of [catena](../../README.md).
 
 ## What it does
 
@@ -79,7 +79,7 @@ $ pdftriage --json book.pdf
 
 | Option | Effect |
 |---|---|
-| `--json` | Emit a [`doc` record](records.md#doc--what-a-file-is) instead of a readable verdict |
+| `--json` | Emit a [`doc` record](../../docs/records.md#doc--what-a-file-is) instead of a readable verdict |
 | `-q`, `--quiet` | Write no verdict; answer with the exit code alone. Diagnostics still go to stderr, because a silent failure is worse than a quiet one |
 
 ## Exit codes
@@ -131,6 +131,6 @@ Running `pdftotext` is the command's job, not the library's.
 
 ## See also
 
-- [`booksniff`](booksniff.md) — whether it is a PDF at all.
-- [`mdscrub`](mdscrub.md) — cleaning up the text once it has been extracted.
-- [The records](records.md) — the shape `--json` writes.
+- [`booksniff`](../booksniff/README.md) — whether it is a PDF at all.
+- [`mdscrub`](../mdscrub/README.md) — cleaning up the text once it has been extracted.
+- [The records](../../docs/records.md) — the shape `--json` writes.
