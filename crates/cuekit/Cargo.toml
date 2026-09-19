@@ -1,0 +1,21 @@
+[package]
+name = "cuekit"
+description = "The cue model everything timed shares, and the subtitle formats it is read from."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+corpus-core.workspace = true
+regex.workspace = true
+schemars.workspace = true
+serde.workspace = true
+textkit.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

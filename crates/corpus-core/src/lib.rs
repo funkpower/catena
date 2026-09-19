@@ -11,7 +11,7 @@
 pub mod chunk;
 pub mod doc;
 pub mod exit;
-mod float;
+pub mod finite;
 pub mod hit;
 pub mod ndjson;
 

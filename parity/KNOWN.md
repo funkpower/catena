@@ -18,6 +18,26 @@ affected and how often it occurs in practice.
 
 ---
 
+## cuenorm — a cue line with trailing settings still reads
+
+**Original:** the timestamp line is split on the arrow and each half is read
+whole, so `00:00:01,000 --> 00:00:03,000  X1:040 X2:560` gives an end time
+that is not a number and the cue is dropped entirely.
+
+**Rust:** each half is reduced to the one token that could be a timestamp, so
+the trailing text is ignored and the cue reads.
+
+**Why this is acceptable:** it is what makes the same reader take WebVTT,
+where positioning settings after the end time are not a malformation but the
+format — `00:00:01.000 --> 00:00:03.000 line:0 position:20%` is an ordinary
+cue. Without it the tool would need a second parser that differed in one
+line. The divergence can only ever recover a cue that the original discarded;
+there is no input where it changes a cue the original read.
+
+**Measured:** `parity/cases/cuenorm/coordinates.srt` — one cue of two
+recovered. Across the other eight cases, including deliberately malformed
+timestamps, the two agree cue for cue.
+
 ## mdscrub — un-paginated text is not given a page 1 marker
 
 **Python:** `_normalize_marker_pages` ends by wrapping any text it found no

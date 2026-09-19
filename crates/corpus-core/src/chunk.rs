@@ -26,18 +26,12 @@ pub struct Chunk {
     /// What part of the work the passage belongs to.
     pub role: Role,
     /// Seconds from the start of the recording, for timed sources.
-    #[serde(
-        default,
-        serialize_with = "crate::float::serialize_option",
-        deserialize_with = "crate::float::deserialize_option"
-    )]
+    #[serde(default, with = "crate::finite::option")]
+    #[schemars(with = "Option<f64>")]
     pub start_time: Option<f64>,
     /// Seconds from the start of the recording, for timed sources.
-    #[serde(
-        default,
-        serialize_with = "crate::float::serialize_option",
-        deserialize_with = "crate::float::deserialize_option"
-    )]
+    #[serde(default, with = "crate::finite::option")]
+    #[schemars(with = "Option<f64>")]
     pub end_time: Option<f64>,
     /// Set tags; see [`flags`]. Sorted and deduplicated on the way in and on
     /// the way out, so the same set of flags is always the same bytes

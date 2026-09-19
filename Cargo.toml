@@ -11,10 +11,12 @@ repository = "https://git.pumpin.online/funkpower/catena"
 
 [workspace.dependencies]
 corpus-core = { path = "crates/corpus-core", version = "0.1.0" }
+cuekit = { path = "crates/cuekit", version = "0.1.0" }
 textkit = { path = "crates/textkit", version = "0.1.0" }
 chunkmd = { path = "crates/chunkmd", version = "0.1.0" }
 mdscrub = { path = "crates/mdscrub", version = "0.1.0" }
 pdftriage = { path = "crates/pdftriage", version = "0.1.0" }
+cuenorm = { path = "crates/cuenorm", version = "0.1.0" }
 
 clap = { version = "4", features = ["derive"] }
 fancy-regex = "0.16"

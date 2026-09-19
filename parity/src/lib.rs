@@ -35,6 +35,20 @@ pub fn oracle(name: &str) -> PathBuf {
     dir().join("oracle").join(name)
 }
 
+/// Cases where `cuenorm` is meant to differ from the JavaScript it was
+/// ported from, each one argued for in `KNOWN.md`.
+pub const DIVERGENT_CUENORM: &[&str] = &["coordinates"];
+
+/// The JavaScript runtime to run an oracle with.
+pub fn node() -> String {
+    std::env::var("CATENA_PARITY_NODE").unwrap_or_else(|_| "node".to_string())
+}
+
+/// Run a JavaScript oracle over `input` and return its stdout.
+pub fn run_node_oracle(script: &str, input: &str) -> Result<String, String> {
+    run_oracle_in(node(), script, &[], input)
+}
+
 /// The Python interpreter to run an oracle with.
 ///
 /// Taken from `CATENA_PARITY_PYTHON`, because the interpreter that has the
@@ -55,18 +69,28 @@ pub fn run_oracle(script: &str, input: &str) -> Result<String, String> {
 
 /// Run an oracle script with arguments.
 pub fn run_oracle_with(script: &str, args: &[String], input: &str) -> Result<String, String> {
+    run_oracle_in(python(), script, args, input)
+}
+
+/// Run an oracle under a named runtime.
+pub fn run_oracle_in(
+    runtime: String,
+    script: &str,
+    args: &[String],
+    input: &str,
+) -> Result<String, String> {
     use std::io::Write as _;
     use std::process::{Command, Stdio};
 
     let script = oracle(script);
-    let mut child = Command::new(python())
+    let mut child = Command::new(&runtime)
         .arg(&script)
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
-        .map_err(|e| format!("running {} with {}: {e}", script.display(), python()))?;
+        .map_err(|e| format!("running {} with {runtime}: {e}", script.display()))?;
     child
         .stdin
         .take()
@@ -85,12 +109,17 @@ pub fn run_oracle_with(script: &str, args: &[String], input: &str) -> Result<Str
 
 /// Every case file for a tool, in a fixed order.
 pub fn cases(tool: &str) -> Vec<PathBuf> {
+    cases_with_extension(tool, "md")
+}
+
+/// Every case file for a tool with a given extension, in a fixed order.
+pub fn cases_with_extension(tool: &str, extension: &str) -> Vec<PathBuf> {
     let dir = dir().join("cases").join(tool);
     let mut found: Vec<PathBuf> = std::fs::read_dir(&dir)
         .unwrap_or_else(|e| panic!("reading {}: {e}", dir.display()))
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|ext| ext == "md"))
+        .filter(|path| path.extension().is_some_and(|ext| ext == extension))
         .collect();
     found.sort();
     found

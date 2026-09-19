@@ -22,10 +22,8 @@ pub struct Hit {
     /// Position within the channel's own ranking, from one.
     pub rank: u32,
     /// The channel's raw score, on whatever scale that channel uses.
-    #[serde(
-        serialize_with = "crate::float::serialize",
-        deserialize_with = "crate::float::deserialize"
-    )]
+    #[serde(with = "crate::finite")]
+    #[schemars(with = "f64")]
     pub score: f64,
     /// Anything the producer wants to carry through fusion untouched.
     ///

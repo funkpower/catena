@@ -167,6 +167,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "cuekit"
+version = "0.1.0"
+dependencies = [
+ "corpus-core",
+ "regex",
+ "schemars",
+ "serde",
+ "serde_json",
+ "textkit",
+]
+
+[[package]]
+name = "cuenorm"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "corpus-core",
+ "cuekit",
+]
+
+[[package]]
 name = "dyn-clone"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -246,6 +267,7 @@ version = "0.1.0"
 dependencies = [
  "chunkmd",
  "corpus-core",
+ "cuekit",
  "mdscrub",
  "pdftriage",
  "serde_json",

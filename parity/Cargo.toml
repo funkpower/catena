@@ -15,6 +15,7 @@ python = []
 
 [dependencies]
 chunkmd.workspace = true
+cuekit.workspace = true
 mdscrub.workspace = true
 pdftriage.workspace = true
 corpus-core.workspace = true
