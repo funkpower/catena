@@ -76,6 +76,28 @@ fn every_answer_matches_python() {
                     note("indices", format!("{ours:?}"), &theirs["indices"]);
                 }
             }
+            "greymap" => {
+                let width = case["width"].as_u64().expect("a width") as usize;
+                let height = case["height"].as_u64().expect("a height") as usize;
+                let pixels: Vec<u8> = case["pixels"]
+                    .as_array()
+                    .expect("an array")
+                    .iter()
+                    .map(|value| value.as_u64().expect("a number") as u8)
+                    .collect();
+
+                // The renderer is not the thing under test; the reduction it
+                // feeds is. Both sides are handed the same pixels.
+                let mut greymap = format!("P5\n{width} {height}\n255\n").into_bytes();
+                greymap.extend_from_slice(&pixels);
+                let ours = pdfgutter::ink::profile(&greymap, pdfgutter::INK_THRESHOLD)
+                    .expect("a readable greymap");
+
+                let theirs_profile = floats(&theirs["profile"]);
+                if ours != theirs_profile {
+                    note("profile", format!("{ours:?}"), &theirs["profile"]);
+                }
+            }
             "verdict" => {
                 let ratios = floats(&case["ratios"]);
                 let gutters: Vec<bool> = case["gutters"]
@@ -124,7 +146,7 @@ fn every_answer_matches_python() {
 #[test]
 fn every_kind_of_case_is_present() {
     let cases = cases();
-    for kind in ["ratio", "gutter", "sample", "verdict"] {
+    for kind in ["ratio", "gutter", "sample", "verdict", "greymap"] {
         assert!(
             cases.iter().any(|case| case["kind"] == kind),
             "no {kind} case"

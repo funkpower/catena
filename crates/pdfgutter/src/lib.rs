@@ -142,6 +142,12 @@ pub fn median(values: &[f64]) -> f64 {
     if values.is_empty() {
         return 0.0;
     }
+    // A run with a number that is not one has no middle. Answering anyway
+    // would put a sheet's shape on the wrong side of a threshold on the
+    // strength of a value that means nothing.
+    if values.iter().any(|value| value.is_nan()) {
+        return f64::NAN;
+    }
     let mut sorted = values.to_vec();
     sorted.sort_by(f64::total_cmp);
     let middle = sorted.len() / 2;
@@ -156,8 +162,20 @@ pub fn median(values: &[f64]) -> f64 {
 /// `gutters` holds one answer per sampled page that was wide enough to look
 /// at, which is why it is usually shorter than `ratios`.
 pub fn is_two_up(ratios: &[f64], gutters: &[bool]) -> bool {
-    let median_ratio = median(ratios);
-    median_ratio > MIN_RATIO && gutter_fraction(gutters) >= MIN_GUTTER_FRACTION
+    two_up_above(ratios, gutters, MIN_RATIO, MIN_GUTTER_FRACTION)
+}
+
+/// The same question against thresholds of your own.
+///
+/// The one place the answer is decided, so that a command offering its own
+/// thresholds cannot come to decide it a second and slightly different way.
+pub fn two_up_above(
+    ratios: &[f64],
+    gutters: &[bool],
+    min_ratio: f64,
+    min_gutter_fraction: f64,
+) -> bool {
+    median(ratios) > min_ratio && gutter_fraction(gutters) >= min_gutter_fraction
 }
 
 /// What share of the pages looked at showed a gutter.
@@ -279,6 +297,25 @@ mod tests {
         assert_eq!(median(&[1.0, 2.0, 3.0, 4.0]), 2.5);
         assert_eq!(median(&[1.0, 2.0, 3.0]), 2.0);
         assert_eq!(median(&[]), 0.0);
+    }
+
+    #[test]
+    fn a_run_with_no_number_in_it_has_no_middle() {
+        assert!(median(&[1.0, f64::NAN, 3.0]).is_nan());
+        // And a shape that is not a number is not a wide sheet.
+        assert!(!is_two_up(&[f64::NAN, 1.4], &[true; 4]));
+    }
+
+    #[test]
+    fn thresholds_of_your_own_decide_it_the_same_way() {
+        let ratios = [1.4; 8];
+        let gutters = [true, true, true, false, false, false, false, false];
+        assert_eq!(
+            is_two_up(&ratios, &gutters),
+            two_up_above(&ratios, &gutters, MIN_RATIO, MIN_GUTTER_FRACTION)
+        );
+        // Three in eight clears a threshold of three in ten.
+        assert!(two_up_above(&ratios, &gutters, MIN_RATIO, 0.3));
     }
 
     #[test]

@@ -236,6 +236,123 @@ fn splitting_twice_does_not_split_twice() {
     assert_eq!(split.len(), 6);
 }
 
+/// A PDF assembled from object bodies, for the shapes the ordinary writer
+/// above cannot make.
+fn write_objects(path: &Path, objects: &[(usize, &str)], root: usize) {
+    let mut out: Vec<u8> = b"%PDF-1.4\n".to_vec();
+    let top = objects.iter().map(|(n, _)| *n).max().unwrap_or(0) + 1;
+    let mut offsets = vec![0usize; top];
+    for (number, body) in objects {
+        offsets[*number] = out.len();
+        out.extend_from_slice(format!("{number} 0 obj\n{body}\nendobj\n").as_bytes());
+    }
+    let start = out.len();
+    out.extend_from_slice(format!("xref\n0 {top}\n0000000000 65535 f \n").as_bytes());
+    for offset in offsets.iter().take(top).skip(1) {
+        out.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(
+        format!("trailer\n<< /Size {top} /Root {root} 0 R >>\nstartxref\n{start}\n%%EOF\n")
+            .as_bytes(),
+    );
+    std::fs::write(path, out).expect("a writable file");
+}
+
+#[test]
+fn a_page_tree_that_does_not_add_up_is_refused_rather_than_rewritten() {
+    // The inner node has no `/Type`, so a strict walk finds one page where
+    // the file says three. Rewriting the tree around pages it could not see
+    // would delete them, and the document would look like it had always been
+    // one page long.
+    let dir = scratch("miscounted");
+    let path = dir.join("in.pdf");
+    write_objects(
+        &path,
+        &[
+            (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+            (2, "<< /Type /Pages /Count 3 /Kids [4 0 R 3 0 R] >>"),
+            (3, "<< /Count 2 /Kids [6 0 R 8 0 R] /Parent 2 0 R >>"),
+            (4, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 480 720] >>"),
+            (6, "<< /Type /Page /Parent 3 0 R /MediaBox [0 0 480 720] >>"),
+            (8, "<< /Type /Page /Parent 3 0 R /MediaBox [0 0 480 720] >>"),
+        ],
+        1,
+    );
+
+    match Pdf::open(&path) {
+        Err(pdfgutter::pdf::Error::Miscounted { declared, found }) => {
+            assert_eq!((declared, found), (3, 1));
+        }
+        other => panic!("expected a refusal, got {:?}", other.map(|pdf| pdf.len())),
+    }
+}
+
+#[test]
+fn a_page_the_tree_lists_twice_is_cut_twice() {
+    // Cutting the original in place would leave the second listing measuring
+    // a page that had already been halved, and it would come through whole.
+    let dir = scratch("duplicated");
+    let (source, destination) = (dir.join("in.pdf"), dir.join("out.pdf"));
+    write_objects(
+        &source,
+        &[
+            (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+            (2, "<< /Type /Pages /Count 2 /Kids [4 0 R 4 0 R] >>"),
+            (
+                4,
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 1008 720] >>",
+            ),
+        ],
+        1,
+    );
+
+    let mut pdf = Pdf::open(&source).expect("a readable PDF");
+    assert_eq!(pdf.len(), 2);
+    assert_eq!(pdf.split(pdfgutter::MIN_RATIO), 4);
+    pdf.save(&destination).expect("a written PDF");
+
+    let split = Pdf::open(&destination).expect("a readable PDF");
+    assert_eq!(split.len(), 4);
+    let widths: Vec<f64> = (0..4).map(|i| split.geometry(i).displayed().0).collect();
+    assert_eq!(widths, [504.0, 504.0, 504.0, 504.0]);
+}
+
+#[test]
+fn a_document_with_nothing_to_cut_keeps_every_page() {
+    let dir = scratch("nothing-to-cut");
+    let (source, destination) = (dir.join("in.pdf"), dir.join("out.pdf"));
+    write(&source, &[tall(), tall(), tall(), tall(), tall()]);
+
+    let mut pdf = Pdf::open(&source).expect("a readable PDF");
+    assert_eq!(pdf.split(pdfgutter::MIN_RATIO), 5);
+    pdf.save(&destination).expect("a written PDF");
+    assert_eq!(Pdf::open(&destination).expect("a readable PDF").len(), 5);
+}
+
+#[test]
+fn a_page_cropped_to_one_of_its_two_halves_is_not_cut_again() {
+    // What running this over its own output would meet if the crop box were
+    // ignored: a sheet whose box is still wide, showing one page.
+    let dir = scratch("cropped");
+    let path = dir.join("in.pdf");
+    write_objects(
+        &path,
+        &[
+            (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+            (2, "<< /Type /Pages /Count 1 /Kids [4 0 R] >>"),
+            (
+                4,
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 1008 720] /CropBox [504 0 1008 720] >>",
+            ),
+        ],
+        1,
+    );
+
+    let mut pdf = Pdf::open(&path).expect("a readable PDF");
+    assert_eq!(pdf.geometry(0).displayed(), (504.0, 720.0));
+    assert_eq!(pdf.split(pdfgutter::MIN_RATIO), 1);
+}
+
 #[test]
 fn what_is_not_a_pdf_is_refused_rather_than_guessed_at() {
     let dir = scratch("refused");

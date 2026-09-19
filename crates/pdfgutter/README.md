@@ -12,8 +12,9 @@ lines interleave, the reading order comes out scrambled, and what lands in the
 index looks like prose and is not.
 
 `pdfgutter` says whether a PDF is that, and splits it when it is. The split
-changes the page boxes and nothing else — no re-rendering, no loss, and a
-250-sheet book becomes a 500-page book at almost no cost in size.
+changes the page boxes and nothing else — nothing is re-rendered, the text and
+the images are the ones that were there, and a 250-sheet book becomes a
+500-page book at almost no cost in size.
 
 ## When you would use it
 
@@ -30,7 +31,8 @@ changes the page boxes and nothing else — no re-rendering, no loss, and a
 cargo install --git https://git.pumpin.online/funkpower/catena pdfgutter
 ```
 
-Detection needs `pdftoppm`, from poppler. Splitting needs nothing.
+Needs `pdftoppm`, from poppler. Nothing is split without first being looked
+at, so it is needed either way.
 
 ## Example
 
@@ -91,8 +93,9 @@ done
 | `--min-ratio <RATIO>` | How wide a sheet must be to hold two pages. Default `1.15` |
 | `--gutter-fraction <FRACTION>` | What share of wide sheets must show a gutter. Default `0.6` |
 
-`--into` writes whatever the verdict was: a document that is not two-up is
-copied through unchanged, so a loop over a directory does not have to branch.
+`--into` writes whatever the verdict was, so a loop over a directory does not
+have to branch. A document with no sheet wide enough to cut is not altered at
+all — every page comes through as it was.
 
 ## Exit codes
 
@@ -100,7 +103,7 @@ copied through unchanged, so a loop over a directory does not have to branch.
 |---|---|
 | `0` | Two pages to a sheet |
 | `1` | One page to a sheet |
-| `2` | It could not be judged — encrypted, or no pages |
+| `2` | It could not be judged — encrypted, no pages, or a page tree that does not add up |
 | `64` | The command line was wrong |
 | `69` | `pdftoppm` is not installed |
 | `74` | The file could not be read or written |
@@ -135,10 +138,23 @@ the answer for a whole book.
 Each wide sheet becomes two pages pointing at the same content, differing only
 in how much of it they show. A sheet the file asks to be turned on its side is
 cut across rather than down, and the halves come out in the order a reader
-would read them.
+would read them. An annotation is kept on the half it sits on rather than
+copied onto both.
 
 Splitting is safe to repeat: the halves are portrait, so a second pass finds
 nothing to do.
+
+Splitting replaces the page tree, which means a page this could not find in
+that tree would be a page dropped from the result. So the number of pages
+found is checked against the number the file says it has, and a document where
+those disagree is refused rather than written short.
+
+### What it measures
+
+The crop box, where a page has one — that is the rectangle a reader shows and
+the one that gets rendered. A wide sheet cropped down to a single page is
+therefore not a spread, which is what stops a second pass cutting a page in
+half. Pages with no crop box, which is most of them, are their media box.
 
 ## As a library
 

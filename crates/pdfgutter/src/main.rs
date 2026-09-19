@@ -144,7 +144,7 @@ fn measure(args: &Args, pdf: &pdfgutter::pdf::Pdf) -> Result<Verdict, ExitCode> 
     Ok(Verdict {
         v: corpus_core::V,
         path: args.path.display().to_string(),
-        two_up: median_ratio > args.min_ratio && gutter_fraction >= args.gutter_fraction,
+        two_up: pdfgutter::two_up_above(&ratios, &gutters, args.min_ratio, args.gutter_fraction),
         pages: pdf.len(),
         median_ratio,
         gutter_fraction,

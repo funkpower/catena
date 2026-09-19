@@ -7,7 +7,7 @@
 use std::fmt;
 use std::path::Path;
 
-use lopdf::{Document, Object, ObjectId};
+use lopdf::{Dictionary, Document, Object, ObjectId};
 
 /// The four page attributes a page may inherit from the tree above it.
 const INHERITED: [&[u8]; 4] = [b"Resources", b"MediaBox", b"CropBox", b"Rotate"];
@@ -33,6 +33,14 @@ pub enum Error {
     Encrypted,
     /// It has no pages.
     Empty,
+    /// The page tree does not add up: the file says one number of pages and
+    /// walking it finds another.
+    Miscounted {
+        /// What the file says.
+        declared: usize,
+        /// What walking the tree found.
+        found: usize,
+    },
     /// It could not be written.
     Unwritable(String),
 }
@@ -43,6 +51,10 @@ impl fmt::Display for Error {
             Error::Unreadable(why) => write!(f, "{why}"),
             Error::Encrypted => write!(f, "it is encrypted"),
             Error::Empty => write!(f, "it has no pages"),
+            Error::Miscounted { declared, found } => write!(
+                f,
+                "it says it has {declared} pages and walking it finds {found}"
+            ),
             Error::Unwritable(why) => write!(f, "{why}"),
         }
     }
@@ -55,16 +67,40 @@ impl std::error::Error for Error {}
 pub struct Geometry {
     /// The media box, left, bottom, right, top, with the corners in order.
     pub media: [f64; 4],
+    /// The crop box, where the page names one. This is what a reader shows
+    /// and what a renderer draws, so it is what everything here measures.
+    pub crop: Option<[f64; 4]>,
     /// A quarter turn clockwise per unit, as the file asks for it.
     pub rotate: i64,
 }
 
 impl Geometry {
-    /// Width and height as displayed, which is the media box turned by
-    /// whatever the page's rotation asks for.
+    /// The rectangle a reader actually shows.
+    ///
+    /// A crop box outside the media box is meaningless, so it is clipped to
+    /// it, and one that clips away the whole page is ignored.
+    pub fn visible(self) -> [f64; 4] {
+        let Some(crop) = self.crop else {
+            return self.media;
+        };
+        let clipped = [
+            crop[0].max(self.media[0]),
+            crop[1].max(self.media[1]),
+            crop[2].min(self.media[2]),
+            crop[3].min(self.media[3]),
+        ];
+        match clipped[2] > clipped[0] && clipped[3] > clipped[1] {
+            true => clipped,
+            false => self.media,
+        }
+    }
+
+    /// Width and height as displayed, which is the visible rectangle turned
+    /// by whatever the page's rotation asks for.
     pub fn displayed(self) -> (f64, f64) {
-        let width = self.media[2] - self.media[0];
-        let height = self.media[3] - self.media[1];
+        let visible = self.visible();
+        let width = visible[2] - visible[0];
+        let height = visible[3] - visible[1];
         match self.quarter_turns() % 2 {
             0 => (width, height),
             _ => (height, width),
@@ -89,7 +125,7 @@ impl Geometry {
     /// Which way to cut depends on the rotation: a sheet turned on its side
     /// has its two pages one above the other in the file, however they look.
     pub fn halves(self) -> [[f64; 4]; 2] {
-        let [left, bottom, right, top] = self.media;
+        let [left, bottom, right, top] = self.visible();
         let middle_x = (left + right) / 2.0;
         let middle_y = (bottom + top) / 2.0;
 
@@ -115,16 +151,30 @@ pub struct Pdf {
 
 impl Pdf {
     /// Open a file.
+    ///
+    /// Refuses a document whose page tree does not add up. Walking a tree and
+    /// finding fewer pages than the file says it has means there is a page
+    /// here this does not understand, and the one thing that must not then
+    /// happen is rewriting the tree around it — a page left out of the new
+    /// tree is a page deleted.
     pub fn open(path: &Path) -> Result<Self, Error> {
         let document = Document::load(path).map_err(|e| Error::Unreadable(e.to_string()))?;
         if document.is_encrypted() {
             return Err(Error::Encrypted);
         }
         let pages: Vec<ObjectId> = document.get_pages().into_values().collect();
-        match pages.is_empty() {
-            true => Err(Error::Empty),
-            false => Ok(Pdf { document, pages }),
+        if pages.is_empty() {
+            return Err(Error::Empty);
         }
+        if let Some(declared) = declared_pages(&document) {
+            if declared != pages.len() {
+                return Err(Error::Miscounted {
+                    declared,
+                    found: pages.len(),
+                });
+            }
+        }
+        Ok(Pdf { document, pages })
     }
 
     /// How many pages it has.
@@ -144,12 +194,19 @@ impl Pdf {
             .inherited(id, b"MediaBox")
             .and_then(|object| rectangle(&self.document, object))
             .unwrap_or(DEFAULT_BOX);
+        let crop = self
+            .inherited(id, b"CropBox")
+            .and_then(|object| rectangle(&self.document, object));
         let rotate = self
             .inherited(id, b"Rotate")
             .and_then(|object| self.document.dereference(object).ok())
             .and_then(|(_, object)| object.as_i64().ok())
             .unwrap_or(0);
-        Geometry { media, rotate }
+        Geometry {
+            media,
+            crop,
+            rotate,
+        }
     }
 
     /// An attribute of a page, from the page itself or from the tree above it.
@@ -169,35 +226,46 @@ impl Pdf {
     /// rest alone.
     ///
     /// Returns how many pages the document now has.
+    /// Cut every sheet wide enough to hold two pages into two, and leave the
+    /// rest alone.
+    ///
+    /// Returns how many pages the document now has. A document with nothing
+    /// to cut is not touched at all, so writing it back out is a copy.
     pub fn split(&mut self, min_ratio: f64) -> usize {
+        let wide: Vec<bool> = (0..self.pages.len())
+            .map(|index| self.geometry(index).ratio() > min_ratio)
+            .collect();
+        if !wide.iter().any(|wide| *wide) {
+            return self.pages.len();
+        }
+
         // Whatever a page would have inherited has to be written onto it
         // first, because the tree it would have inherited from is about to be
         // replaced by a flat one.
         self.settle_inherited();
 
         let mut order: Vec<ObjectId> = Vec::with_capacity(self.pages.len());
-        for index in 0..self.pages.len() {
+        for (index, wide) in wide.iter().enumerate() {
             let id = self.pages[index];
-            let geometry = self.geometry(index);
-            if geometry.ratio() <= min_ratio {
+            if !wide {
                 order.push(id);
                 continue;
             }
 
-            let [first, second] = geometry.halves();
-            let twin = match self.document.get_dictionary(id) {
-                Ok(dictionary) => dictionary.clone(),
-                Err(_) => {
-                    order.push(id);
-                    continue;
-                }
+            // Both halves are new objects and the original is left as it was,
+            // so a page the tree happens to list twice is cut twice rather
+            // than cut once and then measured after the fact.
+            let Ok(original) = self.document.get_dictionary(id).cloned() else {
+                order.push(id);
+                continue;
             };
-            let twin = self.document.add_object(Object::Dictionary(twin));
-
-            self.set_box(id, first);
-            self.set_box(twin, second);
-            order.push(id);
-            order.push(twin);
+            let geometry = self.geometry(index);
+            for half in geometry.halves() {
+                let mut page = original.clone();
+                narrow(&mut page, half);
+                keep_annotations_within(&self.document, &mut page, half);
+                order.push(self.document.add_object(Object::Dictionary(page)));
+            }
         }
 
         self.reparent(&order);
@@ -229,24 +297,6 @@ impl Pdf {
         }
     }
 
-    /// Point a page at half the sheet.
-    fn set_box(&mut self, page: ObjectId, rectangle: [f64; 4]) {
-        let Ok(dictionary) = self.document.get_dictionary_mut(page) else {
-            return;
-        };
-        let value: Vec<Object> = rectangle
-            .iter()
-            .map(|edge| Object::Real(*edge as f32))
-            .collect();
-        dictionary.set("MediaBox", Object::Array(value.clone()));
-        dictionary.set("CropBox", Object::Array(value));
-        // These describe a region inside the old page, and half of them now
-        // lie outside it entirely.
-        for key in NARROWING {
-            dictionary.remove(key);
-        }
-    }
-
     /// Replace the page tree with one flat node holding the pages in order.
     fn reparent(&mut self, order: &[ObjectId]) {
         let Ok(root) = self
@@ -270,6 +320,79 @@ impl Pdf {
             pages.set("Count", Object::Integer(order.len() as i64));
         }
     }
+}
+
+/// Point a page dictionary at half the sheet.
+fn narrow(page: &mut Dictionary, rectangle: [f64; 4]) {
+    let value: Vec<Object> = rectangle
+        .iter()
+        .map(|edge| Object::Real(*edge as f32))
+        .collect();
+    page.set("MediaBox", Object::Array(value.clone()));
+    page.set("CropBox", Object::Array(value));
+    // These describe a region inside the old page, and half of them now lie
+    // outside it entirely.
+    for key in NARROWING {
+        page.remove(key);
+    }
+}
+
+/// Drop the annotations that belong to the other half.
+///
+/// A link sitting on the left page would otherwise be attached to the right
+/// one as well, where a reader would show it over whatever text is now in
+/// that position.
+fn keep_annotations_within(document: &Document, page: &mut Dictionary, half: [f64; 4]) {
+    let Ok(annotations) = page.get(b"Annots").and_then(|object| {
+        document
+            .dereference(object)
+            .map(|(_, object)| object)
+            .and_then(Object::as_array)
+    }) else {
+        return;
+    };
+
+    let kept: Vec<Object> = annotations
+        .iter()
+        .filter(|annotation| {
+            document
+                .dereference(annotation)
+                .ok()
+                .and_then(|(_, object)| object.as_dict().ok())
+                .and_then(|dictionary| dictionary.get(b"Rect").ok())
+                .and_then(|object| rectangle(document, object))
+                .is_none_or(|rect| centre_within(rect, half))
+        })
+        .cloned()
+        .collect();
+
+    match kept.is_empty() {
+        true => {
+            page.remove(b"Annots");
+        }
+        false => page.set("Annots", Object::Array(kept)),
+    }
+}
+
+/// Whether one rectangle's middle sits inside another.
+///
+/// The middle rather than any overlap, because an annotation straddling the
+/// gutter has to land on one page and not both.
+fn centre_within(rect: [f64; 4], half: [f64; 4]) -> bool {
+    let (x, y) = ((rect[0] + rect[2]) / 2.0, (rect[1] + rect[3]) / 2.0);
+    (half[0]..=half[2]).contains(&x) && (half[1]..=half[3]).contains(&y)
+}
+
+/// How many pages the file says it has.
+fn declared_pages(document: &Document) -> Option<usize> {
+    let root = document
+        .catalog()
+        .and_then(|catalog| catalog.get(b"Pages"))
+        .and_then(Object::as_reference)
+        .ok()?;
+    let count = document.get_dictionary(root).ok()?.get(b"Count").ok()?;
+    let (_, count) = document.dereference(count).ok()?;
+    usize::try_from(count.as_i64().ok()?).ok()
 }
 
 /// Four numbers, in the order a PDF rectangle gives them, with the corners
@@ -307,8 +430,62 @@ mod tests {
     fn sheet(rotate: i64) -> Geometry {
         Geometry {
             media: [0.0, 0.0, 1000.0, 700.0],
+            crop: None,
             rotate,
         }
+    }
+
+    fn cropped(crop: [f64; 4]) -> Geometry {
+        Geometry {
+            media: [0.0, 0.0, 1000.0, 700.0],
+            crop: Some(crop),
+            rotate: 0,
+        }
+    }
+
+    #[test]
+    fn the_visible_page_is_the_crop_box_where_there_is_one() {
+        assert_eq!(
+            cropped([200.0, 0.0, 1000.0, 700.0]).visible(),
+            [200.0, 0.0, 1000.0, 700.0]
+        );
+        assert_eq!(sheet(0).visible(), [0.0, 0.0, 1000.0, 700.0]);
+        // And the cut goes down the middle of what is shown, not of the sheet.
+        assert_eq!(
+            cropped([200.0, 0.0, 1000.0, 700.0]).halves()[0],
+            [200.0, 0.0, 600.0, 700.0]
+        );
+    }
+
+    #[test]
+    fn a_crop_box_outside_the_sheet_is_clipped_to_it() {
+        assert_eq!(
+            cropped([-50.0, -50.0, 2000.0, 900.0]).visible(),
+            [0.0, 0.0, 1000.0, 700.0]
+        );
+    }
+
+    #[test]
+    fn a_crop_box_that_leaves_nothing_is_ignored_rather_than_obeyed() {
+        // A box outside the sheet entirely would otherwise give a page with
+        // no area, which no reader shows and nothing can measure.
+        assert_eq!(
+            cropped([2000.0, 0.0, 3000.0, 700.0]).visible(),
+            [0.0, 0.0, 1000.0, 700.0]
+        );
+        assert_eq!(
+            cropped([10.0, 10.0, 10.0, 10.0]).visible(),
+            [0.0, 0.0, 1000.0, 700.0]
+        );
+    }
+
+    #[test]
+    fn a_page_cropped_down_to_one_page_is_not_a_spread() {
+        // The shape that matters: a wide sheet whose crop box shows only one
+        // of the two pages on it. Measuring the sheet would split it again.
+        let one_page = cropped([500.0, 0.0, 1000.0, 700.0]);
+        assert_eq!(one_page.displayed(), (500.0, 700.0));
+        assert!(one_page.ratio() < crate::MIN_RATIO);
     }
 
     #[test]

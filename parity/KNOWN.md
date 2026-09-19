@@ -217,13 +217,62 @@ pixel, and a parity test that demanded it would be a test of pdfium rather
 than of this.
 
 What is compared instead is everything that decides: the aspect ratio, which
-pages get sampled, whether a given ink profile has a gutter, and the verdict
-a set of ratios and gutters adds up to. Both sides are handed the same
-profiles and have to agree exactly.
+pages get sampled, the reduction from pixels to a column profile, whether a
+given profile has a gutter, and the verdict a set of ratios and gutters adds
+up to. Both sides are handed the same pixels and the same profiles, and have
+to agree exactly.
 
-**Measured:** 72 cases, including profiles either side of the ink threshold by
-one ten-thousandth and profiles too narrow to hold the three bands the test
-looks at.
+The two renderers do have to be pointed at the same rectangle, which is what
+`-cropbox` is for — see the next note.
+
+**Measured:** 94 cases, including profiles either side of the ink threshold by
+one ten-thousandth, profiles too narrow to hold the three bands the test looks
+at, and greymaps whose heights do not divide evenly so that both sides have to
+round a fraction the same way.
+
+## pdfgutter — the page is the crop box, consistently
+
+**Python:** takes the aspect ratio from the media box and the ink profile
+from `page.render()`, which draws the **crop box**. On a page that carries
+both — most scanned books do — those are two different rectangles, so the
+shape is measured on one and the ink on the other. The bands the gutter is
+looked for in then fall somewhere other than the middle of what was
+rendered, and a real gutter is missed.
+
+**Rust:** the crop box is what a reader shows, so it is what everything
+measures: the ratio, the render (`pdftoppm -cropbox`), and where the cut
+goes. A page with no crop box is its media box, which is what the spec says
+and what most files are.
+
+**Why this is acceptable:** the original is not internally consistent, and on
+a wide sheet cropped to show only one of its two pages it gets the answer
+wrong in the destructive direction — the sheet still measures wide, so it is
+split again, down the middle of a page rather than between two. Measuring one
+rectangle throughout is the only version of this that is right.
+
+**Measured:** a wide sheet cropped to one page is no longer a split
+candidate, and a cropped spread's gutter lands where it is looked for. The
+arithmetic that both sides share is compared exactly, as above.
+
+## pdfgutter — a page tree that does not add up is refused
+
+**Python:** pdfium enumerates the pages and the question never comes up.
+
+**Rust:** the page tree is walked directly, and a walk is stricter than a
+renderer: a node missing its `/Type`, a `/Type` written as a reference, a kid
+that is a dictionary rather than a reference to one — each of those is a page
+a strict walk does not see and a reader does. So the number of pages found is
+checked against the number the file says it has, and a document where they
+disagree is refused with exit 2.
+
+**Why this is acceptable:** splitting replaces the page tree, and a page left
+out of the new tree is a page deleted. A file this does not fully understand
+is one it must not rewrite. Refusing costs a document that could perhaps have
+been handled; not refusing costs pages, silently, in the copy you keep.
+
+**Measured:** five shapes that a strict walk under-counts, each refused rather
+than written short. A document with nothing wide enough to cut is not
+rewritten at all, so every page comes through however the tree is built.
 
 ## pdfgutter — the thresholds are arguments, not environment variables
 

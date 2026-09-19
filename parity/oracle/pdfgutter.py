@@ -21,10 +21,17 @@ import numpy as np
 _MIN_RATIO = 1.15
 _MIN_GUTTER_FRAC = 0.6
 _TEXT_COL_INK = 0.02
+_INK_THRESHOLD = 160
 
 
 def _ratio(width: float, height: float) -> float:
     return width / height if height else 0.0
+
+
+def _col_ink_profile(pixels: list[int], width: int, height: int) -> list[float]:
+    """The reduction the renderer's output went through, minus the render."""
+    arr = np.asarray(pixels, dtype=np.uint8).reshape(height, width)
+    return [float(x) for x in (arr < _INK_THRESHOLD).mean(axis=0)]
 
 
 def _has_gutter(ink: np.ndarray) -> bool:
@@ -67,6 +74,10 @@ def answer(case: dict) -> dict:
         return {"gutter": _has_gutter(np.asarray(case["ink"], dtype=float))}
     if kind == "sample":
         return {"indices": _sample_indices(case["pages"])}
+    if kind == "greymap":
+        return {
+            "profile": _col_ink_profile(case["pixels"], case["width"], case["height"])
+        }
     if kind == "verdict":
         return _verdict(case["ratios"], case["gutters"])
     raise SystemExit(f"no such case: {kind}")
