@@ -35,6 +35,7 @@ Each tool installs by name, so you can take one without taking the rest.
 | [`cueseg`](crates/cueseg/README.md) | A timed transcript into topic chapters |
 | [`emb`](crates/emb/README.md) | Lines into vectors, against an embedding server |
 | [`rrf`](crates/rrf/README.md) | Several ranked lists into one, without the database |
+| [`avplan`](crates/avplan/README.md) | Whether a recording plays, and the one `ffmpeg` call that fixes it |
 
 Each links to its own page: what it does, when you would use it, worked
 examples, options and exit codes.

@@ -1,0 +1,24 @@
+{"name":"already-playable-mp4","path":"/media/talk.mp4","video":"h264","audio":"aac","encoder":"h264_nvenc"}
+{"name":"already-playable-mov","path":"/media/talk.mov","video":"avc1.640028","audio":"mp4a.40.2","encoder":"h264_nvenc"}
+{"name":"already-playable-m4v","path":"/media/talk.m4v","video":"hevc","audio":"aac","encoder":"h264_nvenc"}
+{"name":"uppercase-extension","path":"/media/TALK.MP4","video":"h264","audio":"aac","encoder":"h264_nvenc"}
+{"name":"vp9-opus-webm-nvenc","path":"/media/lecture.webm","video":"vp9","audio":"opus","encoder":"h264_nvenc"}
+{"name":"vp9-opus-webm-videotoolbox","path":"/media/lecture.webm","video":"vp9","audio":"opus","encoder":"h264_videotoolbox"}
+{"name":"vp9-opus-webm-vaapi","path":"/media/lecture.webm","video":"vp9","audio":"opus","encoder":"h264_vaapi"}
+{"name":"vp9-opus-webm-libx264","path":"/media/lecture.webm","video":"vp9","audio":"opus","encoder":"libx264"}
+{"name":"vaapi-other-device","path":"/media/lecture.webm","video":"av1","audio":"opus","encoder":"h264_vaapi","vaapi_device":"/dev/dri/renderD129"}
+{"name":"h264-in-matroska","path":"/media/film.mkv","video":"h264","audio":"aac","encoder":"h264_nvenc"}
+{"name":"h264-opus-in-mp4","path":"/media/interview.mp4","video":"h264","audio":"opus","encoder":"libx264"}
+{"name":"av1-aac-in-mp4","path":"/media/short.mp4","video":"av1","audio":"aac","encoder":"h264_nvenc"}
+{"name":"no-audio-stream","path":"/media/silent.webm","video":"vp9","audio":"","encoder":"libx264"}
+{"name":"no-video-stream","path":"/media/podcast.m4a","video":"","audio":"aac","encoder":"libx264"}
+{"name":"neither-stream","path":"/media/broken.bin","video":"","audio":"","encoder":"libx264"}
+{"name":"no-extension","path":"/media/download","video":"h264","audio":"aac","encoder":"libx264"}
+{"name":"two-dots-in-the-name","path":"/media/s01.e04.webm","video":"vp8","audio":"vorbis","encoder":"libx264"}
+{"name":"relative-path","path":"talk.webm","video":"vp9","audio":"opus","encoder":"libx264"}
+{"name":"space-in-the-name","path":"/media/a talk.webm","video":"vp9","audio":"opus","encoder":"libx264"}
+{"name":"named-output","path":"/media/lecture.webm","video":"vp9","audio":"opus","encoder":"libx264","output":"/elsewhere/out.mp4"}
+{"name":"codec-merely-starting-with-aac","path":"/media/x.mp4","video":"h264","audio":"aac_latm","encoder":"libx264"}
+{"name":"codec-merely-containing-h264","path":"/media/x.mp4","video":"prores_h264ish","audio":"aac","encoder":"libx264"}
+{"name":"mpeg4-in-avi","path":"/media/old.avi","video":"mpeg4","audio":"mp3","encoder":"h264_nvenc"}
+{"name":"hevc-in-mkv-aac","path":"/media/film.mkv","video":"hev1.1.6.L93","audio":"aac","encoder":"h264_nvenc"}

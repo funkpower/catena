@@ -23,6 +23,7 @@ cueseg = { path = "crates/cueseg", version = "0.1.0" }
 rrf = { path = "crates/rrf", version = "0.1.0" }
 cuepack = { path = "crates/cuepack", version = "0.1.0" }
 bibclean = { path = "crates/bibclean", version = "0.1.0" }
+avplan = { path = "crates/avplan", version = "0.1.0" }
 booksniff = { path = "crates/booksniff", version = "0.1.0" }
 emb = { path = "crates/emb", version = "0.1.0" }
 

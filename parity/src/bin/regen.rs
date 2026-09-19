@@ -19,7 +19,7 @@ type Written = Result<Vec<String>, String>;
 type Job = (&'static str, fn() -> Written);
 
 fn main() -> ExitCode {
-    let jobs: [Job; 15] = [
+    let jobs: [Job; 16] = [
         ("tokens", tokens),
         ("unescape", unescape),
         ("chunkmd", chunkmd),
@@ -35,6 +35,7 @@ fn main() -> ExitCode {
         ("author", author),
         ("vocab", vocab),
         ("mdsplit", mdsplit),
+        ("avplan", avplan),
     ];
 
     for (name, job) in jobs {
@@ -215,6 +216,18 @@ fn cueseg() -> Written {
         }
     }
     Ok(written)
+}
+
+fn avplan() -> Written {
+    let dir = parity::golden("avplan");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let cases = parity::dir().join("cases/avplan/cases.ndjson");
+    let text = std::fs::read_to_string(&cases).map_err(|e| e.to_string())?;
+    let verdicts = parity::run_node_oracle("compatible.mjs", &text)?;
+    let path = dir.join("cases.ndjson");
+    std::fs::write(&path, verdicts).map_err(|e| e.to_string())?;
+    Ok(vec![path.display().to_string()])
 }
 
 fn cuenorm() -> Written {

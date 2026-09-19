@@ -156,3 +156,48 @@ exactly.
 
 **Measured:** checked against the oracle for all of those combinations; only
 the zero hard maximum differs.
+
+## avplan — the encoder is found rather than configured
+
+**Original:** reads `COMPATIBLE_VIDEO_ENCODER` and trusts it, defaulting to
+`h264_nvenc`. A machine with no NVIDIA card and an unset variable builds an
+NVENC command line that fails the moment it runs.
+
+**Rust:** asks `ffmpeg -encoders` what is installed and takes the best of
+them, hardware first.
+
+**Why this is acceptable:** an environment variable naming the encoder is
+per-host configuration, and a filter that reads configuration is a filter
+whose answer depends on where it ran. Detection reaches the same answer on
+every machine the variable was set correctly on, and a better one on the
+machines it was not. The encoder table itself — which arguments each encoder
+gets — is identical, and `--encoder` names one explicitly for anyone who
+needs to.
+
+**Measured:** all four branches of the encoder table are compared against the
+original in `cases/avplan`, each with the encoder named, so the argument
+lists agree exactly.
+
+## avplan — the output path is the destination, not a temporary
+
+**Original:** writes to `<output>.tmp.mp4` and renames on success, so a
+transcode killed halfway leaves no file that looks finished.
+
+**Rust:** the command line names the destination.
+
+**Why this is acceptable:** avplan does not run the command, so it cannot do
+the rename half of the pattern, and a command line that writes to a temporary
+nobody moves is worse than one that writes where it says. Anything running
+these in a loop can write to a temporary of its own choosing with `--output`.
+
+## avplan — a failed probe is an answer, not a fallback
+
+**Original:** when `ffprobe` cannot read a file it falls back to the codec
+recorded in the database, which came from the downloader's pre-download
+metadata and is wrong often enough that the comment above it says so.
+
+**Rust:** exits 2, could not tell.
+
+**Why this is acceptable:** there is no database, and inventing a codec is
+how a compatible file gets re-encoded for forty minutes. Saying so is the
+honest answer and the cheap one.

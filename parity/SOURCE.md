@@ -22,6 +22,7 @@ CATENA_PARITY_PYTHONPATH=/path/to/book-pipeline/src:/path/to/podcast-pipeline/sr
 CATENA_PARITY_NODE=node   # only if it is not already on PATH
 ```
 
-One oracle is JavaScript rather than Python, because the code it compares
-against is. Its three functions are copied into `oracle/cuenorm.mjs` verbatim,
-since the module they live in opens a database connection when it loads.
+Two oracles are JavaScript rather than Python, because the code they compare
+against is. Their functions are copied into `oracle/cuenorm.mjs` and
+`oracle/compatible.mjs` verbatim, since the modules they live in open a
+database connection when they load.
