@@ -11,6 +11,7 @@
 //! which is the difference between a tool that cleans a catalogue and one
 //! that damages it in a new way.
 
+pub mod abstracts;
 pub mod author;
 mod entities4;
 pub mod fix;

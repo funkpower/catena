@@ -1,0 +1,19 @@
+{"abstract": "The obligation ran both ways", "name": "ordinary"}
+{"abstract": "the cat the mat", "name": "repeated-word"}
+{"abstract": "Both ways, plainly.", "name": "punctuation"}
+{"abstract": null, "name": "empty"}
+{"abstract": null, "name": "no-positions"}
+{"abstract": "Abstract", "name": "one-word"}
+{"abstract": "first second third", "name": "gaps"}
+{"abstract": "apple mango zebra", "name": "out-of-order-keys"}
+{"abstract": "alpha beta", "name": "same-position"}
+{"abstract": "\u039a\u03b1\u03bb\u03b7\u03bc\u03ad\u03c1\u03b1 \u03ba\u03cc\u03c3\u03bc\u03b5", "name": "unicode"}
+{"abstract": "a b a b a b a b a b a b a b a b a b a b", "name": "long-runs"}
+{"abstract": "y x", "name": "big-positions"}
+{"abstract": "only", "name": "negative-only"}
+{"abstract": "effect is but that research small", "name": "random-0"}
+{"abstract": "small real", "name": "random-1"}
+{"abstract": "real small", "name": "random-2"}
+{"abstract": "the research", "name": "random-3"}
+{"abstract": "is real research that shows the effect", "name": "random-4"}
+{"abstract": "effect is shows real", "name": "random-5"}

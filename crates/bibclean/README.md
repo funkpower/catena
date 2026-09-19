@@ -341,6 +341,21 @@ count against a heading, and spaced initials count for one.
 A respelling is trusted further than an inversion: `strict_norm` at 0.95,
 `last_first` at 0.9, a publisher family at 0.8, a junk subject at 0.92.
 
+## Abstracts that arrived inside out
+
+Some catalogues publish an abstract as an inverted index — each word mapped to
+the positions it appears at — rather than as text. The reason is copyright: an
+index is a set of facts about a document rather than a copy of it, and may be
+redistributed where the paragraph may not.
+
+```rust
+let prose = bibclean::abstracts::from_inverted(&index);
+```
+
+Sorting by position and joining gives the original back, punctuation and all,
+because those travelled attached to the words. An index with nothing usable in
+it gives `None`, which is how a record with no abstract is usually spelled.
+
 ## As a library
 
 ```rust

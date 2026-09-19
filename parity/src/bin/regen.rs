@@ -19,7 +19,7 @@ type Written = Result<Vec<String>, String>;
 type Job = (&'static str, fn() -> Written);
 
 fn main() -> ExitCode {
-    let jobs: [Job; 19] = [
+    let jobs: [Job; 20] = [
         ("tokens", tokens),
         ("unescape", unescape),
         ("chunkmd", chunkmd),
@@ -39,6 +39,7 @@ fn main() -> ExitCode {
         ("pdfgutter", pdfgutter),
         ("seriesof", seriesof),
         ("subjects", subjects),
+        ("abstracts", abstracts),
     ];
 
     for (name, job) in jobs {
@@ -219,6 +220,18 @@ fn cueseg() -> Written {
         }
     }
     Ok(written)
+}
+
+fn abstracts() -> Written {
+    let dir = parity::golden("abstracts");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let cases = parity::dir().join("cases/abstracts/cases.ndjson");
+    let text = std::fs::read_to_string(&cases).map_err(|e| e.to_string())?;
+    let answers = parity::run_oracle("abstracts.py", &text)?;
+    let path = dir.join("cases.ndjson");
+    std::fs::write(&path, answers).map_err(|e| e.to_string())?;
+    Ok(vec![path.display().to_string()])
 }
 
 fn subjects() -> Written {
