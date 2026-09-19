@@ -19,13 +19,14 @@ type Written = Result<Vec<String>, String>;
 type Job = (&'static str, fn() -> Written);
 
 fn main() -> ExitCode {
-    let jobs: [Job; 6] = [
+    let jobs: [Job; 7] = [
         ("tokens", tokens),
         ("unescape", unescape),
         ("chunkmd", chunkmd),
         ("mdscrub", mdscrub),
         ("pdftriage", pdftriage),
         ("cuenorm", cuenorm),
+        ("cueseg", cueseg),
     ];
 
     for (name, job) in jobs {
@@ -67,6 +68,32 @@ fn unescape() -> Written {
     let path = dir.join("entities.jsonl");
     std::fs::write(&path, decoded).map_err(|e| e.to_string())?;
     Ok(vec![path.display().to_string()])
+}
+
+fn cueseg() -> Written {
+    let dir = parity::golden("cueseg");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let table = parity::dir().join("cases/cueseg/durations.json");
+    let table = std::fs::read_to_string(&table).map_err(|e| e.to_string())?;
+    let durations: std::collections::BTreeMap<String, std::collections::BTreeMap<String, f64>> =
+        serde_json::from_str(&table).map_err(|e| e.to_string())?;
+
+    let mut written = Vec::new();
+    for case in parity::cases_with_extension("cueseg", "ndjson") {
+        let name = parity::case_name(&case);
+        let Some(spans) = durations.get(&name) else {
+            continue;
+        };
+        let cues = std::fs::read_to_string(&case).map_err(|e| e.to_string())?;
+        for (span, duration) in spans {
+            let chapters = parity::run_oracle_with("cueseg.py", &[format!("{duration}")], &cues)?;
+            let path = dir.join(format!("{name}.{span}.ndjson"));
+            std::fs::write(&path, chapters).map_err(|e| e.to_string())?;
+            written.push(path.display().to_string());
+        }
+    }
+    Ok(written)
 }
 
 fn cuenorm() -> Written {

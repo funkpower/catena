@@ -24,7 +24,7 @@ implementation that has moved on:
 
 ```sh
 CATENA_PARITY_PYTHON=/path/to/venv/bin/python \
-CATENA_PARITY_PYTHONPATH=/path/to/book-pipeline/src \
+CATENA_PARITY_PYTHONPATH=/path/to/book-pipeline/src:/path/to/podcast-pipeline/src \
     cargo test -p parity --features python
 ```
 
@@ -39,7 +39,7 @@ read the diff, and commit it with the reason:
 
 ```sh
 CATENA_PARITY_PYTHON=/path/to/venv/bin/python \
-CATENA_PARITY_PYTHONPATH=/path/to/book-pipeline/src \
+CATENA_PARITY_PYTHONPATH=/path/to/book-pipeline/src:/path/to/podcast-pipeline/src \
     cargo run -p parity --bin regen
 ```
 

@@ -19,6 +19,46 @@ cargo install --git https://git.pumpin.online/funkpower/catena <tool>
 
 Each tool installs by name, so you can take one without taking the rest.
 
+## A worked pipeline
+
+Converted markdown in, retrievable passages out:
+
+```
+$ pandoc -t commonmark chapter.xhtml | mdscrub | chunkmd --min-tokens 20
+{"v":1,"idx":0,"text":"The obligation ran both ways, and contemporaries said so plainly\nwhenever they were asked.4 A lord who could not\nprotect was a lord who could not command…","tokens":57,"page":41,"chapter":"III. The Second Estate","role":"body","start_time":null,"end_time":null,"flags":[]}
+{"v":1,"idx":1,"text":"What the rolls do not say, and what has to be inferred, is how often the\nobligation was actually tested…","tokens":41,"page":42,"chapter":"III. The Second Estate","role":"body","start_time":null,"end_time":null,"flags":[]}
+```
+
+A recording instead of a book, with chapter marks a scrubber can use:
+
+```
+$ cuenorm episode.vtt | cueseg --duration 7245
+{"v":1,"start":0.0,"end":1190.6,"title":"The Mill Stood At The Northern End","excerpt":"the mill stood at the northern end of the valley where…"}
+{"v":1,"start":1190.6,"end":2381.3,"title":"Parliament Dissolved Itself Again","excerpt":"parliament dissolved itself again amid furious objections…"}
+```
+
+And before any of that, whether a scanned PDF is worth reading at all:
+
+```
+$ pdftriage scan.pdf
+garbled, needs OCR
+  1820 characters on the opening pages
+  1820 characters over 5 sample pages, ascii text score 0.15
+  letters 0.13, latin-1 0.29
+
+$ for f in *.pdf; do pdftriage --quiet "$f" && ocrmypdf "$f" "ocr/$f"; done
+```
+
+## The tools
+
+| | |
+|---|---|
+| `mdscrub` | Converted markdown in, clean markdown out: residual HTML, control characters, headings, page markers |
+| `chunkmd` | Markdown into passages that carry their page, chapter and role |
+| `pdftriage` | Whether a PDF's text layer is healthy, garbled, sparse, permuted, or absent — and so whether OCR is worth its cost |
+| `cuenorm` | Any subtitle format in, one normalised cue stream out |
+| `cueseg` | A timed transcript into topic chapters |
+
 ## The contract
 
 Every binary in this workspace obeys all of this, or it does not ship.

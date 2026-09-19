@@ -1,0 +1,30 @@
+{
+  "gappy": {
+    "tail": 8995,
+    "tight": 7196
+  },
+  "many-topics": {
+    "tail": 22520,
+    "tight": 18016
+  },
+  "one-cue": {
+    "tail": 5,
+    "tight": 4
+  },
+  "short": {
+    "tail": 750,
+    "tight": 600
+  },
+  "sparse-text": {
+    "tail": 4505,
+    "tight": 3604
+  },
+  "two-topics": {
+    "tail": 9000,
+    "tight": 7200
+  },
+  "uniform": {
+    "tail": 6750,
+    "tight": 5400
+  }
+}
