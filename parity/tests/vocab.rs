@@ -43,6 +43,9 @@ fn items_of(case: &Value) -> Vec<Item> {
 fn rules() -> Rules {
     Rules {
         device_prefixes: vec!["alexskobo".into()],
+        // No scheme: the Python this is compared against has one compiled in
+        // and these cases never reach it.
+        ..Rules::default()
     }
 }
 
