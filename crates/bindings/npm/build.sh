@@ -44,6 +44,17 @@ done
 mv "$out/node/catena.js" "$out/node/catena.cjs"
 mv "$out/node/catena.d.ts" "$out/node/catena.d.cts"
 
+# The declarations are hand-written, so nothing but a type checker would
+# notice them going wrong. Skipped where TypeScript is not installed rather
+# than made a dependency of building at all.
+if [ -x node_modules/.bin/tsc ]; then
+	node_modules/.bin/tsc --noEmit --strict --target es2022 --module es2022 \
+		--moduleResolution bundler typecheck.ts
+	echo "declarations typecheck"
+else
+	echo "skipped typecheck: npm install --no-save typescript" >&2
+fi
+
 sed "s/@VERSION@/$version/" package.json.in >"$out/package.json"
 cp README.md "$out/README.md"
 cp ../LICENSE "$out/LICENSE"
