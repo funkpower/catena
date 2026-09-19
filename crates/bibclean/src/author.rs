@@ -375,7 +375,11 @@ fn normalise_isbn(raw: &str) -> Option<String> {
 /// Whether a character is a digit, by Python's definition — which counts the
 /// superscripts and the circled numbers that a decimal test does not.
 fn is_digit(c: char) -> bool {
-    c.to_digit(10).is_some()
+    // Not `is_ascii_digit`: a decimal digit in any script is a digit, and a
+    // name carrying one is not a name whichever script it is written in.
+    #[allow(clippy::is_digit_ascii_radix)]
+    let decimal = c.is_digit(10);
+    decimal
         || DIGIT_RANGES
             .iter()
             .any(|(from, to)| (*from..=*to).contains(&c))

@@ -51,19 +51,19 @@ fn every_author_judgement_matches_python() {
         };
 
         let ours = list(&bibclean::author::from_front_matter(front.unwrap_or("")));
-        if &ours != &theirs["front_matter"] {
+        if ours != theirs["front_matter"] {
             differs("front_matter", ours.to_string(), &theirs["front_matter"]);
         }
 
         let ours = list(&bibclean::author::from_title(title));
-        if &ours != &theirs["title"] {
+        if ours != theirs["title"] {
             differs("title", ours.to_string(), &theirs["title"]);
         }
 
         let ours = bibclean::author::best(title, front)
             .as_ref()
             .map_or(Value::Null, as_value);
-        if &ours != &theirs["best"] {
+        if ours != theirs["best"] {
             differs("best", ours.to_string(), &theirs["best"]);
         }
 
