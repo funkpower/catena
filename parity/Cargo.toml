@@ -23,6 +23,7 @@ cueseg.workspace = true
 mdscrub.workspace = true
 mdsplit.workspace = true
 avplan.workspace = true
+pdfgutter.workspace = true
 pdftriage.workspace = true
 rrf.workspace = true
 corpus-core.workspace = true

@@ -24,12 +24,16 @@ rrf = { path = "crates/rrf", version = "0.1.0" }
 cuepack = { path = "crates/cuepack", version = "0.1.0" }
 bibclean = { path = "crates/bibclean", version = "0.1.0" }
 avplan = { path = "crates/avplan", version = "0.1.0" }
+pdfgutter = { path = "crates/pdfgutter", version = "0.1.0" }
 booksniff = { path = "crates/booksniff", version = "0.1.0" }
 emb = { path = "crates/emb", version = "0.1.0" }
 
 clap = { version = "4", features = ["derive"] }
 deunicode = "1"
 fancy-regex = "0.16"
+# 0.38 is the last release that builds on the pinned toolchain; the ones
+# after it need a newer compiler than the rest of this asks for.
+lopdf = { version = "0.38", default-features = false }
 regex = "1"
 schemars = "1"
 serde = { version = "1", features = ["derive"] }

@@ -201,3 +201,70 @@ metadata and is wrong often enough that the comment above it says so.
 **Why this is acceptable:** there is no database, and inventing a codec is
 how a compatible file gets re-encoded for forty minutes. Saying so is the
 honest answer and the cheap one.
+
+## pdfgutter — a different rasteriser, so the profiles are compared rather than the pixels
+
+**Python:** renders each sampled page with pdfium at a scale that makes it a
+thousand pixels wide, and counts dark pixels per column.
+
+**Rust:** asks `pdftoppm` for the same thousand-pixel-wide greymap and counts
+the same way.
+
+**Why this is acceptable:** two rasterisers antialias differently, so a pixel
+on the edge of a letterform can land either side of the ink threshold in one
+and not the other. No amount of care makes two renderers agree pixel for
+pixel, and a parity test that demanded it would be a test of pdfium rather
+than of this.
+
+What is compared instead is everything that decides: the aspect ratio, which
+pages get sampled, whether a given ink profile has a gutter, and the verdict
+a set of ratios and gutters adds up to. Both sides are handed the same
+profiles and have to agree exactly.
+
+**Measured:** 72 cases, including profiles either side of the ink threshold by
+one ten-thousandth and profiles too narrow to hold the three bands the test
+looks at.
+
+## pdfgutter — the thresholds are arguments, not environment variables
+
+**Python:** reads `BOOK_PIPELINE_2UP_MIN_RATIO` and
+`BOOK_PIPELINE_2UP_GUTTER_FRAC` at import.
+
+**Rust:** `--min-ratio` and `--gutter-fraction`, with the same defaults.
+
+**Why this is acceptable:** an environment variable read at import makes the
+answer depend on the shell that happened to launch the process, which is the
+one thing a filter must not do. A flag says the same thing where a reader can
+see it, and shows up in the record `--json` writes.
+
+## pdfgutter — a sheet on its side is cut the way it is read
+
+**Python:** takes the media box and ignores `/Rotate` entirely. A sheet stored
+tall and displayed wide is never a split candidate; one stored wide and
+displayed tall is a candidate, and would be cut down the middle of an axis
+that has nothing down the middle of it.
+
+**Rust:** turns the media box by whatever `/Rotate` asks for before measuring
+it, and cuts across rather than down for a quarter turn, in the order a
+reader would read the halves.
+
+**Why this is acceptable:** the wrong half of a rotated sheet is a page with
+the top of one page and the bottom of another on it, and no pipeline
+downstream can recover from that. The rotation is in the file precisely so
+that readers honour it. Documents with no rotation — nearly all of them —
+behave identically.
+
+## pdfgutter — an unreadable file is an answer, not a false
+
+**Python:** `is_double_page` catches everything and returns `False`, so a
+corrupt file, an encrypted one and an ordinary single-page book are the same
+answer.
+
+**Rust:** exit 2 for a file it cannot judge, exit 74 for one it cannot read,
+and exit 1 only for a document it looked at and found to be one page per
+sheet.
+
+**Why this is acceptable:** "no" and "could not tell" are different answers
+and the contract gives them different numbers. A caller that wants the
+Python's behaviour treats both as no; a caller that wants to know which files
+it failed on can now find out.

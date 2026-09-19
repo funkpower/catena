@@ -24,6 +24,7 @@ Each tool installs by name, so you can take one without taking the rest.
 | | |
 |---|---|
 | [`booksniff`](crates/booksniff/README.md) | What a file actually is, whatever its name claims |
+| [`pdfgutter`](crates/pdfgutter/README.md) | Books scanned two pages to a sheet, split back into pages |
 | [`pdftriage`](crates/pdftriage/README.md) | Whether a PDF's text layer is worth reading, or whether it has to be OCRed |
 | [`bibclean`](crates/bibclean/README.md) | Catalogue records audited and repaired, with a reason for every change |
 | [`vocabmerge`](crates/bibclean/README.md#vocabmerge--the-other-command) | The near-duplicate headings in a catalogue's vocabulary |
