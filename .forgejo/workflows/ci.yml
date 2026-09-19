@@ -18,11 +18,11 @@ jobs:
     # serves this one; a job asking for the other is never claimed at all, and
     # shows up as a run that failed in sixty seconds with an empty log.
     runs-on: docker
-    # Pinned to the toolchain the tree is formatted with. `cargo fmt --check` is
-    # part of the gate, and rustfmt's output moves between releases, so a
-    # floating image would fail on formatting nobody changed.
+    # Pinned, not floating: `cargo fmt --check` is part of the gate and
+    # rustfmt's output moves between releases, so a moving image would fail on
+    # formatting nobody touched. CI is the authority on which release that is.
     container:
-      image: rust:1.91-bookworm
+      image: rust:1.98-bookworm
 
     steps:
       # Not actions/checkout. That is a JavaScript action: the runner executes
