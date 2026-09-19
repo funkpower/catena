@@ -12,6 +12,12 @@ use serde_json::Value;
 /// The encoder the server defaults to when nothing names one.
 const DEFAULT_ENCODER: &str = "h264_nvenc";
 
+/// Answers that are meant to differ, each argued for in `KNOWN.md`.
+///
+/// The original emits a destination beginning with a dash bare, and an
+/// encoder reads it as an option rather than a file.
+const DIVERGENT: &[(&str, &str)] = &[("a-relative-name-beginning-with-a-dash", "argv")];
+
 fn named(name: &str) -> avplan::Encoder {
     *avplan::encoder::PREFERRED
         .iter()
@@ -60,6 +66,9 @@ fn every_verdict_matches_the_original() {
         let ours = avplan::plan(path, &streams, Some(chosen), &output, device);
 
         let mut note = |field: &str, ours: String, theirs: &Value| {
+            if DIVERGENT.contains(&(name, field)) {
+                return;
+            }
             wrong.push(format!("{name}.{field}: original {theirs}, rust {ours}"));
         };
 
@@ -96,6 +105,34 @@ fn every_verdict_matches_the_original() {
         "{} verdicts differ:\n{}",
         wrong.len(),
         wrong.join("\n")
+    );
+}
+
+/// A divergence that has quietly gone away is a note in `KNOWN.md` that is no
+/// longer true, which is worth knowing about.
+#[test]
+fn the_documented_divergence_is_exactly_what_was_argued_for() {
+    let case = cases()
+        .into_iter()
+        .find(|case| case["name"] == "a-relative-name-beginning-with-a-dash")
+        .expect("the case exists");
+    let path = case["path"].as_str().expect("a path");
+    let streams = avplan::Streams {
+        video: case["video"].as_str().map(str::to_string),
+        audio: case["audio"].as_str().map(str::to_string),
+        container: avplan::container_of(path),
+    };
+    let ours = avplan::plan(
+        path,
+        &streams,
+        Some(named("libx264")),
+        &avplan::output_beside(path),
+        avplan::DEFAULT_VAAPI_DEVICE,
+    );
+    assert_eq!(
+        ours.argv.last().map(String::as_str),
+        Some("./-clip.h264.mp4"),
+        "the destination is no longer named so an encoder reads it as a file"
     );
 }
 

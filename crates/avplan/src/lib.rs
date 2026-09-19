@@ -110,10 +110,25 @@ pub fn container_plays(extension: Option<&str>) -> bool {
 }
 
 /// The extension of a path, lowercased, without the dot.
+///
+/// Read off the last segment of the path as written, rather than by asking
+/// the path library. The library folds `.` and `..` away and then reports the
+/// extension of whatever they were attached to, which makes `film.mp4/.` —
+/// a directory — a playable MP4.
 pub fn container_of(path: &str) -> Option<String> {
-    std::path::Path::new(path)
-        .extension()
-        .map(|extension| extension.to_string_lossy().to_lowercase())
+    let trimmed = path.trim_end_matches(std::path::is_separator);
+    let segment = trimmed.rsplit(std::path::is_separator).next().unwrap_or("");
+    if matches!(segment, "" | "." | "..") {
+        return None;
+    }
+    // A leading dot is a hidden file, not an extension: `.mp4` is a name.
+    match segment.rfind('.') {
+        None | Some(0) => None,
+        Some(at) => match &segment[at + 1..] {
+            "" => None,
+            extension => Some(extension.to_lowercase()),
+        },
+    }
 }
 
 /// Where a converted copy goes: beside the original, named for what it is.
@@ -122,10 +137,30 @@ pub fn output_beside(path: &str) -> String {
     let stem = path.file_stem().map(|stem| stem.to_string_lossy());
     match (path.parent(), stem) {
         (Some(parent), Some(stem)) if !parent.as_os_str().is_empty() => {
-            format!("{}/{stem}.h264.mp4", parent.display())
+            // The root is the one directory that already ends in a separator,
+            // and a name beginning with two of them means something else
+            // again on some systems.
+            let parent = parent.display().to_string();
+            match parent.ends_with(std::path::MAIN_SEPARATOR) {
+                true => format!("{parent}{stem}.h264.mp4"),
+                false => format!("{parent}/{stem}.h264.mp4"),
+            }
         }
         (_, Some(stem)) => format!("{stem}.h264.mp4"),
         _ => format!("{}.h264.mp4", path.display()),
+    }
+}
+
+/// A path an encoder will read as a path.
+///
+/// The destination is the one argument with no flag in front of it, so a name
+/// beginning with a dash would be read as an option and the call would fail
+/// on a file that is otherwise fine. `./` in front of it names the same file
+/// and cannot be mistaken for anything.
+fn runnable(path: &str) -> String {
+    match path.starts_with('-') {
+        true => format!("./{path}"),
+        false => path.to_string(),
     }
 }
 
@@ -199,7 +234,7 @@ pub fn plan(
             }
             // So a player can start before the whole file has arrived.
             argv.extend(["-movflags".to_string(), "+faststart".to_string()]);
-            argv.push(output.to_string());
+            argv.push(runnable(output));
             argv
         }
     };
@@ -219,6 +254,52 @@ pub fn plan(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_directory_that_looks_like_a_file_is_not_one() {
+        // `Path` folds a trailing `.` away and would otherwise read the
+        // extension of the directory it was attached to, which makes a
+        // directory a playable MP4.
+        assert_eq!(container_of("film.mp4/."), None);
+        assert_eq!(container_of("film.mp4/./"), None);
+        assert_eq!(container_of("film.mp4/.."), None);
+        assert_eq!(container_of("film.mp4"), Some("mp4".to_string()));
+        assert_eq!(container_of("film.MP4"), Some("mp4".to_string()));
+        assert_eq!(container_of("film.mp4//"), Some("mp4".to_string()));
+        assert_eq!(container_of("film"), None);
+        // A leading dot is a hidden file rather than an extension.
+        assert_eq!(container_of(".mp4"), None);
+        assert_eq!(container_of("/media/.hidden.mp4"), Some("mp4".to_string()));
+        assert_eq!(container_of("talk."), None);
+        assert_eq!(container_of(""), None);
+        assert_eq!(container_of("/"), None);
+    }
+
+    #[test]
+    fn a_destination_beginning_with_a_dash_is_named_so_it_is_read_as_one() {
+        let found = plan(
+            "-clip.webm",
+            &streams("vp9", "opus", "webm"),
+            Some(Encoder::Libx264),
+            "-clip.h264.mp4",
+            DEFAULT_VAAPI_DEVICE,
+        );
+        assert_eq!(
+            found.argv.last().map(String::as_str),
+            Some("./-clip.h264.mp4")
+        );
+        // The source needs no such help: it comes after `-i`.
+        assert!(found.argv.contains(&"-clip.webm".to_string()));
+    }
+
+    #[test]
+    fn a_file_at_the_root_does_not_get_two_leading_separators() {
+        // A name beginning with exactly two separators is left to the system
+        // to interpret, and some interpret it as something other than a path.
+        assert_eq!(output_beside("/talk.webm"), "/talk.h264.mp4");
+        assert_eq!(output_beside("/media/talk.webm"), "/media/talk.h264.mp4");
+        assert_eq!(output_beside("talk.webm"), "talk.h264.mp4");
+    }
 
     fn streams(video: &str, audio: &str, container: &str) -> Streams {
         Streams {

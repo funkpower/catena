@@ -26,7 +26,7 @@ Exit codes: 0 it needs converting, 1 it plays as it is, 2 could not tell,
 
 Example:
 
-    for f in *.webm; do avplan \"$f\" | xargs -d '\\n' ffmpeg; done
+    for f in *.webm; do plan=$(avplan \"$f\") && eval \"$plan\"; done
     avplan --json talk.mkv | jq -r '.reasons[]'"
 )]
 struct Args {
@@ -67,7 +67,16 @@ fn main() -> ExitCode {
         }
     }
 
-    let path = args.path.display().to_string();
+    // The record and the command line both carry the path as text, so a name
+    // that is not text cannot be answered about. Saying so beats printing a
+    // confident command that names a file which does not exist.
+    let Some(path) = args.path.to_str().map(str::to_string) else {
+        eprintln!(
+            "avplan: {}: the name is not valid text",
+            args.path.display()
+        );
+        return ExitCode::from(exit::USAGE);
+    };
     let Some(video) = probe(&args.path, "v:0") else {
         eprintln!("avplan: ffprobe could not read {path}");
         return ExitCode::from(exit::INDETERMINATE);
@@ -162,6 +171,9 @@ fn probe(path: &std::path::Path, stream: &str) -> Option<String> {
             "-of",
             "default=noprint_wrappers=1:nokey=1",
         ])
+        // Named after `-i` rather than left as a trailing argument, so that a
+        // file whose name begins with a dash is a file and not an option.
+        .arg("-i")
         .arg(path)
         .output()
         .ok()?;

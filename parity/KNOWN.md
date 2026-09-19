@@ -268,3 +268,29 @@ sheet.
 and the contract gives them different numbers. A caller that wants the
 Python's behaviour treats both as no; a caller that wants to know which files
 it failed on can now find out.
+
+## avplan — separators in a path, and a destination that starts with a dash
+
+**Original:** builds the destination by byte arithmetic — the path, minus as
+many bytes as the extension is long, plus `.h264.mp4`. Its extension function
+ignores trailing separators while the subtraction does not, so `x.mp4//`
+becomes `x.m.h264.mp4`. Duplicate separators are carried through, and a
+destination beginning with `-` is emitted bare.
+
+**Rust:** takes the path apart properly. `film.mp4/.` is a directory and has
+no extension rather than an `mp4` one; `/talk.webm` becomes `/talk.h264.mp4`
+rather than `//talk.h264.mp4`; `x.mp4//` becomes `x.h264.mp4`. A destination
+beginning with `-` is written `./-name`, which is the same file and cannot be
+read as an option.
+
+**Why this is acceptable:** every one of these is a path the original gets
+wrong. A double leading separator is left to the system to interpret and some
+systems interpret it as something else; `x.m.h264.mp4` names a file nobody
+asked for; a directory reported as a playable MP4 is a wrong answer outright;
+and a command line whose destination is read as an option fails on a file
+that was otherwise fine. The original never met any of them because its paths
+were always joined onto an absolute root.
+
+**Measured:** 32 cases, including a file at the root, a name beginning with a
+dash, a name that is only a dot, a non-ASCII name and an extension that is
+only a dot. Ordinary paths — the overwhelming majority — are byte-identical.

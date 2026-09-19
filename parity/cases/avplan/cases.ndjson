@@ -22,3 +22,11 @@
 {"name":"codec-merely-containing-h264","path":"/media/x.mp4","video":"prores_h264ish","audio":"aac","encoder":"libx264"}
 {"name":"mpeg4-in-avi","path":"/media/old.avi","video":"mpeg4","audio":"mp3","encoder":"h264_nvenc"}
 {"name":"hevc-in-mkv-aac","path":"/media/film.mkv","video":"hev1.1.6.L93","audio":"aac","encoder":"h264_nvenc"}
+{"name":"at-the-filesystem-root","path":"/talk.webm","video":"vp9","audio":"opus","encoder":"libx264"}
+{"name":"a-name-beginning-with-a-dash","path":"/media/-clip.webm","video":"vp9","audio":"opus","encoder":"libx264"}
+{"name":"a-name-that-is-only-a-dot","path":"/media/.hidden.webm","video":"vp9","audio":"opus","encoder":"libx264"}
+{"name":"an-upper-case-codec","path":"/media/x.mkv","video":"H264","audio":"AAC","encoder":"libx264"}
+{"name":"a-codec-with-a-profile-suffix","path":"/media/x.mp4","video":"hev1.2.4.L120.B0","audio":"mp4a.40.5","encoder":"libx264"}
+{"name":"a-non-ascii-name","path":"/media/Καλημέρα.webm","video":"vp9","audio":"opus","encoder":"libx264"}
+{"name":"an-extension-that-is-only-a-dot","path":"/media/talk.","video":"vp9","audio":"opus","encoder":"libx264"}
+{"name":"a-relative-name-beginning-with-a-dash","path":"-clip.webm","video":"vp9","audio":"opus","encoder":"libx264"}

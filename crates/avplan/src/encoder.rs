@@ -55,6 +55,13 @@ impl Encoder {
     /// Only VAAPI needs any: the device has to be opened before the file is,
     /// so a filter can upload frames to it.
     pub fn before_input(self, vaapi_device: &str) -> Vec<String> {
+        // No device named is the default device, not a device with no name:
+        // `vaapi=va:` is rejected, and an empty argument is how a shell
+        // passes on a variable nobody set.
+        let vaapi_device = match vaapi_device.is_empty() {
+            true => crate::DEFAULT_VAAPI_DEVICE,
+            false => vaapi_device,
+        };
         match self {
             Encoder::H264Vaapi => vec![
                 "-init_hw_device".into(),
@@ -214,6 +221,16 @@ Encoders:
                 encoder
             );
         }
+    }
+
+    #[test]
+    fn no_device_named_means_the_usual_one() {
+        // A shell passing on an unset variable gives an empty argument, and
+        // an encoder asked to open a device with no name refuses to start.
+        assert_eq!(
+            Encoder::H264Vaapi.before_input(""),
+            Encoder::H264Vaapi.before_input(crate::DEFAULT_VAAPI_DEVICE)
+        );
     }
 
     #[test]

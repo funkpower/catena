@@ -68,11 +68,13 @@ $ avplan --json film.mkv | jq -c '{playable, reasons, encoder}'
 Converting everything in a directory that needs it:
 
 ```sh
-for f in *.webm *.mkv; do avplan "$f" | xargs -d '\n' ffmpeg; done
+for f in *.webm *.mkv; do
+  plan=$(avplan "$f") && eval "$plan"
+done
 ```
 
-`avplan` writes nothing for a file that already plays, so `xargs` runs nothing
-for it either.
+The line is quoted for a shell, so `eval` runs it as written. A file that
+already plays produces no line and a non-zero status, so `&&` skips it.
 
 ## Options
 
@@ -157,7 +159,23 @@ assert!(!plan.playable);
 `video_plays`, `audio_plays` and `container_plays` answer the three questions
 on their own, for anything that needs one of them without the rest.
 
+## The record
+
+`--json` writes one of these, whatever the verdict:
+
+| Field | |
+|---|---|
+| `path` | The file it is about |
+| `playable` | Whether it plays as it stands |
+| `streams` | `video`, `audio` and `container`, as they were found |
+| `reasons` | Why it does not play, in the order the reasons were found. Empty when it does |
+| `encoder` | Which encoder the picture would go through, or `copy`. Absent when nothing needs doing |
+| `copies_audio` | Whether the sound is copied rather than re-encoded |
+| `argv` | The call that would fix it, argument by argument. Empty when nothing needs doing |
+
+It is a shape of its own rather than one of [the records](../../docs/records.md)
+the tools pass between them, because nothing downstream consumes it.
+
 ## See also
 
 - [`cuenorm`](../cuenorm/README.md) — the subtitles that go with the recording.
-- [The record contract](../../docs/records.md) — what `--json` emits.
