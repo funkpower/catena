@@ -48,6 +48,7 @@ try {
 | `splitCollection` | One markdown file into the works inside it |
 | `fuseHits` | Several ranked lists into one |
 | `identify` | What a file is, from its first bytes |
+| `seriesOf` | The series a book belongs to, and which volume this is |
 
 The tools that read files or call another program are not here: a browser has
 neither, and a binding that pretends otherwise fails at run time rather than

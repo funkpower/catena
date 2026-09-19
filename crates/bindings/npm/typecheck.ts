@@ -3,8 +3,8 @@
 // check, and nothing else would notice.
 import {
   chunkMarkdown, scrub, countTokens, parseSubtitles, packCues,
-  splitCollection, fuseHits, identify,
-  type Chunk, type Cue, type Section, type Hit, type Doc,
+  splitCollection, fuseHits, identify, seriesOf,
+  type Chunk, type Cue, type Section, type Hit, type Doc, type SeriesProposal,
 } from "./dist/web/catena.js";
 
 const chunks: Chunk[] = chunkMarkdown("# One\n\nbody\n", 512, 64, 50, 768);
@@ -35,4 +35,8 @@ parseSubtitles("x");
 packCues(cues);
 fuseHits(hits);
 
-export const checked = [page, chapter, flags, clean, tokens, start, packed, slug, fused, kind, notes];
+const proposal: SeriesProposal | undefined = seriesOf("The Philokalia Vol 3");
+const volume: number | undefined = proposal?.volume;
+seriesOf("Aquinas (Companion)", "Cambridge");
+
+export const checked = [volume, page, chapter, flags, clean, tokens, start, packed, slug, fused, kind, notes];

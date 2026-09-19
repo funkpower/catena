@@ -36,6 +36,7 @@ cuepack.workspace = true
 mdscrub.workspace = true
 mdsplit.workspace = true
 rrf.workspace = true
+seriesof.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 textkit.workspace = true

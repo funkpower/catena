@@ -26,6 +26,7 @@ bibclean = { path = "crates/bibclean", version = "0.1.0" }
 avplan = { path = "crates/avplan", version = "0.1.0" }
 pdfgutter = { path = "crates/pdfgutter", version = "0.1.0" }
 catena = { path = "crates/bindings", version = "0.1.0" }
+seriesof = { path = "crates/seriesof", version = "0.1.0" }
 booksniff = { path = "crates/booksniff", version = "0.1.0" }
 emb = { path = "crates/emb", version = "0.1.0" }
 

@@ -176,6 +176,11 @@ pub fn identify(name: &str, bytes: &[u8]) -> Doc {
     booksniff::sniff(&bytes, name)
 }
 
+/// The series a title belongs to, and which volume of it this is.
+pub fn series_of(title: &str, author: Option<&str>) -> Option<seriesof::Proposal> {
+    seriesof::series_of(title, author)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -230,6 +235,14 @@ mod tests {
     fn a_channel_nobody_here_knows_is_ignored_rather_than_refused() {
         assert_eq!(channel_named("vec"), Some(corpus_core::Channel::Vector));
         assert_eq!(channel_named("lexical"), None);
+    }
+
+    #[test]
+    fn a_series_comes_back_the_same_as_the_library_reads_it() {
+        let found = series_of("The Philokalia Vol 3", None).expect("a series");
+        assert_eq!(found.series, "The Philokalia");
+        assert_eq!(found.volume, Some(3));
+        assert_eq!(series_of("Being and Time", None), None);
     }
 
     #[test]

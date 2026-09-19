@@ -28,6 +28,7 @@ Each tool installs by name, so you can take one without taking the rest.
 | [`pdftriage`](crates/pdftriage/README.md) | Whether a PDF's text layer is worth reading, or whether it has to be OCRed |
 | [`bibclean`](crates/bibclean/README.md) | Catalogue records audited and repaired, with a reason for every change |
 | [`vocabmerge`](crates/bibclean/README.md#vocabmerge--the-other-command) | The near-duplicate headings in a catalogue's vocabulary |
+| [`seriesof`](crates/seriesof/README.md) | The series a book belongs to, and which volume this is |
 | [`mdscrub`](crates/mdscrub/README.md) | Converted markdown in, clean markdown out |
 | [`mdsplit`](crates/mdsplit/README.md) | One markdown file into the works inside it |
 | [`chunkmd`](crates/chunkmd/README.md) | Markdown into passages that carry their page, chapter and role |

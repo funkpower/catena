@@ -70,6 +70,20 @@ export interface Hit {
   payload: unknown;
 }
 
+/** What a title says about its series. */
+export interface SeriesProposal {
+  v: number;
+  title: string;
+  author?: string;
+  series: string;
+  /** Which volume, where the title said. Absent for membership without order. */
+  volume?: number;
+  /** A title reconstructed from publisher shorthand, where one reliably can be. */
+  proposed_title?: string;
+  /** "volume" or "publisher". */
+  method: string;
+}
+
 /** What a file is. */
 export interface Doc {
   v: number;
@@ -208,6 +222,17 @@ pub fn identify(name: &str, data: &[u8]) -> Result<JsValue, JsValue> {
     to_js(&crate::identify(name, data))
 }
 
+/// The series a title belongs to, and which volume of it this is.
+///
+/// `undefined` when the title says nothing about a series.
+#[wasm_bindgen(js_name = seriesOf, skip_typescript)]
+pub fn series_of(title: &str, author: Option<String>) -> Result<JsValue, JsValue> {
+    match crate::series_of(title, author.as_deref()) {
+        Some(found) => to_js(&found),
+        None => Ok(JsValue::UNDEFINED),
+    }
+}
+
 /// Declarations for the functions whose return type the generator cannot
 /// infer, so a caller gets `Chunk[]` rather than `any`.
 #[wasm_bindgen(typescript_custom_section)]
@@ -218,4 +243,5 @@ export function packCues(cues: Cue[], seconds?: number, max_tokens?: number): Ch
 export function splitCollection(markdown: string): Section[];
 export function fuseHits(hits: Hit[], k?: number, weights?: Record<string, number>, limit?: number): Hit[];
 export function identify(name: string, data: Uint8Array): Doc;
+export function seriesOf(title: string, author?: string): SeriesProposal | undefined;
 "#;

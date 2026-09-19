@@ -356,6 +356,35 @@ pub unsafe extern "C" fn catena_identify(
     give_json(&crate::identify(name, bytes))
 }
 
+/// The series a title belongs to. Returns a JSON proposal, or NULL when the
+/// title says nothing about a series — which is most titles, and not an
+/// error: `catena_last_error` is NULL in that case.
+///
+/// # Safety
+///
+/// `title` must be NUL-terminated UTF-8; `author` likewise, or NULL.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn catena_series_of(
+    title: *const c_char,
+    author: *const c_char,
+) -> *mut c_char {
+    clear_error();
+    let Some(title) = (unsafe { borrow(title, "title") }) else {
+        return ptr::null_mut();
+    };
+    let author = match author.is_null() {
+        true => None,
+        false => match unsafe { borrow(author, "author") } {
+            Some(author) => Some(author),
+            None => return ptr::null_mut(),
+        },
+    };
+    match crate::series_of(title, author) {
+        Some(found) => give_json(&found),
+        None => ptr::null_mut(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -453,6 +482,18 @@ mod tests {
         let chunks =
             through(|| unsafe { catena_pack_cues(packed.as_ptr(), 0.0, 0) }).expect("chunks");
         assert!(chunks.contains("the mill stood at the northern end"));
+    }
+
+    #[test]
+    fn a_title_with_no_series_is_null_and_not_an_error() {
+        let title = c"Being and Time";
+        assert!(through(|| unsafe { catena_series_of(title.as_ptr(), ptr::null()) }).is_none());
+        assert_eq!(error(), None, "no series is an answer, not a failure");
+
+        let series = c"The Philokalia Vol 3";
+        let json = through(|| unsafe { catena_series_of(series.as_ptr(), ptr::null()) })
+            .expect("a proposal");
+        assert!(json.contains("\"volume\":3"));
     }
 
     #[test]

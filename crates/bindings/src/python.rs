@@ -192,6 +192,22 @@ fn identify<'py>(py: Python<'py>, name: &str, data: &[u8]) -> PyResult<Bound<'py
     to_py(py, &crate::identify(name, data))
 }
 
+/// The series a title belongs to, and which volume of it this is.
+///
+/// `None` when the title says nothing about a series, which is most titles.
+#[pyfunction]
+#[pyo3(signature = (title, author = None))]
+fn series_of<'py>(
+    py: Python<'py>,
+    title: &str,
+    author: Option<&str>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    match crate::series_of(title, author) {
+        Some(found) => Ok(Some(to_py(py, &found)?)),
+        None => Ok(None),
+    }
+}
+
 /// The module Python imports.
 #[pymodule]
 fn _catena(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -204,5 +220,6 @@ fn _catena(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(split_collection, module)?)?;
     module.add_function(wrap_pyfunction!(fuse_hits, module)?)?;
     module.add_function(wrap_pyfunction!(identify, module)?)?;
+    module.add_function(wrap_pyfunction!(series_of, module)?)?;
     Ok(())
 }

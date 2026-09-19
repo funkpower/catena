@@ -1,0 +1,80 @@
+{"name": "number-9-0", "kind": "number", "text": "9"}
+{"name": "number-IX-1", "kind": "number", "text": "IX"}
+{"name": "number-ix-2", "kind": "number", "text": "ix"}
+{"name": "number-ix-3", "kind": "number", "text": " ix "}
+{"name": "number-XX-4", "kind": "number", "text": "XX"}
+{"name": "number-0-5", "kind": "number", "text": "0"}
+{"name": "number-201-6", "kind": "number", "text": "201"}
+{"name": "number-200-7", "kind": "number", "text": "200"}
+{"name": "number-1-8", "kind": "number", "text": "1"}
+{"name": "number-xxi-9", "kind": "number", "text": "xxi"}
+{"name": "number-nine-10", "kind": "number", "text": "nine"}
+{"name": "number-blank-11", "kind": "number", "text": ""}
+{"name": "number-blank-12", "kind": "number", "text": "  "}
+{"name": "number-i-13", "kind": "number", "text": "i"}
+{"name": "number-III-14", "kind": "number", "text": "III"}
+{"name": "number-c-15", "kind": "number", "text": "c"}
+{"name": "number-l-16", "kind": "number", "text": "l"}
+{"name": "number-12.5-17", "kind": "number", "text": "12.5"}
+{"name": "number-07-18", "kind": "number", "text": "07"}
+{"name": "number-\u0663-19", "kind": "number", "text": "\u0663"}
+{"name": "volume-20", "kind": "volume", "title": "The Philokalia Vol 3"}
+{"name": "volume-21", "kind": "volume", "title": "Collected Works of C.G. Jung, Volume 9"}
+{"name": "volume-22", "kind": "volume", "title": "The Art of Computer Programming, Volume 3: Sorting and Searching"}
+{"name": "volume-23", "kind": "volume", "title": "The Song of the Sirin (Raven Son Book 1)"}
+{"name": "volume-24", "kind": "volume", "title": "Vol. 2. PLATO, EPICTETUS, MARCUS AURELIUS"}
+{"name": "volume-25", "kind": "volume", "title": "Book 1"}
+{"name": "volume-26", "kind": "volume", "title": "Being and Time 1927"}
+{"name": "volume-27", "kind": "volume", "title": "Ethics 2"}
+{"name": "volume-28", "kind": "volume", "title": "A History of Philosophy, Vol. IV"}
+{"name": "volume-29", "kind": "volume", "title": "A History of Philosophy Volume IV: Modern Philosophy"}
+{"name": "volume-30", "kind": "volume", "title": "The Lord of the Rings Part 2"}
+{"name": "volume-31", "kind": "volume", "title": "Summa Theologica, Tome II"}
+{"name": "volume-32", "kind": "volume", "title": "Institutes Bk 4"}
+{"name": "volume-33", "kind": "volume", "title": "Harry Potter (Book 7)"}
+{"name": "volume-34", "kind": "volume", "title": "The Decline and Fall vol. xx"}
+{"name": "volume-35", "kind": "volume", "title": "The Decline and Fall vol. xxi"}
+{"name": "volume-36", "kind": "volume", "title": "Works pt 3"}
+{"name": "volume-37", "kind": "volume", "title": "Volume 1"}
+{"name": "volume-38", "kind": "volume", "title": ""}
+{"name": "volume-39", "kind": "volume", "title": "   "}
+{"name": "volume-40", "kind": "volume", "title": "The Republic"}
+{"name": "volume-41", "kind": "volume", "title": "Selected Works Vol 201"}
+{"name": "volume-42", "kind": "volume", "title": "Selected Works Vol 0"}
+{"name": "volume-43", "kind": "volume", "title": "abc Vol 1"}
+{"name": "volume-44", "kind": "volume", "title": "abcd Vol 1"}
+{"name": "volume-45", "kind": "volume", "title": "(Raven Son Book 12)"}
+{"name": "volume-46", "kind": "volume", "title": "Sirin [Raven Son Book 3]"}
+{"name": "volume-47", "kind": "volume", "title": "Title (Series Book 2) extra"}
+{"name": "volume-48", "kind": "volume", "title": "Jung \u2014 Volume 9"}
+{"name": "volume-49", "kind": "volume", "title": "Jung \u2013 Volume 9"}
+{"name": "volume-50", "kind": "volume", "title": "Nicomachean Ethics, Books VIII and IX"}
+{"name": "volume-51", "kind": "volume", "title": "The Cambridge History, Volume II: The Middle Ages"}
+{"name": "publisher-52", "kind": "publisher", "title": "Aquinas (Companion)", "author": "Cambridge"}
+{"name": "publisher-53", "kind": "publisher", "title": "Nietzsche (Companion)", "author": "Blackwell"}
+{"name": "publisher-54", "kind": "publisher", "title": "Logic (Very Short Introduction)", "author": "Oxford"}
+{"name": "publisher-55", "kind": "publisher", "title": "Ethics (Handbook)", "author": "Oxford"}
+{"name": "publisher-56", "kind": "publisher", "title": "Ethics (Companion)", "author": "Routledge"}
+{"name": "publisher-57", "kind": "publisher", "title": "Christian Ethics (2004) (Companion)", "author": "Cambridge"}
+{"name": "publisher-58", "kind": "publisher", "title": "Christian Ethics.2009 (Companion)", "author": "Cambridge"}
+{"name": "publisher-59", "kind": "publisher", "title": "Christian Ethics [2006] (Companion)", "author": "Cambridge"}
+{"name": "publisher-60", "kind": "publisher", "title": "British Drama [Contemporary] (Companion)", "author": "Cambridge"}
+{"name": "publisher-61", "kind": "publisher", "title": "Aquinas (Second Edition)", "author": "Cambridge"}
+{"name": "publisher-62", "kind": "publisher", "title": "Aquinas", "author": "Cambridge"}
+{"name": "publisher-63", "kind": "publisher", "title": "Aquinas (Companion)", "author": "Fergus Kerr"}
+{"name": "publisher-64", "kind": "publisher", "title": "Aquinas (Companion)", "author": null}
+{"name": "publisher-65", "kind": "publisher", "title": "(Companion)", "author": "Cambridge"}
+{"name": "publisher-66", "kind": "publisher", "title": "Ethics (Companion)", "author": "  WILEY   BLACKWELL "}
+{"name": "publisher-67", "kind": "publisher", "title": "Ethics (Companions)", "author": "Cambridge"}
+{"name": "publisher-68", "kind": "publisher", "title": "Kant (Guidebook)", "author": "Routledge"}
+{"name": "publisher-69", "kind": "publisher", "title": "Mind (Contemporary Debates)", "author": "Blackwell"}
+{"name": "publisher-70", "kind": "publisher", "title": "Philosophy (Anthology)", "author": "Blackwell"}
+{"name": "publisher-71", "kind": "publisher", "title": "Theology (Studies)", "author": "SUNY"}
+{"name": "publisher-72", "kind": "publisher", "title": "Hegel (Concise)", "author": "Blackwell"}
+{"name": "publisher-73", "kind": "publisher", "title": "Ethics (Contemporary Introductions)", "author": "Routledge"}
+{"name": "publisher-74", "kind": "publisher", "title": "X (Companion)", "author": "Cambridge"}
+{"name": "publisher-75", "kind": "publisher", "title": "Ethics (companion)", "author": "cambridge"}
+{"name": "publisher-76", "kind": "publisher", "title": "Ethics ( Companion )", "author": "Cambridge"}
+{"name": "publisher-77", "kind": "publisher", "title": "Ethics (Handbook)", "author": "Palgrave"}
+{"name": "publisher-78", "kind": "publisher", "title": "Ethics (Handbook)", "author": "Springer"}
+{"name": "publisher-79", "kind": "publisher", "title": "", "author": "Cambridge"}

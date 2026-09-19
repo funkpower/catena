@@ -227,6 +227,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
+ "seriesof",
  "textkit",
  "wasm-bindgen",
 ]
@@ -1013,6 +1014,7 @@ dependencies = [
  "pdftriage",
  "rrf",
  "serde_json",
+ "seriesof",
  "textkit",
 ]
 
@@ -1418,6 +1420,20 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "seriesof"
+version = "0.1.0"
+dependencies = [
+ "catena-cli",
+ "clap",
+ "corpus-core",
+ "fancy-regex 0.16.2",
+ "schemars",
+ "serde",
+ "serde_json",
+ "textkit",
 ]
 
 [[package]]
