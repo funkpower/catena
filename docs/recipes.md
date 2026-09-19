@@ -63,18 +63,40 @@ done
 carries good text needs none; one whose text layer is mojibake needs it badly,
 and the mojibake is invisible until you read a retrieved passage.
 
+`pdftriage` exits `0` when the layer is fine, `1` when it needs work, and `2`
+when it could not tell — treat `2` as needing a human, not as a `1`.
+
+But "needs work" is four different situations, and OCR is the wrong answer to
+one of them. `--json` says which:
+
 ```sh
 for f in flat/*.pdf; do
-  if pdftriage --quiet "$f"; then
-    pdftotext -layout "$f" "text/$(basename "$f" .pdf).txt"
-  else
-    ocrmypdf --redo-ocr "$f" "ocr/$(basename "$f")"   # not part of this suite
-  fi
+  case "$(pdftriage --json "$f" | jq -r .text_layer)" in
+    healthy)
+      pdftotext -layout "$f" "text/$(basename "$f" .pdf).txt" ;;
+    reflected_font)
+      # The one verdict where OCR is the wrong answer: every character is
+      # already in the file, permuted by a non-standard font encoding, and
+      # undoing the permutation recovers the text exactly. `pdftriage`'s
+      # `reflect::undo` does that in process; from a shell today it is still
+      # an OCR, which is an hour of GPU time to recover text the file holds.
+      ocrmypdf --force-ocr "$f" "ocr/$(basename "$f")" ;;
+    absent)
+      # A scan, with nothing to preserve. The default refuses a file that
+      # already has text, which is what you want here.
+      ocrmypdf "$f" "ocr/$(basename "$f")" ;;
+    garbled|sparse)
+      # --force-ocr, not --redo-ocr. The text layer looks fine to a machine
+      # and is mojibake, so anything that "keeps the text it judges good"
+      # keeps precisely the text that is wrong.
+      ocrmypdf --force-ocr "$f" "ocr/$(basename "$f")" ;;
+  esac
 done
 ```
 
-`pdftriage` exits `0` when the layer is fine, `1` when it needs OCR, and `2`
-when it could not tell — treat `2` as needing a human, not as a `1`.
+`ocrmypdf` and `tesseract` are not part of this suite and will not be. A
+trained OCR model and a PDF rebuilt around an invisible text layer are not a
+filter's work; deciding *whether* to call one, and with which flag, is.
 
 **3. Convert to markdown.** Whatever you like: `pandoc`, `marker`, `pdftotext`
 and a script. Nothing here cares, as long as what comes out is markdown with
