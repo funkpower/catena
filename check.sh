@@ -21,6 +21,13 @@ cargo test --workspace
 say "docs"
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --quiet
 
+say "documentation links"
+if command -v python3 >/dev/null 2>&1; then
+	python3 tools/check-links.py
+else
+	echo "skipped: no python3"
+fi
+
 # Differential tests against the Python these tools were ported from. Skipped
 # unless an interpreter with the dependencies is named, since most machines do
 # not have one.
