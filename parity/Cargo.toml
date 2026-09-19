@@ -1,0 +1,17 @@
+[package]
+name = "parity"
+description = "Differential tests against the Python implementations these tools were ported from."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+# Re-runs the Python oracle during the test instead of trusting the golden
+# files. Off by default so the suite passes on a machine with no Python.
+python = []
+
+[dependencies]
+textkit.workspace = true

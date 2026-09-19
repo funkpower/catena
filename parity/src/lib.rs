@@ -1,0 +1,88 @@
+//! Differential tests against the Python implementations these tools were
+//! ported from.
+//!
+//! The risk in this port is not that Rust is hard. It is that the heuristics
+//! were tuned against a real corpus over a long time, and a reimplementation
+//! that is 98% right is worse than no port at all, because the 2% is silent.
+//!
+//! So every ported function is pinned to what the Python produced, by golden
+//! files under `parity/golden/`. The default test run compares Rust against
+//! those files and needs nothing but Rust. With `--features python` the
+//! oracle is re-run live, which catches the golden files drifting away from
+//! a Python implementation that has moved on.
+//!
+//! Fixtures are generated, synthetic, or public domain. No corpus text is
+//! committed here, and for copyrighted sources only the derived signal — the
+//! scores, the counts, the timings — is ever checked in.
+
+pub mod sample;
+
+use std::path::{Path, PathBuf};
+
+/// The `parity/` directory, wherever this crate was checked out to.
+pub fn dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).to_path_buf()
+}
+
+/// Path to a golden file.
+pub fn golden(name: &str) -> PathBuf {
+    dir().join("golden").join(name)
+}
+
+/// Path to an oracle script.
+pub fn oracle(name: &str) -> PathBuf {
+    dir().join("oracle").join(name)
+}
+
+/// The Python interpreter to run an oracle with.
+///
+/// Taken from `CATENA_PARITY_PYTHON`, because the interpreter that has the
+/// pipeline's dependencies installed is a fact about one machine and must not
+/// be compiled in.
+pub fn python() -> String {
+    std::env::var("CATENA_PARITY_PYTHON").unwrap_or_else(|_| "python3".to_string())
+}
+
+/// Run an oracle script over `input` and return its stdout.
+///
+/// The interpreter comes from the environment and the script from this
+/// directory, so nothing about where a Python pipeline lives on a particular
+/// machine is compiled in.
+pub fn run_oracle(script: &str, input: &str) -> Result<String, String> {
+    use std::io::Write as _;
+    use std::process::{Command, Stdio};
+
+    let script = oracle(script);
+    let mut child = Command::new(python())
+        .arg(&script)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|e| format!("running {} with {}: {e}", script.display(), python()))?;
+    child
+        .stdin
+        .take()
+        .expect("stdin was piped")
+        .write_all(input.as_bytes())
+        .map_err(|e| format!("writing to {}: {e}", script.display()))?;
+    let out = child
+        .wait_with_output()
+        .map_err(|e| format!("waiting for {}: {e}", script.display()))?;
+    if !out.status.success() {
+        return Err(format!("{} exited with {}", script.display(), out.status));
+    }
+    String::from_utf8(out.stdout)
+        .map_err(|e| format!("{} wrote invalid UTF-8: {e}", script.display()))
+}
+
+/// Read a golden file, dropping its `#` header lines.
+pub fn read_golden(name: &str) -> Vec<String> {
+    let path = golden(name);
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
+    text.lines()
+        .filter(|line| !line.starts_with('#'))
+        .map(str::to_string)
+        .collect()
+}
