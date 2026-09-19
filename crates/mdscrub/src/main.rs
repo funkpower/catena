@@ -10,6 +10,10 @@ use clap::Parser;
 ///
 /// Reads markdown on stdin, or from a path, and writes it to stdout. Safe to
 /// run twice.
+///
+/// Page boundaries are left alone unless `--pages` asks for them, because
+/// only the program that just read a PDF knows that a form feed in the text
+/// is a page break rather than a stray control character.
 #[derive(Parser)]
 #[command(
     version,
@@ -22,6 +26,12 @@ Example:
 struct Args {
     /// Markdown file to read. Reads stdin when absent.
     path: Option<PathBuf>,
+
+    /// First turn page separators and form feeds into page markers. For text
+    /// straight out of a PDF or DjVu extractor, which marks its page
+    /// boundaries that way.
+    #[arg(long)]
+    pages: bool,
 }
 
 fn main() -> ExitCode {
@@ -38,5 +48,9 @@ fn main() -> ExitCode {
         }
     };
 
+    let markdown = match args.pages {
+        true => mdscrub::pages::normalize(&markdown),
+        false => markdown,
+    };
     catena_cli::text("mdscrub", &mdscrub::scrub(&markdown))
 }

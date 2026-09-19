@@ -8,8 +8,9 @@
 
 use std::sync::LazyLock;
 
+use fancy_regex::Regex as Boundaried;
 use regex::Regex;
-use textkit::pattern::SPACE;
+use textkit::pattern::{SPACE, WORD_END, WORD_START};
 
 fn pattern(source: &str) -> Regex {
     Regex::new(source).expect("a valid pattern")
@@ -36,10 +37,11 @@ static HEADING: LazyLock<Regex> = LazyLock::new(|| pattern(&format!(r"^(#{{1,6}}
 
 /// A page anchor: `<span id="…page42">`, `<a id="page-42">`, and the rest of
 /// the shapes an EPUB uses to say where a printed page began.
-pub static PAGE_ANCHOR: LazyLock<Regex> = LazyLock::new(|| {
-    pattern(&format!(
-        r#"(?i)<(?:span|a|div)\b[^>]*\bid{SPACE}*={SPACE}*["'][^"']*?page[-_]?(\d+)[^"']*["'][^>]*>(?:</(?:span|a|div)>)?"#
+pub static PAGE_ANCHOR: LazyLock<Boundaried> = LazyLock::new(|| {
+    Boundaried::new(&format!(
+        r#"(?i)<(?:span|a|div){WORD_END}[^>]*{WORD_START}id{SPACE}*={SPACE}*["'][^"']*?page[-_]?(\d+)[^"']*["'][^>]*>(?:</(?:span|a|div)>)?"#
     ))
+    .expect("a valid pattern")
 });
 
 /// Clean one heading's text.
@@ -71,6 +73,7 @@ pub fn clean_all(markdown: &str) -> String {
         let raw = &found[2];
         let pages: Vec<u32> = PAGE_ANCHOR
             .captures_iter(raw)
+            .filter_map(Result::ok)
             .map(|anchor| textkit::decimal(&anchor[1]))
             .collect();
         let cleaned = clean(&PAGE_ANCHOR.replace_all(raw, ""));
@@ -86,10 +89,15 @@ pub fn clean_all(markdown: &str) -> String {
 }
 
 /// Turn the page anchors left in the body into page markers.
+///
+/// The number is carried through exactly as the document wrote it, padding
+/// and all: `page007` becomes page 007. A heading's anchor is read as a
+/// number instead, because a heading's page is a fact about the document
+/// rather than a piece of its text.
 pub fn anchors_to_markers(markdown: &str) -> String {
     PAGE_ANCHOR
-        .replace_all(markdown, |found: &regex::Captures| {
-            format!("\n\n<!-- Page {} -->\n\n", textkit::decimal(&found[1]))
+        .replace_all(markdown, |found: &fancy_regex::Captures| {
+            format!("\n\n<!-- Page {} -->\n\n", &found[1])
         })
         .into_owned()
 }
@@ -139,6 +147,12 @@ mod tests {
     fn body_anchors_become_markers() {
         let cleaned = anchors_to_markers("text <span id=\"pg_page19\"></span> more");
         assert!(cleaned.contains("<!-- Page 19 -->"));
+    }
+
+    #[test]
+    fn a_padded_page_number_in_the_body_keeps_its_padding() {
+        let cleaned = anchors_to_markers("text <span id=\"page007\"></span> more");
+        assert!(cleaned.contains("<!-- Page 007 -->"), "{cleaned}");
     }
 
     #[test]

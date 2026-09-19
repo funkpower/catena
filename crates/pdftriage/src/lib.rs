@@ -44,7 +44,7 @@ const SPARSE_CHARS_PER_PAGE: f64 = 200.0;
 const COMMON_WORDS: &[&str] = &[
     "a", "all", "an", "and", "are", "as", "at", "be", "been", "but", "by", "for", "from", "had",
     "have", "his", "in", "is", "it", "more", "not", "of", "on", "one", "or", "that", "the",
-    "there", "they", "this", "to", "was", "were", "which", "with", "you",
+    "there", "they", "this", "to", "was", "we", "were", "which", "with", "you",
 ];
 const HEALTHY_WORD_RATIO: f64 = 0.10;
 
@@ -133,16 +133,18 @@ pub fn triage(sample: &Sample<'_>, limits: &Limits) -> Triage {
         sample.middle_pages
     ));
 
-    if reflect::undo(sample.middle).is_some() {
-        notes.push("reflecting the character codes recovers ordinary text".into());
-        return Triage {
-            layer: TextLayer::ReflectedFont,
-            needs_ocr: false,
-            notes,
-        };
-    }
-
+    // Damage can only be judged where there is enough text to judge it, and
+    // that guard comes first — including before the recovery attempt, which
+    // on a short sample would otherwise answer for the whole document.
     if middle.len() >= limits.min_chars_to_judge {
+        if reflect::undo(sample.middle).is_some() {
+            notes.push("reflecting the character codes recovers ordinary text".into());
+            return Triage {
+                layer: TextLayer::ReflectedFont,
+                needs_ocr: false,
+                notes,
+            };
+        }
         let letters = score::letter_share(&middle);
         let latin1 = score::latin1_share(&middle);
         notes.push(format!("letters {letters:.2}, latin-1 {latin1:.2}"));
@@ -248,8 +250,29 @@ mod tests {
     }
 
     #[test]
-    fn the_common_word_list_is_sorted_so_it_can_be_searched() {
+    fn the_common_word_list_is_sorted_and_whole() {
         assert!(COMMON_WORDS.windows(2).all(|pair| pair[0] < pair[1]));
+        assert_eq!(COMMON_WORDS.len(), 37, "a word has gone missing");
+    }
+
+    #[test]
+    fn a_short_sample_is_judged_on_density_rather_than_damage() {
+        // Too little text to call it damaged, which is what the density gate
+        // is for. Answering from the recovery attempt instead would route the
+        // file away from the OCR it needs.
+        let stored: String = "The mill stood at the northern end. "
+            .repeat(4)
+            .chars()
+            .map(|c| {
+                let reflected = 0x120 - c as u32;
+                char::from_u32(reflected)
+                    .filter(|_| (0xa1..=0xff).contains(&reflected))
+                    .unwrap_or(c)
+            })
+            .collect();
+        let found = triage(&sample(&prose(), &stored, Some(400)), &Limits::default());
+        assert_eq!(found.layer, TextLayer::Sparse, "{:#?}", found.notes);
+        assert!(found.needs_ocr);
     }
 
     #[test]

@@ -10,6 +10,12 @@
 
 use serde_json::Value;
 
+/// Measurements that are meant to differ, each argued for in `KNOWN.md`.
+///
+/// The two implementations compile against different Unicode versions, and
+/// the newer one knows letterforms the older one does not.
+const DIVERGENT: &[(&str, &str)] = &[("cyrillic-extended-c", "letters")];
+
 /// Both sides compute a count divided by a count, so agreement is exact or
 /// the counts differ.
 fn same(ours: f64, theirs: &Value) -> bool {
@@ -46,6 +52,9 @@ fn every_measurement_matches_python() {
         let body = pdftriage::score::body(text);
 
         let mut note = |field: &str, ours: String, theirs: &Value| {
+            if DIVERGENT.contains(&(name, field)) {
+                return;
+            }
             wrong.push(format!("{name}.{field}: python {theirs}, rust {ours}"));
         };
 
@@ -98,6 +107,29 @@ fn every_measurement_matches_python() {
                 &theirs["decoded"],
             );
         }
+    }
+
+    // A divergence that has quietly gone away is a note in KNOWN.md that is
+    // no longer true, which is worth knowing about.
+    for (name, field) in DIVERGENT {
+        let case = cases
+            .iter()
+            .find(|case| case["name"].as_str() == Some(name))
+            .unwrap_or_else(|| panic!("{name} is recorded as divergent but is not a case"));
+        let theirs = golden
+            .iter()
+            .find(|record| record["name"].as_str() == Some(name))
+            .expect("a golden answer");
+        let body = pdftriage::score::body(case["text"].as_str().expect("text"));
+        let ours = match *field {
+            "letters" => pdftriage::score::letter_share(&body),
+            other => panic!("nothing measures {other}"),
+        };
+        assert_ne!(
+            Some(ours),
+            theirs[field].as_f64(),
+            "{name}.{field} no longer diverges — update KNOWN.md"
+        );
     }
 
     assert!(

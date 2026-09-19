@@ -38,25 +38,60 @@ there is no input where it changes a cue the original read.
 recovered. Across the other eight cases, including deliberately malformed
 timestamps, the two agree cue for cue.
 
+## pdftriage — a newer Unicode table knows letters an older one does not
+
+**Python:** `str.isalpha` is true for the letter categories of the Unicode
+version the interpreter was built against.
+
+**Rust:** the same test against a table built from a later Unicode version,
+which knows 4,924 code points the older one does not.
+
+**Why this is acceptable:** the newer answer is the correct one, and the
+difference is entirely one-directional — every code point the two disagree
+about is a letter that Rust knows and Python does not, never the reverse. It
+matters because the letter share is what calls a text layer dead: a book
+typeset in Cyrillic Extended-C is judged garbled by the older table, which
+sends a perfectly readable text layer for an hour of OCR that can only make it
+worse. Erring toward not re-OCRing a book whose text is fine is the right
+direction for this gate to err in.
+
+Both tables will keep moving, which is the other reason this entry exists: the
+golden files pin one pair of Unicode versions, and a change to either shows up
+as a parity failure rather than as a silently different verdict.
+
+**Measured:** `parity/cases/pdftriage/samples.ndjson`, case
+`cyrillic-extended-c`: letter share 1.00 here against 0.00 there, which is the
+difference between healthy and garbled. Brute-forced over the whole code
+space: 4,924 disagreements, none of them in the other direction.
+
 ## mdscrub — un-paginated text is not given a page 1 marker
 
 **Python:** `_normalize_marker_pages` ends by wrapping any text it found no
 pagination in as `<!-- Page 1 -->\n\n…`, so that downstream can assume a
 marker exists.
 
-**Rust:** text with no page separators and no form feeds is returned
+**Rust:** page boundaries are not touched at all unless `--pages` asks for
+them, and even then text with no separators and no form feeds is returned
 unchanged.
 
 **Why this is acceptable:** a cleanup filter has to be safe to run twice, and
 the Python's version is not — a second pass wraps the first pass's marker in
 another one. The assumption it exists to serve belongs to the converter that
 knows it just read a PDF, not to a filter that is handed markdown of unknown
-provenance. The chunker already handles a document with no page markers by
-emitting chunks with no page number, which is the honest answer.
+provenance: a form feed in a code listing is a control character, and a dash
+rule in a quoted document is not a page break. The chunker already handles a
+document with no page markers by emitting chunks with no page number, which is
+the honest answer.
+
+Separating the two passes is also what makes the cleanup idempotent. Removing
+a tag can leave a dash rule flush against a newline, and a pagination pass
+running afterwards would find a page boundary on the second run that was not
+there on the first.
 
 **Measured:** not exercised by any parity case, since the Python function is
 only reachable from the PDF conversion path. Covered by
-`mdscrub::pages::tests::text_with_no_page_boundaries_is_left_exactly_as_it_was`.
+`mdscrub::pages::tests::text_with_no_page_boundaries_is_left_exactly_as_it_was`
+and `mdscrub::tests::nothing_manufactures_a_page_boundary_on_a_second_run`.
 
 ## Every ported pattern — the two engines disagree about `\d` and `(?i)`
 
@@ -96,6 +131,10 @@ billion pages does not exist, and the alternative — a 64-bit field — would
 make every chunk record wider to carry a value nothing can produce. The
 saturation is deliberate rather than a wrap, so the wrong answer is at least
 obviously wrong.
+
+Note that this applies only where a page number becomes a *number*. Where one
+is copied into text — a page anchor in the body of a document — it is carried
+through exactly as it was written, padding and all.
 
 **Measured:** no document in any corpus this was run against has a page
 marker above five digits.

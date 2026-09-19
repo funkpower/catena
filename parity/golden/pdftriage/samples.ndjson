@@ -22,3 +22,5 @@
 {"ascii": 1.0, "body": 736, "decoded": null, "english": 0.42105263157894735, "latin1": 0.0, "letters": 0.9782608695652174, "name": "nbsp-prose", "tidy": 1.0, "vowelled": 1.0}
 {"ascii": 0.9523809523809523, "body": 630, "decoded": null, "english": 0.0, "latin1": 0.0, "letters": 0.9523809523809523, "name": "control-chars", "tidy": 1.0, "vowelled": 1.0}
 {"ascii": 0.8823529411764706, "body": 680, "decoded": null, "english": 0.5, "latin1": 0.0, "letters": 0.9705882352941176, "name": "ligatures", "tidy": 1.0, "vowelled": 0.875}
+{"ascii": 1.0, "body": 436, "decoded": null, "english": 1.0, "latin1": 0.0, "letters": 1.0, "name": "function-words", "tidy": 1.0, "vowelled": 1.0}
+{"ascii": 0.0, "body": 500, "decoded": null, "english": 0.0, "latin1": 0.0, "letters": 0.0, "name": "cyrillic-extended-c", "tidy": null, "vowelled": null}

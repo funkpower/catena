@@ -626,6 +626,7 @@ dependencies = [
  "catena-cli",
  "clap",
  "corpus-core",
+ "fancy-regex 0.16.2",
  "regex",
  "textkit",
 ]

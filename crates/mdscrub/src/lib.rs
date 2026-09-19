@@ -20,8 +20,7 @@ pub mod unescape;
 ///
 /// Safe to run twice: the second run changes nothing.
 pub fn scrub(markdown: &str) -> String {
-    let text = pages::normalize(markdown);
-    let text = heading::clean_all(&text);
+    let text = heading::clean_all(markdown);
     let text = heading::anchors_to_markers(&text);
     let text = html::strip_tags(&text);
     let text = html::scrub_control(&text);
@@ -62,10 +61,27 @@ mod tests {
     }
 
     #[test]
-    fn form_feeds_become_pages_rather_than_disappearing() {
-        // The control-character pass would delete a form feed, so page
-        // normalisation has to happen first or the boundary is lost.
-        let cleaned = scrub("one\u{c}two");
-        assert!(cleaned.contains("<!-- Page 2 -->"), "{cleaned:?}");
+    fn page_normalisation_is_not_part_of_cleaning() {
+        // A form feed in ordinary markdown is a control character, not a page
+        // boundary. It is one only to a program that knows it just read a PDF.
+        assert_eq!(scrub("one\u{c}two"), "onetwo\n");
+    }
+
+    #[test]
+    fn pagination_first_then_cleaning_is_still_idempotent() {
+        let raw = "one\u{c}<span>two</span>";
+        let once = scrub(&pages::normalize(raw));
+        assert!(once.contains("<!-- Page 2 -->"), "{once:?}");
+        assert_eq!(scrub(&pages::normalize(&once)), once);
+    }
+
+    #[test]
+    fn nothing_manufactures_a_page_boundary_on_a_second_run() {
+        // Stripping a tag can leave a separator flush against a newline. If
+        // pagination ran after that, a second pass would find a boundary the
+        // first pass did not.
+        let raw = "{2}------------------------------<span></span>\nafter\n";
+        let once = scrub(raw);
+        assert_eq!(scrub(&once), once, "{once:?}");
     }
 }

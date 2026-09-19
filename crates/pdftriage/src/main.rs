@@ -43,7 +43,8 @@ struct Args {
     #[arg(long)]
     json: bool,
 
-    /// Say nothing; answer with the exit code alone.
+    /// Write no verdict; answer with the exit code alone. Diagnostics still go
+    /// to stderr, because a silent failure is worse than a quiet one.
     #[arg(long, short)]
     quiet: bool,
 }
@@ -62,11 +63,17 @@ fn main() -> ExitCode {
         }
     };
 
-    if which("pdftotext").is_none() {
-        eprintln!("pdftriage: pdftotext is not on PATH (it ships with poppler)");
-        return ExitCode::from(exit::UNAVAILABLE);
+    for program in ["pdftotext", "pdfinfo"] {
+        if which(program).is_none() {
+            eprintln!("pdftriage: {program} is not on PATH (it ships with poppler)");
+            return ExitCode::from(exit::UNAVAILABLE);
+        }
     }
 
+    // Both of them, because without the page count the sample window falls
+    // back to the front of the book and the density gate cannot run at all —
+    // and a file would then be judged differently on two machines that both
+    // have everything the tool said it needed.
     let pages = page_count(&args.path);
     let (first, last) = pdftriage::middle_window(pages, SPAN);
 
@@ -179,11 +186,41 @@ fn page_count(path: &Path) -> Option<u32> {
         .and_then(|count| count.trim().parse().ok())
 }
 
+/// Find a program on `PATH`, the way a shell would.
+///
+/// Checking that a file exists is not enough: a non-executable file of the
+/// right name shadows the real program and turns a clear "not installed" into
+/// an obscure failure several steps later. On Windows the name on `PATH` also
+/// carries an extension, which is what `PATHEXT` lists.
 fn which(program: &str) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
+    let extensions: Vec<String> = match std::env::var("PATHEXT") {
+        Ok(list) => std::iter::once(String::new())
+            .chain(list.split(';').map(str::to_lowercase))
+            .collect(),
+        Err(_) => vec![String::new()],
+    };
+
     std::env::split_paths(&path)
-        .map(|dir| dir.join(program))
-        .find(|candidate| candidate.is_file())
+        .flat_map(|dir| {
+            extensions
+                .iter()
+                .map(move |extension| dir.join(format!("{program}{extension}")))
+        })
+        .find(|candidate| is_program(candidate))
+}
+
+#[cfg(unix)]
+fn is_program(path: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    std::fs::metadata(path)
+        .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(not(unix))]
+fn is_program(path: &std::path::Path) -> bool {
+    path.is_file()
 }
 
 #[cfg(test)]
@@ -192,7 +229,25 @@ mod tests {
 
     #[test]
     fn a_program_that_exists_is_found_and_one_that_does_not_is_not() {
-        assert!(which("sh").is_some() || which("sh.exe").is_some());
+        assert!(which("sh").is_some(), "every system has a shell");
         assert!(which("definitely-not-a-program-93a1").is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_file_that_is_not_executable_is_not_a_program() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = std::env::temp_dir().join("pdftriage-which");
+        std::fs::create_dir_all(&dir).expect("a writable directory");
+        let path = dir.join("not-a-program-8813");
+        std::fs::write(&path, b"#!/bin/sh\n").expect("a writable path");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644))
+            .expect("permissions to set");
+
+        assert!(!is_program(&path));
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+            .expect("permissions to set");
+        assert!(is_program(&path));
     }
 }

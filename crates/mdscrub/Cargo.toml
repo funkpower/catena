@@ -11,6 +11,7 @@ repository.workspace = true
 catena-cli.workspace = true
 clap.workspace = true
 corpus-core.workspace = true
+fancy-regex.workspace = true
 regex.workspace = true
 textkit.workspace = true
 
