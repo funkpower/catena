@@ -1,0 +1,221 @@
+//! JavaScript and TypeScript, through WebAssembly.
+//!
+//! # Shape
+//!
+//! Records come back as **plain objects**, not handles: the same documents
+//! the command line writes, with the same field names and the same stability
+//! promise. Nothing has to be freed, `JSON.stringify` works, and an array of
+//! chunks spreads into state without ceremony.
+//!
+//! # What is not here
+//!
+//! The tools that read files or call another program. A browser has no
+//! `pdftoppm` and no files, and a binding that pretends otherwise is one that
+//! fails at run time rather than at compile time.
+
+use wasm_bindgen::prelude::*;
+
+use crate::{ChunkBudgets, CueBudgets};
+
+/// Hand-written because the generated `.d.ts` would otherwise say `any`: a
+/// binding that types its whole return value as `any` is a binding
+/// TypeScript cannot check.
+#[wasm_bindgen(typescript_custom_section)]
+const TYPES: &'static str = r#"
+/** A retrievable passage. The same record `chunkmd` writes. */
+export interface Chunk {
+  v: number;
+  /** Position in the stream, from zero. */
+  idx: number;
+  text: string;
+  /** Tokens, by the encoding the budgets count in. */
+  tokens: number;
+  /** The page it came from, where the source had page markers. */
+  page: number | null;
+  /** The heading it sits under. */
+  chapter: string | null;
+  /** "body", "front", "back", "index" or "bibliography". */
+  role: string;
+  /** Seconds into the recording, for passages made from cues. */
+  start_time: number | null;
+  end_time: number | null;
+  flags: string[];
+}
+
+/** One line of a transcript. */
+export interface Cue {
+  v: number;
+  start: number;
+  end: number;
+  text: string;
+}
+
+/** One work inside a collection. */
+export interface Section {
+  v: number;
+  idx: number;
+  title: string;
+  slug: string;
+  text: string;
+}
+
+/** One scored candidate, before or after fusion. */
+export interface Hit {
+  v: number;
+  id: string;
+  /** "vec", "fts" or "meta". */
+  channel: string;
+  rank: number;
+  score: number;
+  payload: unknown;
+}
+
+/** What a file is. */
+export interface Doc {
+  v: number;
+  path: string;
+  kind: string;
+  declared_ext: string | null;
+  bytes: number;
+  pages: number | null;
+  language: string | null;
+  text_layer: string | null;
+  needs_ocr: boolean | null;
+  notes: string[];
+}
+"#;
+
+/// What the chunker does when nothing is passed.
+fn chunk_budgets(
+    target: Option<usize>,
+    overlap: Option<usize>,
+    min_tokens: Option<usize>,
+    hard_max: Option<usize>,
+) -> ChunkBudgets {
+    let default = ChunkBudgets::default();
+    ChunkBudgets {
+        target: target.unwrap_or(default.target),
+        overlap: overlap.unwrap_or(default.overlap),
+        min_tokens: min_tokens.unwrap_or(default.min_tokens),
+        hard_max: hard_max.unwrap_or(default.hard_max),
+    }
+}
+
+fn to_js<T: serde::Serialize>(value: &T) -> Result<JsValue, JsValue> {
+    serde_wasm_bindgen::to_value(value).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+fn from_js<T: serde::de::DeserializeOwned>(value: JsValue, what: &str) -> Result<T, JsValue> {
+    serde_wasm_bindgen::from_value(value)
+        .map_err(|e| JsValue::from_str(&format!("{what} is not the expected shape: {e}")))
+}
+
+/// Cut markdown into retrievable passages.
+#[wasm_bindgen(js_name = chunkMarkdown, skip_typescript)]
+pub fn chunk_markdown(
+    markdown: &str,
+    target: Option<usize>,
+    overlap: Option<usize>,
+    min_tokens: Option<usize>,
+    hard_max: Option<usize>,
+) -> Result<JsValue, JsValue> {
+    let budgets = chunk_budgets(target, overlap, min_tokens, hard_max);
+    to_js(&crate::chunk_markdown(markdown, budgets))
+}
+
+/// Clean converted markdown.
+///
+/// `pages` also normalises page markers, which is not idempotent.
+#[wasm_bindgen(js_name = scrub)]
+pub fn scrub(markdown: &str, pages: Option<bool>) -> String {
+    match pages.unwrap_or(false) {
+        true => crate::scrub_markdown_pages(markdown),
+        false => crate::scrub_markdown(markdown),
+    }
+}
+
+/// How many tokens a string is.
+#[wasm_bindgen(js_name = countTokens)]
+pub fn count_tokens(text: &str) -> usize {
+    crate::count_tokens(text)
+}
+
+/// Read any of the subtitle formats into cues.
+#[wasm_bindgen(js_name = parseSubtitles, skip_typescript)]
+pub fn parse_subtitles(content: &str, keep_repeats: Option<bool>) -> Result<JsValue, JsValue> {
+    let cues = crate::parse_subtitles(content);
+    let cues = match keep_repeats.unwrap_or(false) {
+        true => cues,
+        false => crate::merge_repeats(&cues),
+    };
+    to_js(&cues)
+}
+
+/// Pack cues into passages worth embedding.
+#[wasm_bindgen(js_name = packCues, skip_typescript)]
+pub fn pack_cues(
+    cues: JsValue,
+    seconds: Option<f64>,
+    max_tokens: Option<usize>,
+) -> Result<JsValue, JsValue> {
+    let default = CueBudgets::default();
+    let budgets = CueBudgets {
+        seconds: seconds.unwrap_or(default.seconds),
+        max_tokens: max_tokens.unwrap_or(default.max_tokens),
+    };
+    let cues: Vec<cuekit::Cue> = from_js(cues, "cues")?;
+    to_js(&crate::pack_cues(&cues, budgets))
+}
+
+/// Split a collection into the works inside it.
+///
+/// Throws when the document is one work rather than a collection, which is
+/// the usual answer, with the reason each candidate was rejected.
+#[wasm_bindgen(js_name = splitCollection, skip_typescript)]
+pub fn split_collection(markdown: &str) -> Result<JsValue, JsValue> {
+    match crate::split_collection(markdown) {
+        Ok(sections) => to_js(&sections),
+        Err(why) => Err(JsValue::from_str(&why)),
+    }
+}
+
+/// Fuse ranked lists into one.
+#[wasm_bindgen(js_name = fuseHits, skip_typescript)]
+pub fn fuse_hits(
+    hits: JsValue,
+    k: Option<f64>,
+    weights: JsValue,
+    limit: Option<usize>,
+) -> Result<JsValue, JsValue> {
+    let hits: Vec<corpus_core::Hit> = from_js(hits, "hits")?;
+    let weights: Vec<(String, f64)> = match weights.is_undefined() || weights.is_null() {
+        true => Vec::new(),
+        false => from_js::<std::collections::HashMap<String, f64>>(weights, "weights")?
+            .into_iter()
+            .collect(),
+    };
+    to_js(&crate::fuse_hits(
+        &hits,
+        k.unwrap_or(rrf::K),
+        &weights,
+        limit,
+    ))
+}
+
+/// Say what a file is from its first bytes and its name.
+#[wasm_bindgen(js_name = identify, skip_typescript)]
+pub fn identify(name: &str, data: &[u8]) -> Result<JsValue, JsValue> {
+    to_js(&crate::identify(name, data))
+}
+
+/// Declarations for the functions whose return type the generator cannot
+/// infer, so a caller gets `Chunk[]` rather than `any`.
+#[wasm_bindgen(typescript_custom_section)]
+const SIGNATURES: &'static str = r#"
+export function chunkMarkdown(markdown: string, target?: number, overlap?: number, min_tokens?: number, hard_max?: number): Chunk[];
+export function parseSubtitles(content: string, keep_repeats?: boolean): Cue[];
+export function packCues(cues: Cue[], seconds?: number, max_tokens?: number): Chunk[];
+export function splitCollection(markdown: string): Section[];
+export function fuseHits(hits: Hit[], k?: number, weights?: Record<string, number>, limit?: number): Hit[];
+export function identify(name: string, data: Uint8Array): Doc;
+"#;

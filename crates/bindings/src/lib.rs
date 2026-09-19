@@ -18,6 +18,14 @@
 #[cfg(feature = "python")]
 mod python;
 
+#[cfg(feature = "capi")]
+pub mod capi;
+
+// Only ever compiled for a wasm32 target. The feature can be on elsewhere —
+// `--all-features` turns everything on — and there it compiles to nothing.
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+pub mod wasm;
+
 use corpus_core::{Chunk, Doc, Hit};
 use cuekit::Cue;
 

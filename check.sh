@@ -18,6 +18,15 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 say "tests"
 cargo test --workspace
 
+# The WebAssembly build is only ever compiled for wasm32, so `--all-features`
+# above does not reach it: on any other target the module compiles to nothing.
+say "webassembly"
+if rustup target list --installed 2>/dev/null | grep -q wasm32-unknown-unknown; then
+	cargo clippy -p catena --features wasm --lib --target wasm32-unknown-unknown -- -D warnings
+else
+	echo "skipped: rustup target add wasm32-unknown-unknown"
+fi
+
 say "docs"
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --quiet
 

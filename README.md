@@ -56,7 +56,29 @@ command does can be done in process instead.
 | [`textkit`](crates/textkit/README.md) | Token counting, sentence and paragraph splitting |
 | [`cuekit`](crates/cuekit/README.md) | The cue model, and the three subtitle formats it is read from |
 | [`catena-cli`](crates/catena-cli/README.md) | The parts of a filter every command does the same way |
-| [`bindings`](crates/bindings/README.md) | The same libraries from Python, for callers already holding the text |
+| [`bindings`](crates/bindings/README.md) | The same libraries from Python, C and JavaScript |
+
+## From another language
+
+The tools are filters first, and a subprocess is the right answer most of the
+time. When the caller is already holding the text, the same libraries are
+callable in process from three languages:
+
+| | Install | Import |
+|---|---|---|
+| **Python** | `pip install catena` | `import catena` |
+| **JavaScript** | `npm install catena` | `import { chunkMarkdown } from "catena"` |
+| **C** | build the `capi` feature | `#include <catena.h>` |
+
+```python
+chunks = catena.chunk_markdown(markdown, target=512)
+chunks[0]["page"]        # 41
+```
+
+Each hands back the same record shapes the commands write — dictionaries in
+Python, plain objects in JavaScript, JSON in C — so a stage that was parsing
+NDJSON from a subprocess can call the function and get what it was already
+parsing. Details in [`bindings`](crates/bindings/README.md).
 
 ## A worked pipeline
 

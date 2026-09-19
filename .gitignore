@@ -1,3 +1,6 @@
 target/
 *.profraw
 .DS_Store
+
+# Built npm package; `crates/bindings/npm/build.sh` makes it.
+crates/bindings/npm/dist/

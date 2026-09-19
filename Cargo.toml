@@ -32,6 +32,8 @@ emb = { path = "crates/emb", version = "0.1.0" }
 clap = { version = "4", features = ["derive"] }
 clap_mangen = "0.3"
 pyo3 = { version = "0.27", features = ["extension-module", "abi3-py39"] }
+wasm-bindgen = "0.2"
+serde-wasm-bindgen = "0.6"
 deunicode = "1"
 fancy-regex = "0.16"
 # 0.38 is the last release that builds on the pinned toolchain; the ones

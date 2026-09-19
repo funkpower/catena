@@ -7,6 +7,20 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+# wasm-pack ships a wasm-opt older than the WebAssembly rustc now emits, and
+# it rejects the module rather than assuming the features are allowed. Naming
+# them keeps the optimisation instead of turning it off; every one is years
+# old and in every runtime that matters.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = [
+    "-O",
+    "--enable-bulk-memory",
+    "--enable-nontrapping-float-to-int",
+    "--enable-sign-ext",
+    "--enable-mutable-globals",
+    "--enable-reference-types",
+]
+
 [lib]
 name = "catena"
 path = "src/lib.rs"
@@ -28,11 +42,28 @@ textkit.workspace = true
 
 pyo3 = { workspace = true, optional = true }
 
+# The JavaScript build. Only ever compiled for a wasm32 target; on any other
+# the module is compiled out and these sit unused.
+wasm-bindgen = { workspace = true, optional = true }
+serde-wasm-bindgen = { workspace = true, optional = true }
+
 [features]
 # Only maturin turns this on. pyo3's extension-module feature leaves the
 # Python symbols to be resolved by the interpreter at load time, so an
 # ordinary `cargo build` would fail to link if it were on by default.
 python = ["dep:pyo3"]
+# The C ABI. Off by default so an ordinary build does not also export a
+# hundred symbols nobody asked for.
+capi = []
+# JavaScript and TypeScript, through WebAssembly.
+wasm = ["dep:wasm-bindgen", "dep:serde-wasm-bindgen"]
 
-[lints]
-workspace = true
+# Not `workspace = true`. The workspace forbids unsafe, and a C ABI is unsafe
+# by definition: it takes raw pointers from a caller this cannot see. The
+# allowance is the narrowest thing that compiles — every `unsafe` in this
+# crate is in `src/capi.rs`, and `unsafe_op_in_unsafe_fn` keeps each one
+# spelled out rather than inherited from the function signature.
+[lints.rust]
+unsafe_code = "allow"
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "warn"

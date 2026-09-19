@@ -1,0 +1,26 @@
+{
+  "name": "catena",
+  "version": "@VERSION@",
+  "description": "Turn a pile of files into a searchable corpus: chunking, scrubbing, subtitles and rank fusion, as WebAssembly",
+  "license": "MPL-2.0",
+  "homepage": "https://git.pumpin.online/funkpower/catena",
+  "repository": {
+    "type": "git",
+    "url": "git+https://git.pumpin.online/funkpower/catena.git"
+  },
+  "keywords": ["chunking", "markdown", "subtitles", "retrieval", "corpus", "tokens", "wasm"],
+  "type": "module",
+  "types": "./web/catena.d.ts",
+  "exports": {
+    ".": {
+      "node": { "types": "./node/catena.d.cts", "default": "./node/catena.cjs" },
+      "default": { "types": "./web/catena.d.ts", "default": "./web/catena.js" }
+    },
+    "./node": { "types": "./node/catena.d.cts", "default": "./node/catena.cjs" },
+    "./web": { "types": "./web/catena.d.ts", "default": "./web/catena.js" },
+    "./node/*": "./node/*",
+    "./web/*": "./web/*",
+    "./package.json": "./package.json"
+  },
+  "files": ["node/", "web/", "README.md", "LICENSE"]
+}

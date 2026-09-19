@@ -53,6 +53,8 @@ jobs:
           apt-get update -qq
           apt-get install -qq -y --no-install-recommends python3 >/dev/null
           rustup component add rustfmt clippy
+          # The WebAssembly binding is checked for its own target.
+          rustup target add wasm32-unknown-unknown
 
       - name: Check
         run: ./check.sh
