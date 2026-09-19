@@ -1,0 +1,30 @@
+{"best": {"author": "James H. Billington", "confidence": 0.9, "evidence": "…by James H. Billington", "isbn": "0394708461", "method": "front_matter_copyright"}, "clean": "James H. Billington", "front_matter": [{"author": "James H. Billington", "confidence": 0.9, "evidence": "…by James H. Billington", "isbn": "0394708461", "method": "front_matter_copyright"}], "name_prefix": "James H. Billington", "title": []}
+{"best": {"author": "James H. Billington", "confidence": 0.8, "evidence": "Billington, James H.", "isbn": "9780394708468", "method": "front_matter_loc"}, "clean": "Billington, James H.", "front_matter": [{"author": "James H. Billington", "confidence": 0.8, "evidence": "Billington, James H.", "isbn": "9780394708468", "method": "front_matter_loc"}], "name_prefix": "Billington James H.", "title": []}
+{"best": {"author": "James H. Billington", "confidence": 0.9, "evidence": "…by James H. Billington", "isbn": "0394708461", "method": "front_matter_copyright"}, "clean": null, "front_matter": [{"author": "James H. Billington", "confidence": 0.9, "evidence": "…by James H. Billington", "isbn": "0394708461", "method": "front_matter_copyright"}, {"author": "James H. Billington", "confidence": 0.8, "evidence": "Billington, James H.", "isbn": "0394708461", "method": "front_matter_loc"}], "name_prefix": null, "title": []}
+{"best": null, "clean": null, "front_matter": [], "name_prefix": "Cambridge", "title": []}
+{"best": {"author": "Carroll Quigley", "confidence": 0.7, "evidence": "by Carroll Quigley", "isbn": null, "method": "title_by"}, "clean": "Carroll Quigley", "front_matter": [], "name_prefix": "Carroll Quigley", "title": [{"author": "Carroll Quigley", "confidence": 0.7, "evidence": "by Carroll Quigley", "isbn": null, "method": "title_by"}]}
+{"best": {"author": "Carroll Quigley", "confidence": 0.5, "evidence": "CarrollQuigley", "isbn": null, "method": "title_camel"}, "clean": null, "front_matter": [], "name_prefix": null, "title": [{"author": "Carroll Quigley", "confidence": 0.5, "evidence": "CarrollQuigley", "isbn": null, "method": "title_camel"}]}
+{"best": {"author": "Carroll Quigley", "confidence": 0.5, "evidence": "CarrollQuigley", "isbn": null, "method": "title_camel"}, "clean": null, "front_matter": [], "name_prefix": null, "title": [{"author": "Carroll Quigley", "confidence": 0.5, "evidence": "CarrollQuigley", "isbn": null, "method": "title_camel"}]}
+{"best": null, "clean": null, "front_matter": [], "name_prefix": null, "title": []}
+{"best": {"author": "James H. Billington", "confidence": 0.9, "evidence": "…by James H. Billington", "isbn": "0394708461", "method": "front_matter_copyright"}, "clean": null, "front_matter": [{"author": "James H. Billington", "confidence": 0.9, "evidence": "…by James H. Billington", "isbn": "0394708461", "method": "front_matter_copyright"}], "name_prefix": null, "title": [{"author": "Carroll Quigley", "confidence": 0.7, "evidence": "by Carroll Quigley", "isbn": null, "method": "title_by"}]}
+{"best": null, "clean": null, "front_matter": [], "name_prefix": "", "title": []}
+{"best": null, "clean": "Aristotle", "front_matter": [], "name_prefix": "ARISTOTLE", "title": []}
+{"best": null, "clean": "Barbara A. Kerr", "front_matter": [], "name_prefix": "Barbara", "title": []}
+{"best": null, "clean": "John Schuster & John Sutton", "front_matter": [], "name_prefix": "John Schuster", "title": []}
+{"best": null, "clean": "Smith", "front_matter": [], "name_prefix": "Smith", "title": []}
+{"best": null, "clean": "Smith", "front_matter": [], "name_prefix": "Smith", "title": []}
+{"best": null, "clean": null, "front_matter": [], "name_prefix": "Smith", "title": []}
+{"best": null, "clean": "Ludwig von Mises", "front_matter": [], "name_prefix": "Ludwig von Mises", "title": []}
+{"best": null, "clean": null, "front_matter": [], "name_prefix": "", "title": []}
+{"best": null, "clean": null, "front_matter": [], "name_prefix": "", "title": []}
+{"best": null, "clean": null, "front_matter": [], "name_prefix": "James H. Billington", "title": []}
+{"best": null, "clean": "Smith Jr. II", "front_matter": [], "name_prefix": "Smith Jr.", "title": []}
+{"best": null, "clean": "O'Brien, Flann", "front_matter": [], "name_prefix": "O'Brien Flann", "title": []}
+{"best": null, "clean": "Søren Kierkegaard", "front_matter": [], "name_prefix": "", "title": []}
+{"best": null, "clean": null, "front_matter": [], "name_prefix": "", "title": []}
+{"best": null, "clean": "Éric Voegelin", "front_matter": [], "name_prefix": "", "title": []}
+{"best": null, "clean": null, "front_matter": [], "name_prefix": "", "title": []}
+{"best": null, "clean": null, "front_matter": [], "name_prefix": null, "title": []}
+{"best": {"author": "Jane Q. Public", "confidence": 0.9, "evidence": "…by Jane Q. Public", "isbn": null, "method": "front_matter_copyright"}, "clean": null, "front_matter": [{"author": "Jane Q. Public", "confidence": 0.9, "evidence": "…by Jane Q. Public", "isbn": null, "method": "front_matter_copyright"}], "name_prefix": null, "title": []}
+{"best": {"author": "Flann O'Brien", "confidence": 0.8, "evidence": "O'Brien, Flann,", "isbn": null, "method": "front_matter_loc"}, "clean": null, "front_matter": [{"author": "Flann O'Brien", "confidence": 0.8, "evidence": "O'Brien, Flann,", "isbn": null, "method": "front_matter_loc"}], "name_prefix": null, "title": []}
+{"best": null, "clean": null, "front_matter": [], "name_prefix": null, "title": []}

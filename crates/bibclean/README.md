@@ -91,6 +91,43 @@ through this and back into whatever it came from.
 {"title":"THE HUMAN CONDITION","author":"Arendt, Hannah","path":"/library/9780226586601.pdf"}
 ```
 
+## Recovering a missing author
+
+A book says who wrote it on its own copyright page. Hand in the opening pages
+as `front_matter` and a record whose author is missing gets a name proposed,
+with the evidence and how far it is worth trusting:
+
+```
+$ bibclean authors.ndjson
+{"v":1,"title":"The Icon and the Axe","author":"Unknown",…,"reasons":["unknown_author","missing_isbn"],"severity":3,"changes":[],"author_proposal":{"author":"James H. Billington","method":"front_matter_copyright","confidence":0.9,"evidence":"…by James H. Billington","isbn":"0394708461"}}
+{"v":1,"title":"Tragedy and Hope by Carroll Quigley","author":"",…,"reasons":["unknown_author"],"severity":3,"changes":[],"author_proposal":{"author":"Carroll Quigley","method":"title_by","confidence":0.7,"evidence":"by Carroll Quigley","isbn":null}}
+```
+
+Four signals, cheapest and most trustworthy first:
+
+| Method | Confidence | Read from |
+|---|---|---|
+| `front_matter_copyright` | 0.9 | "Copyright © 1966 by …" |
+| `front_matter_loc` | 0.8 | The cataloguing block's main entry, written surname first |
+| `title_by` | 0.7 | "… by Author Name" at the end of the title |
+| `title_camel` | 0.5 | A run-together name at the front of the title |
+
+An ISBN found on the same page rides along with the name, because the two are
+facts about the same book.
+
+A candidate that reads as a publisher rather than a person is refused — an
+imprint holds the copyright on a great many books and is the author of none of
+them — as is one with a digit in it, one that opens with an article, and one
+too long to be a name. Shouting is fixed, bare initials get their full stops,
+and co-authors are kept: `John Schuster and John Sutton` becomes
+`John Schuster & John Sutton`.
+
+Nothing is applied. A record that already has an author is not second-guessed;
+the proposal is only ever made where there is a gap.
+
+The front matter is read and never written back — it is evidence handed in,
+not part of the record.
+
 ## Slugs
 
 A slug is a public identifier — it reaches citations and notes, and outlives

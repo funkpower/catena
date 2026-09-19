@@ -9,10 +9,10 @@ use corpus_core::{exit, ndjson};
 
 /// Audit catalogue records and repair what can be repaired without a lookup.
 ///
-/// Reads one JSON record per line — `title`, `author`, `isbn` and `path` are
-/// read, everything else is carried through untouched — and writes each one
-/// back with the faults it has, how much they weigh, and a line for every
-/// change made and why.
+/// Reads one JSON record per line — `title`, `author`, `isbn`, `path`,
+/// `slug`, `id` and `front_matter` are read, everything else is carried
+/// through untouched — and writes each one back with the faults it has, how
+/// much they weigh, and a line for every change made and why.
 ///
 /// Nothing is rewritten silently. A run can be read before it is agreed to,
 /// which is the difference between cleaning a catalogue and damaging it in a
@@ -45,7 +45,9 @@ struct Args {
 /// should be replaced does, even when nothing else is wrong, because the
 /// identifier is the part other things have written down.
 fn needs_attention(cleaned: &bibclean::Cleaned) -> bool {
-    bibclean::reasons::worth_fixing(&cleaned.reasons) || cleaned.slug_proposal.is_some()
+    bibclean::reasons::worth_fixing(&cleaned.reasons)
+        || cleaned.slug_proposal.is_some()
+        || cleaned.author_proposal.is_some()
 }
 
 fn main() -> ExitCode {

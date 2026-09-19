@@ -11,6 +11,7 @@
 //! which is the difference between a tool that cleans a catalogue and one
 //! that damages it in a new way.
 
+pub mod author;
 mod entities4;
 pub mod fix;
 pub mod isbn;
@@ -49,6 +50,17 @@ pub struct Book {
     /// A number that makes a slug unique. Needed to judge or regenerate one.
     #[serde(default)]
     pub id: Option<i64>,
+    /// The opening pages of the work, if the caller has them.
+    ///
+    /// A book says who wrote it on its own copyright page, which is the
+    /// cheapest and most trustworthy answer there is for a record whose
+    /// author is missing.
+    ///
+    /// Read but never written back: it is evidence handed in, not part of
+    /// the record, and several thousand characters of it on every line would
+    /// bury everything else.
+    #[serde(default, skip_serializing)]
+    pub front_matter: Option<String>,
     /// Everything else the record carried.
     #[serde(flatten)]
     #[schemars(with = "Map<String, Value>")]
@@ -90,6 +102,12 @@ pub struct Cleaned {
     pub severity: u32,
     /// What was changed, and why.
     pub changes: Vec<Change>,
+    /// A name for a record that has none, with the evidence for it.
+    ///
+    /// Proposed rather than applied, because the evidence differs in strength
+    /// and a wrong name is worse than an honest gap.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_proposal: Option<author::Suggestion>,
     /// What should happen to the record's slug, when it has one to judge.
     ///
     /// Named apart from the record's own `slug`, which is carried through
@@ -172,10 +190,24 @@ pub fn clean(book: &Book) -> Cleaned {
         _ => None,
     };
 
+    // Only for a record that has no author to overwrite. A name recovered
+    // from the text is evidence, not an improvement on one somebody entered.
+    let author_proposal = reasons
+        .iter()
+        .any(|reason| reason == "unknown_author" || reason == "placeholder_author")
+        .then(|| {
+            author::best(
+                book.title.as_deref().unwrap_or(""),
+                book.front_matter.as_deref(),
+            )
+        })
+        .flatten();
+
     Cleaned {
         severity: reasons::severity(&reasons),
         reasons,
         changes,
+        author_proposal,
         slug_proposal: proposal,
         book: cleaned,
     }
@@ -194,6 +226,7 @@ mod tests {
             path: None,
             slug: None,
             id: None,
+            front_matter: None,
             extra: Map::new(),
         }
     }
@@ -245,6 +278,26 @@ mod tests {
         let mut book = book("The Human Condition", "Arendt, Hannah");
         book.path = Some("/library/20231115123456.pdf".into());
         assert_eq!(clean(&book).book.isbn, None);
+    }
+
+    #[test]
+    fn a_record_with_no_author_gets_one_proposed_from_its_own_pages() {
+        let mut book = book("The Icon and the Axe", "Unknown");
+        book.front_matter = Some("Copyright © 1966 by James H. Billington".into());
+
+        let cleaned = clean(&book);
+        let proposal = cleaned.author_proposal.expect("a proposal");
+        assert_eq!(proposal.author, "James H. Billington");
+        assert_eq!(proposal.method, "front_matter_copyright");
+        // Proposed, never applied.
+        assert_eq!(cleaned.book.author.as_deref(), Some("Unknown"));
+    }
+
+    #[test]
+    fn a_record_that_has_an_author_is_not_second_guessed() {
+        let mut book = book("The Icon and the Axe", "Billington, James H.");
+        book.front_matter = Some("Copyright © 1966 by Somebody Else".into());
+        assert!(clean(&book).author_proposal.is_none());
     }
 
     #[test]
