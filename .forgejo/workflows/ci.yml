@@ -1,30 +1,49 @@
 name: ci
 
+# Deliberately not triggered by pull_request.
+#
+# The forge this runs on is public and takes pull requests from strangers, and a
+# runner executes whatever the workflow checks out. Triggering on pull_request
+# would mean a stranger's first contribution runs code on the runner host before
+# anyone has read it. Triggering only on push means the runner only ever executes
+# code that someone with push rights put there.
 on:
   push:
+    branches: ['**']
   workflow_dispatch:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # `docker`, not `ubuntu-latest`. The runner registers both labels but only
+    # serves this one; a job asking for the other is never claimed at all, and
+    # shows up as a run that failed in sixty seconds with an empty log.
+    runs-on: docker
+    # Pinned to the toolchain the tree is formatted with. `cargo fmt --check` is
+    # part of the gate, and rustfmt's output moves between releases, so a
+    # floating image would fail on formatting nobody changed.
+    container:
+      image: rust:1.91-bookworm
+
     steps:
-      - uses: actions/checkout@v4
-
-      - name: install rust
+      # Not actions/checkout. That is a JavaScript action: the runner executes
+      # it with `node` inside this container, and a Rust image carries no node,
+      # so the job dies at the first step with "node: executable file not found
+      # in $PATH". actions/cache is the same. Cloning by hand costs four lines
+      # and keeps the lean image.
+      - name: Checkout
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-            | sh -s -- -y --default-toolchain stable --profile minimal \
-                --component rustfmt --component clippy
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          git init -q .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          git fetch -q --depth 1 origin "$GITHUB_SHA"
+          git checkout -q FETCH_HEAD
 
-      - name: cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: cargo-${{ hashFiles('Cargo.lock') }}
+      # check.sh runs the link checker when python3 is there and says it
+      # skipped when it is not. In CI it should run.
+      - name: Tools the gate uses
+        run: |
+          apt-get update -qq
+          apt-get install -qq -y --no-install-recommends python3 >/dev/null
+          rustup component add rustfmt clippy
 
-      - name: check
+      - name: Check
         run: ./check.sh
