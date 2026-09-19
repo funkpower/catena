@@ -72,6 +72,7 @@ paste -d'\t' <(chunkmd book.md | jq -c .) vectors.ndjson
 | `--max-input-tokens <TOKENS>` | `1800` | Cut each text to this many tokens before sending it; `0` sends them whole |
 | `--timeout <SECONDS>` | `600` | How long to wait for one request |
 | `--attempts <COUNT>` | `3` | How many times to try a failing request |
+| `--man` | Write this page as a manual page, in roff |
 
 The input cap is a defensive one, not a model limit. A server returns an error
 for an input past its context length, and that error fails the whole batch —

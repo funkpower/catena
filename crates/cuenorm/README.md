@@ -83,6 +83,7 @@ cuenorm episode.srt | cueseg --duration 7245 > chapters.ndjson
 | Option | Effect |
 |---|---|
 | `--keep-repeats` | Keep consecutive repeats instead of merging them |
+| `--man` | Write this page as a manual page, in roff |
 
 ## Exit codes
 

@@ -92,6 +92,7 @@ done
 | `--quiet`, `-q` | Say nothing; the exit code is the answer |
 | `--min-ratio <RATIO>` | How wide a sheet must be to hold two pages. Default `1.15` |
 | `--gutter-fraction <FRACTION>` | What share of wide sheets must show a gutter. Default `0.6` |
+| `--man` | Write this page as a manual page, in roff |
 
 `--into` writes whatever the verdict was, so a loop over a directory does not
 have to branch. A document with no sheet wide enough to cut is not altered at
@@ -155,6 +156,22 @@ The crop box, where a page has one — that is the rectangle a reader shows and
 the one that gets rendered. A wide sheet cropped down to a single page is
 therefore not a spread, which is what stops a second pass cutting a page in
 half. Pages with no crop box, which is most of them, are their media box.
+
+## The record
+
+`--json` writes one of these, whatever the verdict:
+
+| Field | |
+|---|---|
+| `path` | The file it is about |
+| `two_up` | Whether it is two pages to a sheet |
+| `pages` | How many pages it has |
+| `median_ratio` | The middle ratio of the pages looked at |
+| `gutter_fraction` | What share of the wide ones showed a gutter |
+| `sampled` | One entry per page looked at: its `number`, its `ratio`, and whether it had a `gutter` — `null` where the page was too narrow to be worth rendering |
+
+It is a shape of its own rather than one of [the records](../../docs/records.md)
+the tools pass between them, because nothing downstream consumes it.
 
 ## As a library
 

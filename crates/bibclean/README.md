@@ -71,6 +71,7 @@ bibclean books.ndjson | jq -r '.changes[] | "\(.why)\t\(.from)\t→\t\(.to)"'
 | Option | Effect |
 |---|---|
 | `--flagged` | Write only the records that need attention |
+| `--man` | Write this page as a manual page, in roff |
 
 A missing ISBN alone does not count as needing attention: nearly every book
 lacks one.
@@ -248,6 +249,7 @@ One heading per line — an `id`, a `name`, and the `count` of works under it:
 |---|---|
 | `--kind <author\|publisher\|tag>` | What kind of heading the list holds |
 | `--rules <FILE>` | Vocabulary specific to this collection |
+| `--man` | Write this page as a manual page, in roff |
 
 The rules file is JSON, and today holds one thing:
 

@@ -57,6 +57,7 @@ cuepack episode.srt > passages.ndjson
 |---|---|---|
 | `--seconds <SECONDS>` | `75` | Flush a passage once it covers this much audio |
 | `--max-tokens <TOKENS>` | `512` | Never let a passage exceed this many tokens |
+| `--man` | Write this page as a manual page, in roff |
 
 Seventy-five seconds is about a paragraph of speech: long enough to hold an
 argument, short enough that a result points at a place in the recording rather

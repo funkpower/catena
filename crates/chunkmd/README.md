@@ -60,6 +60,7 @@ chunkmd book.md | jq -c 'select(.role == "body")'
 | `--overlap <TOKENS>` | `64` | Carry this much of each chunk into the next |
 | `--min-tokens <TOKENS>` | `50` | Drop chunks smaller than this |
 | `--hard-max <TOKENS>` | `768` | Never emit a chunk larger than this |
+| `--man` | Write this page as a manual page, in roff |
 
 The defaults suit a model with a 512-token comfortable window. A larger model
 wants roughly double everything:

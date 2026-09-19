@@ -85,6 +85,7 @@ for f in sections/*.md; do mdscrub "$f" | chunkmd > "chunks/$(basename "$f" .md)
 | Option | Effect |
 |---|---|
 | `--into <DIR>` | Write one file per section instead of records |
+| `--man` | Write this page as a manual page, in roff |
 
 Files are named for their position and their title, so a directory listing is
 in reading order.

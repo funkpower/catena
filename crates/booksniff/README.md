@@ -66,6 +66,7 @@ booksniff library/*.pdf | jq -r 'select(.kind != "pdf") | "\(.kind)\t\(.path)"'
 | Option | Effect |
 |---|---|
 | `--plain` | Print a line a person can read instead of the record |
+| `--man` | Write this page as a manual page, in roff |
 
 ## Exit codes
 

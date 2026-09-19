@@ -102,10 +102,15 @@ Written by [`cueseg`](../crates/cueseg/README.md).
 
 ## Records that belong to one tool
 
-Not everything is shared. [`bibclean`](../crates/bibclean/README.md) reads and
-writes catalogue records, author suggestions, slug proposals and vocabulary
-merge proposals; those shapes are described where that tool is, because
-nothing else consumes them.
+Not everything is shared. A tool whose answer nothing downstream consumes
+has a shape of its own, described where that tool is:
+
+- [`bibclean`](../crates/bibclean/README.md) — catalogue records, author
+  suggestions, slug proposals and vocabulary merge proposals.
+- [`avplan`](../crates/avplan/README.md) — what has to happen to a recording,
+  and the call that would do it.
+- [`pdfgutter`](../crates/pdfgutter/README.md) — whether a scan is two pages
+  to a sheet, and what each sampled page measured.
 
 ## Getting the schemas
 

@@ -84,6 +84,7 @@ already plays produces no line and a non-zero status, so `&&` skips it.
 | `--output <PATH>` | Where the converted copy goes. Defaults to `<name>.h264.mp4` beside the original |
 | `--encoder <NAME>` | Use this encoder rather than the best one installed |
 | `--vaapi-device <PATH>` | The render node to encode on. Defaults to `/dev/dri/renderD128` |
+| `--man` | Write this page as a manual page, in roff |
 
 ## Exit codes
 

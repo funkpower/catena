@@ -71,6 +71,7 @@ cat *.ndjson | rrf --weight fts=2 --weight meta=1
 | `-n`, `--limit <COUNT>` | all | How many results to keep |
 | `--rrf-k <K>` | `60` | The rank constant |
 | `--weight <CHANNEL=WEIGHT>` | `vec=1 fts=1 meta=1.5` | What a channel's rank is worth. Repeatable |
+| `--man` | Write this page as a manual page, in roff |
 
 The rank constant flattens the difference between rank one and rank two. Sixty
 is what the method's own paper uses and what every other implementation uses,

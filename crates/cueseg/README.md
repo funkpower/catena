@@ -65,6 +65,7 @@ cueseg --duration 7245 transcript.ndjson | jq -r '"\(.start | floor)\t\(.title)"
 | Option | Effect |
 |---|---|
 | `--duration <SECONDS>` | How long the recording is |
+| `--man` | Write this page as a manual page, in roff |
 
 Without it, the duration is taken from the end of the last cue. That is
 earlier than the end of the file whenever a recording ends in music or

@@ -83,6 +83,7 @@ pandoc -t commonmark chapter.xhtml | mdscrub | chunkmd > chunks.ndjson
 | Option | Effect |
 |---|---|
 | `--pages` | First turn page separators and form feeds into page markers |
+| `--man` | Write this page as a manual page, in roff |
 
 `--pages` is for text straight out of a PDF or DjVu extractor, which marks its
 page boundaries with a form feed or a rule of dashes. It is off by default

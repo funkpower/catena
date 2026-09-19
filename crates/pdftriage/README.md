@@ -81,6 +81,7 @@ $ pdftriage --json book.pdf
 |---|---|
 | `--json` | Emit a [`doc` record](../../docs/records.md#doc--what-a-file-is) instead of a readable verdict |
 | `-q`, `--quiet` | Write no verdict; answer with the exit code alone. Diagnostics still go to stderr, because a silent failure is worse than a quiet one |
+| `--man` | Write this page as a manual page, in roff |
 
 ## Exit codes
 
