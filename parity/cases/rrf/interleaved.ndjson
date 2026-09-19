@@ -1,0 +1,10 @@
+{"id": "id5", "channel": "vec", "rank": 5, "score": 0.0}
+{"id": "id1", "channel": "fts", "rank": 5, "score": 0.0}
+{"id": "id1", "channel": "vec", "rank": 1, "score": 0.0}
+{"id": "id5", "channel": "fts", "rank": 1, "score": 0.0}
+{"id": "id3", "channel": "vec", "rank": 3, "score": 0.0}
+{"id": "id3", "channel": "fts", "rank": 3, "score": 0.0}
+{"id": "id2", "channel": "vec", "rank": 2, "score": 0.0}
+{"id": "id4", "channel": "fts", "rank": 2, "score": 0.0}
+{"id": "id4", "channel": "vec", "rank": 4, "score": 0.0}
+{"id": "id2", "channel": "fts", "rank": 4, "score": 0.0}

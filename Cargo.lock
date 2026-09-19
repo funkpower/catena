@@ -286,6 +286,7 @@ dependencies = [
  "cueseg",
  "mdscrub",
  "pdftriage",
+ "rrf",
  "serde_json",
  "textkit",
 ]
@@ -368,6 +369,15 @@ name = "regex-syntax"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
+
+[[package]]
+name = "rrf"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "corpus-core",
+ "serde_json",
+]
 
 [[package]]
 name = "rustc-hash"
