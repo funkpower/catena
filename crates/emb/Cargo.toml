@@ -1,0 +1,25 @@
+[package]
+name = "emb"
+description = "Lines in, vectors out, against an HTTP embedding endpoint."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+catena-cli.workspace = true
+clap.workspace = true
+corpus-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+textkit.workspace = true
+thiserror.workspace = true
+ureq.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+textkit.workspace = true
+
+[lints]
+workspace = true

@@ -22,6 +22,7 @@ cueseg = { path = "crates/cueseg", version = "0.1.0" }
 rrf = { path = "crates/rrf", version = "0.1.0" }
 cuepack = { path = "crates/cuepack", version = "0.1.0" }
 booksniff = { path = "crates/booksniff", version = "0.1.0" }
+emb = { path = "crates/emb", version = "0.1.0" }
 
 clap = { version = "4", features = ["derive"] }
 fancy-regex = "0.16"
@@ -34,6 +35,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 thiserror = "2"
 unicode-general-category = "1"
+ureq = { version = "3", features = ["json"] }
 tiktoken-rs = "0.12"
 
 [workspace.lints.rust]

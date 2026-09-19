@@ -60,6 +60,7 @@ $ for f in *.pdf; do pdftriage --quiet "$f" && ocrmypdf "$f" "ocr/$f"; done
 | `cuenorm` | Any subtitle format in, one normalised cue stream out |
 | `cueseg` | A timed transcript into topic chapters |
 | `cuepack` | Cues into passages worth embedding, keeping the times they were said at |
+| `emb` | Lines into vectors, against an embedding server |
 | `rrf` | Several ranked lists into one, without the database |
 
 ## The contract
@@ -78,9 +79,9 @@ Every binary in this workspace obeys all of this, or it does not ship.
    "broke" are never the same number. A consumer closing the pipe is not a
    failure: `… | head -1` exits `0`, like every other filter.
 5. **No network, no database, no config file, no state.** Two exceptions, both
-   declared in `--help`: a tool whose whole job is an HTTP call, and a tool
+   declared in `--help`: `emb`, whose whole job is an HTTP call, and a tool
    that shells out to a named external program and fails clearly when it is
-   absent.
+   absent — `pdftriage` needs `pdftotext`.
 6. **No ambient knowledge.** No hostnames, no local paths, no private
    vocabularies compiled in. General scheme data — Bible book names, ISBN check
    digits — may be; anything local is a `--rules file.json`.
