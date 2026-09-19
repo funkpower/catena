@@ -18,8 +18,9 @@ pub struct Doc {
     pub kind: Kind,
     /// Extension the name claimed, lowercased, without the dot.
     pub declared_ext: Option<String>,
-    /// Size on disk.
-    pub bytes: u64,
+    /// Size on disk. Signed, because this is a database column as often as
+    /// it is a number, and every database that will hold it counts in `i64`.
+    pub bytes: i64,
     /// Page count, for paginated formats.
     pub pages: Option<u32>,
     /// ISO 639-2/B language code, when one was detected.
@@ -29,12 +30,13 @@ pub struct Doc {
     /// Whether the file has to be OCRed to be searchable.
     pub needs_ocr: Option<bool>,
     /// Human-readable observations, in the order they were made.
+    #[serde(default)]
     pub notes: Vec<String>,
 }
 
 impl Doc {
     /// A doc with only what inspection of the bytes always yields.
-    pub fn new(path: impl Into<String>, kind: Kind, bytes: u64) -> Self {
+    pub fn new(path: impl Into<String>, kind: Kind, bytes: i64) -> Self {
         Self {
             v: crate::V,
             path: path.into(),
@@ -52,6 +54,12 @@ impl Doc {
     /// Append an observation.
     pub fn note(&mut self, note: impl Into<String>) {
         self.notes.push(note.into());
+    }
+}
+
+impl crate::Record for Doc {
+    fn version(&self) -> u32 {
+        self.v
     }
 }
 
@@ -137,8 +145,13 @@ mod tests {
 
     #[test]
     fn a_record_written_without_a_version_reads_as_version_one() {
-        let doc: Doc =
-            serde_json::from_str(r#"{"path":"a","kind":"txt","bytes":1,"notes":[]}"#).unwrap();
+        let doc: Doc = serde_json::from_str(r#"{"path":"a","kind":"txt","bytes":1}"#).unwrap();
         assert_eq!(doc.v, 1);
+    }
+
+    #[test]
+    fn an_omitted_empty_list_reads_as_an_empty_list() {
+        let doc: Doc = serde_json::from_str(r#"{"path":"a","kind":"txt","bytes":1}"#).unwrap();
+        assert!(doc.notes.is_empty());
     }
 }

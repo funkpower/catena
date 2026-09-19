@@ -22,8 +22,18 @@ pub struct Hit {
     /// Position within the channel's own ranking, from one.
     pub rank: u32,
     /// The channel's raw score, on whatever scale that channel uses.
+    #[serde(
+        serialize_with = "crate::float::serialize",
+        deserialize_with = "crate::float::deserialize"
+    )]
     pub score: f64,
     /// Anything the producer wants to carry through fusion untouched.
+    ///
+    /// Keys serialise in sorted order, which is what makes a fused stream
+    /// byte-reproducible. That holds because `serde_json`'s map is a
+    /// `BTreeMap`; enabling its `preserve_order` feature anywhere in the
+    /// dependency graph would switch it to insertion order and break it. The
+    /// test below is what would catch that.
     #[serde(default)]
     pub payload: Map<String, Value>,
 }
@@ -39,6 +49,12 @@ impl Hit {
             score,
             payload: Map::new(),
         }
+    }
+}
+
+impl crate::Record for Hit {
+    fn version(&self) -> u32 {
+        self.v
     }
 }
 
@@ -78,6 +94,22 @@ mod tests {
             serde_json::to_string(&hit).unwrap(),
             r#"{"v":1,"id":"abc","channel":"fts","rank":1,"score":0.5,"payload":{}}"#
         );
+    }
+
+    #[test]
+    fn a_score_that_is_not_a_number_is_refused_rather_than_written_as_null() {
+        let mut hit = Hit::new("a", Channel::Fts, 1, 0.0);
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            hit.score = bad;
+            let e = serde_json::to_string(&hit).unwrap_err();
+            assert!(e.to_string().contains("cannot be written"), "{bad}: {e}");
+        }
+    }
+
+    #[test]
+    fn a_score_that_overflows_a_float_is_refused_on_the_way_in() {
+        let line = r#"{"id":"a","channel":"fts","rank":1,"score":1e999}"#;
+        assert!(serde_json::from_str::<Hit>(line).is_err());
     }
 
     #[test]

@@ -26,11 +26,23 @@ pub struct Chunk {
     /// What part of the work the passage belongs to.
     pub role: Role,
     /// Seconds from the start of the recording, for timed sources.
+    #[serde(
+        default,
+        serialize_with = "crate::float::serialize_option",
+        deserialize_with = "crate::float::deserialize_option"
+    )]
     pub start_time: Option<f64>,
     /// Seconds from the start of the recording, for timed sources.
+    #[serde(
+        default,
+        serialize_with = "crate::float::serialize_option",
+        deserialize_with = "crate::float::deserialize_option"
+    )]
     pub end_time: Option<f64>,
-    /// Set tags, sorted and deduplicated; see [`flags`].
-    #[serde(default)]
+    /// Set tags; see [`flags`]. Sorted and deduplicated on the way in and on
+    /// the way out, so the same set of flags is always the same bytes
+    /// whatever order the producer set them in.
+    #[serde(default, deserialize_with = "sorted_flags")]
     pub flags: Vec<String>,
 }
 
@@ -62,10 +74,23 @@ impl Chunk {
 
     /// Whether a flag is set.
     pub fn has_flag(&self, flag: &str) -> bool {
-        self.flags
-            .binary_search_by(|f| f.as_str().cmp(flag))
-            .is_ok()
+        self.flags.iter().any(|set| set == flag)
     }
+}
+
+impl crate::Record for Chunk {
+    fn version(&self) -> u32 {
+        self.v
+    }
+}
+
+/// Sort and deduplicate flags as they are read, so a record written by
+/// another implementation gets the same treatment as one built here.
+fn sorted_flags<'de, D: serde::Deserializer<'de>>(input: D) -> Result<Vec<String>, D::Error> {
+    let mut flags = Vec::<String>::deserialize(input)?;
+    flags.sort_unstable();
+    flags.dedup();
+    Ok(flags)
 }
 
 /// The flag names the tools in this workspace set.
@@ -120,6 +145,25 @@ mod tests {
             serde_json::to_string(&chunk).unwrap(),
             r#"{"v":1,"idx":0,"text":"hello","tokens":1,"page":null,"chapter":null,"role":"body","start_time":null,"end_time":null,"flags":[]}"#
         );
+    }
+
+    #[test]
+    fn flags_read_from_a_stream_are_sorted_and_unique_too() {
+        let chunk: Chunk = serde_json::from_str(
+            r#"{"idx":0,"text":"x","tokens":1,"role":"body","flags":["zebra","alpha","alpha"]}"#,
+        )
+        .unwrap();
+        assert_eq!(chunk.flags, ["alpha", "zebra"]);
+        assert!(chunk.has_flag("zebra"));
+        assert!(chunk.has_flag("alpha"));
+    }
+
+    #[test]
+    fn a_timestamp_that_is_not_a_number_is_refused_rather_than_dropped() {
+        let mut chunk = Chunk::new(0, "x", 1);
+        chunk.start_time = Some(f64::NAN);
+        let e = serde_json::to_string(&chunk).unwrap_err();
+        assert!(e.to_string().contains("cannot be written"), "{e}");
     }
 
     #[test]

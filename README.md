@@ -14,7 +14,7 @@ means something.
 ## Install
 
 ```sh
-cargo install --git https://git.pumpin.online/funkpower/catena corpus-core
+cargo install --git https://git.pumpin.online/funkpower/catena <tool>
 ```
 
 Each tool installs by name, so you can take one without taking the rest.
@@ -31,8 +31,9 @@ Every binary in this workspace obeys all of this, or it does not ship.
    line, flushed as it is produced, so a slow stage never blocks the pipe.
 4. **Predicates answer with exit codes.** `0` yes, `1` no, `2` could not tell.
    Failures use the `sysexits` range — `64` bad usage, `65` bad input, `69` a
-   missing external program, `74` I/O — so "no" and "broke" are never the same
-   number.
+   missing external program, `70` the tool's own fault, `74` I/O — so "no" and
+   "broke" are never the same number. A consumer closing the pipe is not a
+   failure: `… | head -1` exits `0`, like every other filter.
 5. **No network, no database, no config file, no state.** Two exceptions, both
    declared in `--help`: a tool whose whole job is an HTTP call, and a tool
    that shells out to a named external program and fails clearly when it is
@@ -90,4 +91,6 @@ cargo fmt --check
 
 ## Licence
 
-MPL-2.0. See `LICENSE`.
+MPL-2.0, library crates and binaries alike. The notice lives in `LICENSE` and
+the `license` field of every manifest rather than in a header on every file,
+which is what MPL-2.0 Exhibit A allows for.

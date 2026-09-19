@@ -1,6 +1,7 @@
 //! Prints the JSON Schema for the record types, so a consumer in another
 //! language can generate its own bindings instead of reading Rust.
 
+use std::io::Write;
 use std::process::ExitCode;
 
 use corpus_core::{Chunk, Doc, Hit, exit};
@@ -14,28 +15,41 @@ Prints the JSON Schema for one record type, or an object of all three.
 ";
 
 fn main() -> ExitCode {
-    let mut args = std::env::args().skip(1);
-    match args.next().as_deref() {
-        Some("schema") => {
-            let which = args.next().unwrap_or_else(|| "all".into());
-            match schema(&which) {
-                Some(json) => {
-                    println!("{json}");
-                    ExitCode::from(exit::OK as u8)
-                }
-                None => {
-                    eprintln!("corpus-core: unknown record type {which:?}\n\n{USAGE}");
-                    ExitCode::from(exit::USAGE as u8)
-                }
-            }
-        }
-        Some("--help" | "-h") => {
-            println!("{USAGE}");
-            ExitCode::from(exit::OK as u8)
-        }
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+
+    match args.as_slice() {
+        ["--help" | "-h"] => print(USAGE),
+        ["--version"] => print(&format!("corpus-core {}\n", env!("CARGO_PKG_VERSION"))),
+        ["schema"] => emit("all"),
+        ["schema", which] => emit(which),
         _ => {
-            eprintln!("{USAGE}");
-            ExitCode::from(exit::USAGE as u8)
+            eprint!("{USAGE}");
+            ExitCode::from(exit::USAGE)
+        }
+    }
+}
+
+fn emit(which: &str) -> ExitCode {
+    match schema(which) {
+        Some(json) => print(&format!("{json}\n")),
+        None => {
+            eprintln!("corpus-core: unknown record type {which:?}\n");
+            eprint!("{USAGE}");
+            ExitCode::from(exit::USAGE)
+        }
+    }
+}
+
+/// Write to stdout, treating a consumer that stopped reading as the end of
+/// the job rather than as a failure. `println!` would panic there.
+fn print(text: &str) -> ExitCode {
+    match std::io::stdout().write_all(text.as_bytes()) {
+        Ok(()) => ExitCode::from(exit::OK),
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => ExitCode::from(exit::OK),
+        Err(e) => {
+            eprintln!("corpus-core: {e}");
+            ExitCode::from(exit::IO)
         }
     }
 }

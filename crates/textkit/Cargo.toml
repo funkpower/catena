@@ -10,6 +10,5 @@ repository.workspace = true
 [dependencies]
 tiktoken-rs.workspace = true
 
-[lints.rust]
-unsafe_code = "forbid"
-missing_docs = "warn"
+[lints]
+workspace = true
