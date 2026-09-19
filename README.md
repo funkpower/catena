@@ -101,6 +101,8 @@ these go into a pipeline without first reading how it works:
 - The same input gives the same output, on every run and every machine.
 - `--json` is the stable form, and does not change shape without a major
   version.
+- `--man` writes the program's manual page, generated from the same definition
+  `--help` is.
 
 The whole of it, with the reasoning: [what these programs
 promise](docs/contract.md).

@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 clap.workspace = true
+clap_mangen.workspace = true
 corpus-core.workspace = true
 serde.workspace = true
 

@@ -29,6 +29,7 @@ booksniff = { path = "crates/booksniff", version = "0.1.0" }
 emb = { path = "crates/emb", version = "0.1.0" }
 
 clap = { version = "4", features = ["derive"] }
+clap_mangen = "0.3"
 deunicode = "1"
 fancy-regex = "0.16"
 # 0.38 is the last release that builds on the pinned toolchain; the ones

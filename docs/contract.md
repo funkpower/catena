@@ -61,11 +61,16 @@ same as any other filter.
 ## Nothing reaches outside the process
 
 No network, no database, no configuration file, no state kept between runs.
-Two exceptions, both declared in `--help`:
+Four exceptions, each declared in `--help`:
 
 - [`emb`](../crates/emb/README.md) makes an HTTP call, which is the whole of what it does.
-- [`pdftriage`](../crates/pdftriage/README.md) runs `pdftotext` and `pdfinfo`, and exits `69`
-  when either is missing rather than guessing.
+- [`pdftriage`](../crates/pdftriage/README.md) runs `pdftotext` and `pdfinfo`.
+- [`pdfgutter`](../crates/pdfgutter/README.md) runs `pdftoppm` to look at a page.
+- [`avplan`](../crates/avplan/README.md) runs `ffprobe` to read a file's streams, and
+  `ffmpeg` to ask which encoders the machine has.
+
+The three that call another program exit `69` when it is missing, rather than
+guessing at what it would have said.
 
 ## Nothing is assumed about where it is running
 
@@ -87,3 +92,14 @@ Where a program prints something for a person to read, `--json` prints the
 same answer as a record, and that record does not change shape without a major
 version. Programs whose only sensible output is a stream of records write that
 stream and have no `--json` to add.
+
+## Every one writes its own manual page
+
+`--man` writes the program's manual page, in roff, to stdout:
+
+```sh
+pdfgutter --man | gzip > /usr/local/share/man/man1/pdfgutter.1.gz
+```
+
+It is generated from the same definition `--help` is, so the two can never
+come to say different things.

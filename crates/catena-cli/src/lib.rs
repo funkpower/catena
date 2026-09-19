@@ -8,6 +8,9 @@
 //! - a consumer that closed the pipe is the end of the job, not a failure;
 //! - a record is flushed as it is written, so a slow stage downstream sees it
 //!   immediately.
+//!
+//! It also gives every tool `--man`, so that the manual page and the help
+//! text can never say different things.
 
 use std::io::{BufWriter, Write};
 use std::process::ExitCode;
@@ -21,13 +24,68 @@ use serde::Serialize;
 /// wrong with the arguments leaves with 64, which is what the rest of the
 /// suite means by "the command line was wrong".
 pub fn parse<T: clap::Parser>() -> Result<T, ExitCode> {
-    T::try_parse().map_err(|e| {
+    let command = T::command().arg(
+        clap::Arg::new("man")
+            .long("man")
+            .action(clap::ArgAction::SetTrue)
+            .help("Write this page as a manual page, in roff"),
+    );
+
+    // Looked for before parsing, the way `--help` is: a mode, not an option,
+    // and not blocked by an argument the mode does not need. Anything after a
+    // bare `--` is a value and never a flag.
+    if std::env::args()
+        .skip(1)
+        .take_while(|argument| argument != "--")
+        .any(|argument| argument == "--man")
+    {
+        return Err(man(command));
+    }
+
+    let leave = |e: clap::Error| {
         let _ = e.print();
         match e.use_stderr() {
             true => ExitCode::from(exit::USAGE),
             false => ExitCode::from(exit::OK),
         }
-    })
+    };
+    let matches = command.try_get_matches().map_err(leave)?;
+    T::from_arg_matches(&matches).map_err(leave)
+}
+
+/// Write the manual page for a command and leave.
+///
+/// Generated from the same definition `--help` is, because a manual page kept
+/// by hand is a manual page that is wrong.
+fn man(command: clap::Command) -> ExitCode {
+    // A package holding two commands would otherwise put the package's name
+    // at the head of both pages, and `man vocabmerge` would open bibclean.
+    let command = match invoked_as() {
+        // Leaked because clap holds names for the life of the program,
+        // which from here is one page of roff and an exit.
+        Some(name) => command.name(&*name.leak()),
+        None => command,
+    };
+
+    let mut roff = Vec::new();
+    if let Err(e) = clap_mangen::Man::new(command).render(&mut roff) {
+        eprintln!("man: {e}");
+        return ExitCode::from(exit::SOFTWARE);
+    }
+    match String::from_utf8(roff) {
+        Ok(page) => text("man", &page),
+        Err(_) => ExitCode::from(exit::SOFTWARE),
+    }
+}
+
+/// What this program was called, without a path and without an extension.
+fn invoked_as() -> Option<String> {
+    let argv0 = std::env::args_os().next()?;
+    let name = std::path::Path::new(&argv0).file_stem()?.to_str()?;
+    match name.is_empty() {
+        true => None,
+        false => Some(name.to_string()),
+    }
 }
 
 /// Write records to stdout as NDJSON, one per line, flushed as they go.
@@ -158,5 +216,40 @@ mod tests {
             format!("{:?}", finish("test", Closed)),
             format!("{:?}", ExitCode::from(exit::OK))
         );
+    }
+
+    /// A command shaped like the tools here: a required path and a flag.
+    #[derive(clap::Parser)]
+    #[command(name = "example", about = "An example.")]
+    struct Example {
+        /// The file to read.
+        path: std::path::PathBuf,
+        /// Emit a record.
+        #[arg(long)]
+        json: bool,
+    }
+
+    fn page() -> String {
+        let command = <Example as clap::CommandFactory>::command();
+        let mut roff = Vec::new();
+        clap_mangen::Man::new(command)
+            .render(&mut roff)
+            .expect("a rendered page");
+        String::from_utf8(roff).expect("text")
+    }
+
+    #[test]
+    fn the_manual_page_says_what_the_help_says() {
+        let page = page();
+        assert!(page.contains(".TH example 1"), "{page}");
+        assert!(page.contains("An example."), "{page}");
+        assert!(page.contains("\\-\\-json"), "{page}");
+    }
+
+    #[test]
+    fn the_manual_page_describes_arguments_the_command_requires() {
+        // The page has to describe a command whose arguments are required,
+        // which is why it cannot be reached by parsing them first.
+        assert!(page().contains("PATH"), "{}", page());
     }
 }
