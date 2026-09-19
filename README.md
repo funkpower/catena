@@ -53,6 +53,7 @@ $ for f in *.pdf; do pdftriage --quiet "$f" && ocrmypdf "$f" "ocr/$f"; done
 
 | | |
 |---|---|
+| `bibclean` | Catalogue records audited and repaired, with a reason for every change |
 | `booksniff` | What a file actually is, whatever its name claims |
 | `mdscrub` | Converted markdown in, clean markdown out: residual HTML, control characters, headings, page markers |
 | `chunkmd` | Markdown into passages that carry their page, chapter and role |
