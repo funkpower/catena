@@ -15,6 +15,7 @@ python = []
 
 [dependencies]
 chunkmd.workspace = true
+mdscrub.workspace = true
 corpus-core.workspace = true
 serde_json.workspace = true
 textkit.workspace = true

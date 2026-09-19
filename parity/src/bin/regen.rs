@@ -19,7 +19,11 @@ type Written = Result<Vec<String>, String>;
 type Job = (&'static str, fn() -> Written);
 
 fn main() -> ExitCode {
-    let jobs: [Job; 2] = [("tokens", tokens), ("chunkmd", chunkmd)];
+    let jobs: [Job; 3] = [
+        ("tokens", tokens),
+        ("chunkmd", chunkmd),
+        ("mdscrub", mdscrub),
+    ];
 
     for (name, job) in jobs {
         match job() {
@@ -48,6 +52,31 @@ fn tokens() -> Written {
     let path = parity::golden("tokens.counts");
     std::fs::write(&path, format!("{header}{counts}")).map_err(|e| e.to_string())?;
     Ok(vec![path.display().to_string()])
+}
+
+fn mdscrub() -> Written {
+    let dir = parity::golden("mdscrub");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let mut written = Vec::new();
+    for case in parity::cases("mdscrub") {
+        let markdown = std::fs::read_to_string(&case).map_err(|e| e.to_string())?;
+        let name = parity::case_name(&case);
+        let cleaned = parity::run_oracle("mdscrub.py", &markdown)?;
+        let path = dir.join(format!("{name}.md"));
+        std::fs::write(&path, cleaned).map_err(|e| e.to_string())?;
+        written.push(path.display().to_string());
+
+        // Where the Rust deliberately differs, its own answer is committed
+        // too, so the difference is visible in a review rather than only in
+        // a test failure. See parity/KNOWN.md.
+        if parity::DIVERGENT_MDSCRUB.contains(&name.as_str()) {
+            let path = dir.join(format!("{name}.rust.md"));
+            std::fs::write(&path, ::mdscrub::scrub(&markdown)).map_err(|e| e.to_string())?;
+            written.push(path.display().to_string());
+        }
+    }
+    Ok(written)
 }
 
 fn chunkmd() -> Written {

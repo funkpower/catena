@@ -76,7 +76,7 @@ pub fn split_by_page(markdown: &str) -> Vec<Page<'_>> {
         let text = trim(&markdown[start..end]);
         if !text.is_empty() {
             pages.push(Page {
-                number: Some(page_number(&markdown[marker.start()..marker.end()])),
+                number: Some(textkit::decimal(&markdown[marker.start()..marker.end()])),
                 text,
                 offset: start,
             });
@@ -138,7 +138,7 @@ impl PageIndex {
     pub fn new(markdown: &str) -> Self {
         Self(
             PAGE.find_iter(markdown)
-                .map(|marker| (marker.start(), page_number(marker.as_str())))
+                .map(|marker| (marker.start(), textkit::decimal(marker.as_str())))
                 .collect(),
         )
     }
@@ -191,20 +191,6 @@ pub fn page_chapters(chapters: &[Chapter]) -> HashMap<u32, &str> {
         }
     }
     out
-}
-
-/// Read the digits out of a page marker.
-///
-/// Digits are matched by the Unicode class, so a marker could in principle
-/// carry non-ASCII decimal digits; those count the same way here as they
-/// would in Python. A number too large for the field saturates rather than
-/// wrapping — see `parity/KNOWN.md`.
-fn page_number(marker: &str) -> u32 {
-    let mut number: u32 = 0;
-    for digit in marker.chars().filter_map(|c| c.to_digit(10)) {
-        number = number.saturating_mul(10).saturating_add(digit);
-    }
-    number
 }
 
 fn trim(text: &str) -> &str {

@@ -219,6 +219,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
+name = "mdscrub"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "corpus-core",
+ "regex",
+ "textkit",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -236,6 +246,7 @@ version = "0.1.0"
 dependencies = [
  "chunkmd",
  "corpus-core",
+ "mdscrub",
  "serde_json",
  "textkit",
 ]

@@ -10,8 +10,10 @@
 //! chunk ends and a chunk boundary that moves is a chunk that no longer
 //! matches what is already in an index.
 
+pub mod number;
 pub mod segment;
 pub mod tokens;
 
+pub use number::decimal;
 pub use segment::{is_space, paragraphs, sentences};
 pub use tokens::{count, decode_lossy, encode, split_at_token_limit};

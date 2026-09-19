@@ -1,0 +1,17 @@
+[package]
+name = "mdscrub"
+description = "Cleans converted markdown: residual HTML, control characters, headings, page markers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+clap.workspace = true
+corpus-core.workspace = true
+regex.workspace = true
+textkit.workspace = true
+
+[lints]
+workspace = true
