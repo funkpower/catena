@@ -100,6 +100,13 @@ a time.
 
 Written by [`cueseg`](../crates/cueseg/README.md).
 
+## Records that belong to one tool
+
+Not everything is shared. [`bibclean`](../crates/bibclean/README.md) reads and
+writes catalogue records, author suggestions, slug proposals and vocabulary
+merge proposals; those shapes are described where that tool is, because
+nothing else consumes them.
+
 ## Getting the schemas
 
 The JSON Schema for the first three is printed by the record library itself:
