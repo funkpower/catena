@@ -103,3 +103,6 @@ pdfgutter --man | gzip > /usr/local/share/man/man1/pdfgutter.1.gz
 
 It is generated from the same definition `--help` is, so the two can never
 come to say different things.
+
+See also [the recipes](recipes.md), for what these rules buy when the
+tools are put in a row.

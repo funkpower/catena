@@ -41,6 +41,10 @@ Each tool installs by name, so you can take one without taking the rest.
 Each links to its own page: what it does, when you would use it, worked
 examples, options and exit codes.
 
+For how they fit together — a scanned book to a searchable passage, a
+transcript to a citation with a timestamp, vectors into pgvector and hybrid
+search fused on top — see [the recipes](docs/recipes.md).
+
 ## The libraries underneath
 
 Every tool is a library crate with a thin command on top, so anything a

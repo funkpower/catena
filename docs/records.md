@@ -126,3 +126,6 @@ $ cargo run -p corpus-core -- schema chunk
 ```
 
 See [`corpus-core`](../crates/corpus-core/README.md).
+
+See also [the recipes](recipes.md), for what these rules buy when the
+tools are put in a row.
