@@ -1,0 +1,32 @@
+from typing import Any, Iterable, Mapping, Sequence
+
+__version__: str
+
+def chunk_markdown(
+    markdown: str,
+    *,
+    target: int | None = ...,
+    overlap: int | None = ...,
+    min_tokens: int | None = ...,
+    hard_max: int | None = ...,
+) -> list[dict[str, Any]]: ...
+def scrub(markdown: str, *, pages: bool = ...) -> str: ...
+def count_tokens(text: str) -> int: ...
+def parse_subtitles(
+    content: str, *, keep_repeats: bool = ...
+) -> list[dict[str, Any]]: ...
+def pack_cues(
+    cues: Iterable[Mapping[str, Any]],
+    *,
+    seconds: float | None = ...,
+    max_tokens: int | None = ...,
+) -> list[dict[str, Any]]: ...
+def split_collection(markdown: str) -> list[dict[str, Any]]: ...
+def fuse_hits(
+    hits: Iterable[Mapping[str, Any]],
+    *,
+    k: float | None = ...,
+    weights: Mapping[str, float] | None = ...,
+    limit: int | None = ...,
+) -> list[dict[str, Any]]: ...
+def identify(name: str, data: bytes) -> dict[str, Any]: ...

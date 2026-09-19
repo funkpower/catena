@@ -56,6 +56,7 @@ command does can be done in process instead.
 | [`textkit`](crates/textkit/README.md) | Token counting, sentence and paragraph splitting |
 | [`cuekit`](crates/cuekit/README.md) | The cue model, and the three subtitle formats it is read from |
 | [`catena-cli`](crates/catena-cli/README.md) | The parts of a filter every command does the same way |
+| [`bindings`](crates/bindings/README.md) | The same libraries from Python, for callers already holding the text |
 
 ## A worked pipeline
 

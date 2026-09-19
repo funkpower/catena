@@ -1,0 +1,47 @@
+[build-system]
+requires = ["maturin>=1.9,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "catena"
+description = "The catena libraries behind one surface, for calling in process rather than as a subprocess"
+readme = "README.md"
+license = "MPL-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.9"
+keywords = ["chunking", "markdown", "subtitles", "retrieval", "corpus", "tokens"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Rust",
+    "Topic :: Text Processing :: Markup",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
+# maturin takes it from Cargo.toml, so there is one place to bump.
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://git.pumpin.online/funkpower/catena"
+Repository = "https://git.pumpin.online/funkpower/catena"
+
+[tool.maturin]
+bindings = "pyo3"
+module-name = "catena._catena"
+# Mixed layout: the compiled module is private and python/catena wraps it,
+# which is what lets the wheel carry py.typed and a stub file. A bare
+# extension module has nowhere to put either.
+python-source = "python"
+# The feature is optional so that an ordinary `cargo build` does not try to
+# link against a Python that is not there. This is the only place it is
+# turned on.
+features = ["python"]
+profile = "wheel"
+manifest-path = "Cargo.toml"

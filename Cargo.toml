@@ -25,11 +25,13 @@ cuepack = { path = "crates/cuepack", version = "0.1.0" }
 bibclean = { path = "crates/bibclean", version = "0.1.0" }
 avplan = { path = "crates/avplan", version = "0.1.0" }
 pdfgutter = { path = "crates/pdfgutter", version = "0.1.0" }
+catena = { path = "crates/bindings", version = "0.1.0" }
 booksniff = { path = "crates/booksniff", version = "0.1.0" }
 emb = { path = "crates/emb", version = "0.1.0" }
 
 clap = { version = "4", features = ["derive"] }
 clap_mangen = "0.3"
+pyo3 = { version = "0.27", features = ["extension-module", "abi3-py39"] }
 deunicode = "1"
 fancy-regex = "0.16"
 # 0.38 is the last release that builds on the pinned toolchain; the ones
@@ -56,3 +58,11 @@ missing_docs = "warn"
 strip = true
 lto = true
 codegen-units = 1
+
+# The Python extension module, which cannot be stripped the way a binary can.
+# Stripping a dylib's symbols leaves one macOS refuses to load at all —
+# "mis-aligned LINKEDIT string pool" — and there is nothing to strip for
+# anyway, since the interpreter resolves its symbols at load time.
+[profile.wheel]
+inherits = "release"
+strip = false

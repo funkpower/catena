@@ -1,0 +1,38 @@
+[package]
+name = "catena"
+description = "The catena libraries behind one surface, for calling in process rather than as a subprocess."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "catena"
+path = "src/lib.rs"
+# `cdylib` for the bindings, `rlib` so the workspace can still depend on it.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+booksniff.workspace = true
+chunkmd.workspace = true
+corpus-core.workspace = true
+cuekit.workspace = true
+cuepack.workspace = true
+mdscrub.workspace = true
+mdsplit.workspace = true
+rrf.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+textkit.workspace = true
+
+pyo3 = { workspace = true, optional = true }
+
+[features]
+# Only maturin turns this on. pyo3's extension-module feature leaves the
+# Python symbols to be resolved by the interpreter at load time, so an
+# ordinary `cargo build` would fail to link if it were on by default.
+python = ["dep:pyo3"]
+
+[lints]
+workspace = true
