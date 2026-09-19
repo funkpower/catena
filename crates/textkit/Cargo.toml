@@ -1,0 +1,15 @@
+[package]
+name = "textkit"
+description = "Tokenising and segmenting text, the way the catena tools agree to do it."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tiktoken-rs.workspace = true
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
