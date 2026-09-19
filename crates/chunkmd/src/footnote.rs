@@ -8,7 +8,7 @@
 use std::sync::LazyLock;
 
 use fancy_regex::Regex as FancyRegex;
-use regex::Regex;
+use textkit::pattern::{SPACE, WORD_END, WORD_START};
 
 /// A private-use codepoint marking the start of a note's text.
 ///
@@ -40,47 +40,50 @@ const MIN_CITED_NOTES: usize = 2;
 /// more spaces — several notes can share one physical line — so that a
 /// superscript *reference* to a note, mid-sentence, does not qualify.
 static NOTE_MARKER: LazyLock<FancyRegex> = LazyLock::new(|| {
-    FancyRegex::new(
+    FancyRegex::new(&format!(
         r"(?xm)
-    (?: ^[ \t]{0,8} (?:-[ \t]+)?      # line start, optional '- ' list bullet
-      | (?<=\s\s)                     # or after a 2+ space run
+    (?: ^[ \t]{{0,8}} (?:-[ \t]+)?      # line start, optional '- ' list bullet
+      | (?<={SPACE}{SPACE})            # or after a 2+ space run
       | (?<=\ -\ )                    # or after ' - ' (inline list separator)
     )
     (?:
-        \d{1,3} \\?[.)] [ \t]+ \S                 # plain '12. ' or escaped '12\. '
-      | \[ \d{1,3} \] [ \t]* \S                   # bracket-numbered '[12] Author'
-      | \d{1,3} [ \t]+ \S                         # bare '12 ' from a page bottom
-      | [¹²³⁰-⁹]+ \s* \S                          # unicode superscript marker
-      | (?:fn|ftn|note) \d{1,4} [.)] [ \t]+ \S    # id-style 'fn39. '
-      | (?:<span[^>]*>\s*)*                       # outer span wrap
-        <a\b[^>]*> \s* (?:<span[^>]*>\s*)* (?:<sup>\s*)?
-            \d{1,3} \s* [.)]?
-        \s* (?:</sup>\s*)? (?:</span>\s*)* </a>
-        (?:\s*</span>)* \s* [.)]?                 # anchor forms
-      | \[ \s* (?:<span[^>]*>)? \s* \d{1,3}
-        \s* (?:</span>)? \s* \] \( \#[^)]* \)     # [42](#...)
-      | <sup> \s* \d{1,3} \s* </sup>              # bare sup note
-    )",
-    )
+        \d{{1,3}} \\?[.)] [ \t]+ \S               # plain '12. ' or escaped '12\. '
+      | \[ \d{{1,3}} \] [ \t]* \S                 # bracket-numbered '[12] Author'
+      | \d{{1,3}} [ \t]+ \S                       # bare '12 ' from a page bottom
+      | [¹²³⁰-⁹]+ {SPACE}* \S                     # unicode superscript marker
+      | (?:fn|ftn|note) \d{{1,4}} [.)] [ \t]+ \S  # id-style 'fn39. '
+      | (?:<span[^>]*>{SPACE}*)*                  # outer span wrap
+        <a{WORD_END}[^>]*> {SPACE}* (?:<span[^>]*>{SPACE}*)* (?:<sup>{SPACE}*)?
+            \d{{1,3}} {SPACE}* [.)]?
+        {SPACE}* (?:</sup>{SPACE}*)? (?:</span>{SPACE}*)* </a>
+        (?:{SPACE}*</span>)* {SPACE}* [.)]?        # anchor forms
+      | \[ {SPACE}* (?:<span[^>]*>)? {SPACE}* \d{{1,3}}
+        {SPACE}* (?:</span>)? {SPACE}* \] \( \#[^)]* \)  # [42](#...)
+      | <sup> {SPACE}* \d{{1,3}} {SPACE}* </sup>   # bare sup note
+    )"
+    ))
     .expect("a valid pattern")
 });
 
 /// What makes a note bibliographic rather than discursive.
-static CITE_SIGNAL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+static CITE_SIGNAL: LazyLock<FancyRegex> = LazyLock::new(|| {
+    FancyRegex::new(&format!(
         r"(?ix)
-    \((?:[^()]*\b)?(?:1[5-9]|20)\d{2}\)   # parenthesised year: (Oxford, 1998)
-  | \bpp?\.\s*\d                          # p. 12 / pp. 12-34
-  | \bvol\.\s*\d                          # vol. 2
-  | \bIbid\b | \bop\.\s*cit\b | \bloc\.\s*cit\b
-  | \bet\s+al\b
-  | \b(?:University|Clarendon|Academic)\s+Press\b | \bPress,\s
-  | \beds?\.\s | \btrans\.\s
-  | \*[^*\n]{3,80}\*\s*,?\s*\d            # short form: *Title*, 183
-  | <span[^>]*italic[^>]*>                # HTML-italic title survives conversion
-  | ,\s+\d{1,4}\s*[.;]                    # trailing page: '..., 183.'
-  | https?://                             # web citations (URLs, DOIs)",
-    )
+    \((?:[^()]*{WORD_END})?(?:1[5-9]|20)\d{{2}}\)   # parenthesised year: (Oxford, 1998)
+  | {WORD_START}pp?\.{SPACE}*\d                      # p. 12 / pp. 12-34
+  | {WORD_START}vol\.{SPACE}*\d                      # vol. 2
+  | {WORD_START}Ibid{WORD_END}
+  | {WORD_START}op\.{SPACE}*cit{WORD_END}
+  | {WORD_START}loc\.{SPACE}*cit{WORD_END}
+  | {WORD_START}et{SPACE}+al{WORD_END}
+  | {WORD_START}(?:University|Clarendon|Academic){SPACE}+Press{WORD_END}
+  | {WORD_START}Press,{SPACE}
+  | {WORD_START}eds?\.{SPACE} | {WORD_START}trans\.{SPACE}
+  | \*[^*\n]{{3,80}}\*{SPACE}*,?{SPACE}*\d         # short form: *Title*, 183
+  | <span[^>]*italic[^>]*>                          # HTML-italic title survives conversion
+  | ,{SPACE}+\d{{1,4}}{SPACE}*[.;]                   # trailing page: '..., 183.'
+  | https?://                                       # web citations (URLs, DOIs)"
+    ))
     .expect("a valid pattern")
 });
 
@@ -107,7 +110,7 @@ pub fn looks_like_citations(text: &str) -> bool {
     for (at, start) in starts.iter().enumerate() {
         let end = starts.get(at + 1).copied().unwrap_or(text.len());
         let entry: String = text[*start..end].chars().take(ENTRY_WINDOW).collect();
-        if CITE_SIGNAL.is_match(&entry) {
+        if CITE_SIGNAL.is_match(&entry).unwrap_or(false) {
             cited += 1;
             if cited >= MIN_CITED_NOTES {
                 return true;

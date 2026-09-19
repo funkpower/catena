@@ -194,6 +194,7 @@ dependencies = [
  "clap",
  "corpus-core",
  "cuekit",
+ "fancy-regex 0.16.2",
  "regex",
  "schemars",
  "serde",
@@ -474,6 +475,7 @@ dependencies = [
 name = "textkit"
 version = "0.1.0"
 dependencies = [
+ "regex",
  "tiktoken-rs",
 ]
 

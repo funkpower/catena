@@ -27,7 +27,6 @@ const SPAN: u32 = 5;
 #[command(
     version,
     about,
-    long_about = None,
     after_help = "\
 Exit codes: 0 the layer needs OCR, 1 it does not, 2 could not tell,
 69 pdftotext is not installed, 74 the file could not be read.

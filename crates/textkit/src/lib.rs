@@ -11,6 +11,7 @@
 //! matches what is already in an index.
 
 pub mod number;
+pub mod pattern;
 pub mod segment;
 pub mod tokens;
 

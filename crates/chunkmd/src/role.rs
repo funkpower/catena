@@ -14,10 +14,18 @@
 use std::sync::LazyLock;
 
 use corpus_core::Role;
+use fancy_regex::Regex as Boundaried;
 use regex::Regex;
+use textkit::pattern::{SPACE, WORD, WORD_END, WORD_START};
 
 fn pattern(source: &str) -> Regex {
     Regex::new(source).expect("a valid pattern")
+}
+
+/// A pattern that needs Python's word boundary, which is a lookaround here
+/// because Rust's own `\b` counts combining marks as word characters.
+fn bounded(source: &str) -> Boundaried {
+    Boundaried::new(source).expect("a valid pattern")
 }
 
 /// Chapter titles that give the section away, tried in this order.
@@ -25,17 +33,27 @@ static BY_TITLE: LazyLock<Vec<(Role, Regex)>> = LazyLock::new(|| {
     vec![
         (
             Role::Bibliography,
-            pattern(
-                r"(?i)(bibliograph|works\s+cited|literature\s+cited|further\s+reading|^\s*references\s*$|^\s*(end)?notes\s*$)",
-            ),
+            pattern(&format!(
+                r"(?i)(bibliograph|works{SPACE}+cited|literature{SPACE}+cited|further{SPACE}+reading|^{SPACE}*references{SPACE}*$|^{SPACE}*(end)?notes{SPACE}*$)"
+            )),
         ),
-        (Role::Index, pattern(r"(?i)^\s*index(\s+of\s+\w+)?\s*$")),
-        (Role::Toc, pattern(r"(?i)^\s*(table\s+of\s+)?contents\s*$")),
+        (
+            Role::Index,
+            pattern(&format!(
+                r"(?i)^{SPACE}*index({SPACE}+of{SPACE}+{WORD}+)?{SPACE}*$"
+            )),
+        ),
+        (
+            Role::Toc,
+            pattern(&format!(
+                r"(?i)^{SPACE}*(table{SPACE}+of{SPACE}+)?contents{SPACE}*$"
+            )),
+        ),
         (
             Role::Frontmatter,
-            pattern(
-                r"(?i)(copyright|title\s*page|colophon|^\s*dedication\s*$|^\s*epigraph\s*$|about\s+the\s+(author|publisher)|acknowledg)",
-            ),
+            pattern(&format!(
+                r"(?i)(copyright|title{SPACE}*page|colophon|^{SPACE}*dedication{SPACE}*$|^{SPACE}*epigraph{SPACE}*$|about{SPACE}+the{SPACE}+(author|publisher)|acknowledg)"
+            )),
         ),
     ]
 });
@@ -43,29 +61,40 @@ static BY_TITLE: LazyLock<Vec<(Role, Regex)>> = LazyLock::new(|| {
 /// A standalone bibliography heading inside the chunk's own text —
 /// "Bibliography", "## Works Cited", "Selected Bibliography".
 static INTEXT_BIBLIO_HEADING: LazyLock<Regex> = LazyLock::new(|| {
-    pattern(
-        r"(?im)^\s*#{0,6}\s*(select(?:ed)?\s+)?(bibliography|works\s+cited|references|sources)\s*$",
-    )
+    pattern(&format!(
+        r"(?im)^{SPACE}*#{{0,6}}{SPACE}*(select(?:ed)?{SPACE}+)?(bibliography|works{SPACE}+cited|references|sources){SPACE}*$"
+    ))
 });
 
 /// One bibliography entry: "Lastname, First…", or the dash run that stands
 /// for "the same author again".
-static BIBLIO_ENTRY: LazyLock<Regex> =
-    LazyLock::new(|| pattern(r"^(?:[A-Z][\w'’\-]+,\s+\S|[—–-]{2,3}\s*[.,])"));
+static BIBLIO_ENTRY: LazyLock<Regex> = LazyLock::new(|| {
+    pattern(&format!(
+        r"^(?:[A-Z][\p{{L}}\p{{N}}_'’\-]+,{SPACE}+\S|[—–-]{{2,3}}{SPACE}*[.,])"
+    ))
+});
 
 /// The continuation of a wrapped entry: "New York: Springer, 2013."
-static BIBLIO_CONTINUATION: LazyLock<Regex> =
-    LazyLock::new(|| pattern(r"\b(University|Press|Publish|Books|Verlag|Editions|& Co|Inc\.)\b"));
+static BIBLIO_CONTINUATION: LazyLock<Boundaried> = LazyLock::new(|| {
+    bounded(&format!(
+        r"{WORD_START}(University|Press|Publish|Books|Verlag|Editions|& Co|Inc\.){WORD_END}"
+    ))
+});
 
-static YEAR: LazyLock<Regex> = LazyLock::new(|| pattern(r"\b(1[5-9]\d{2}|20\d{2})\b"));
+static YEAR: LazyLock<Boundaried> =
+    LazyLock::new(|| bounded(&format!(r"{WORD_START}(1[5-9]\d{{2}}|20\d{{2}}){WORD_END}")));
 
 /// An index line: a short lead, then a list of page numbers.
-static INDEX_LINE: LazyLock<Regex> =
-    LazyLock::new(|| pattern(r"^.{1,70}?,\s+[ivxlc\d]{1,4}(?:[,–-]\s*[ivxlc\d]{1,4})*\s*$"));
+static INDEX_LINE: LazyLock<Regex> = LazyLock::new(|| {
+    pattern(&format!(
+        r"^.{{1,70}}?,{SPACE}+[ivxlc\d]{{1,4}}(?:[,–-]{SPACE}*[ivxlc\d]{{1,4}})*{SPACE}*$"
+    ))
+});
 
 /// A contents line: dot leaders to a page number, or a link to an internal
 /// anchor, which is what a converted EPUB's table of contents becomes.
-static TOC_LINE: LazyLock<Regex> = LazyLock::new(|| pattern(r"(\.{3,}\s*\d{1,4}\s*$|\]\(#)"));
+static TOC_LINE: LazyLock<Regex> =
+    LazyLock::new(|| pattern(&format!(r"(\.{{3,}}{SPACE}*\d{{1,4}}{SPACE}*$|\]\(#)")));
 
 /// A wrapped entry long enough that its publisher name is probably a
 /// coincidence rather than a citation, in characters.
@@ -139,8 +168,8 @@ pub fn classify(text: &str, chapter: Option<&str>) -> Role {
 }
 
 fn looks_like_entry(paragraph: &str) -> bool {
-    let year = YEAR.is_match(paragraph);
-    let publisher = BIBLIO_CONTINUATION.is_match(paragraph);
+    let year = YEAR.is_match(paragraph).unwrap_or(false);
+    let publisher = BIBLIO_CONTINUATION.is_match(paragraph).unwrap_or(false);
     if BIBLIO_ENTRY.is_match(paragraph) && (year || publisher) {
         return true;
     }

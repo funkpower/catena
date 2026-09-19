@@ -9,6 +9,7 @@
 use std::sync::LazyLock;
 
 use regex::Regex;
+use textkit::pattern::SPACE;
 
 fn pattern(source: &str) -> Regex {
     Regex::new(source).expect("a valid pattern")
@@ -21,23 +22,24 @@ static LINK: LazyLock<Regex> = LazyLock::new(|| pattern(r"\[([^\]]*)\]\([^)]*\)"
 static BRACKETED: LazyLock<Regex> = LazyLock::new(|| pattern(r"\[([^\]]+)\]\{[^}]*\}"));
 
 /// A trailing `{.attr}` block.
-static ATTRIBUTE_TAIL: LazyLock<Regex> = LazyLock::new(|| pattern(r"\s*\{[^}]*\}\s*$"));
+static ATTRIBUTE_TAIL: LazyLock<Regex> =
+    LazyLock::new(|| pattern(&format!(r"{SPACE}*\{{[^}}]*\}}{SPACE}*$")));
 
 /// Any inline tag. Broader than the one used on body text, because a heading
 /// has no code fences to protect.
 static TAG: LazyLock<Regex> = LazyLock::new(|| pattern(r"<[^>]+>"));
 
-static SPACE_RUN: LazyLock<Regex> = LazyLock::new(|| pattern(r"\s+"));
+static SPACE_RUN: LazyLock<Regex> = LazyLock::new(|| pattern(&format!(r"{SPACE}+")));
 
 /// A heading line, and the text after its hashes.
-static HEADING: LazyLock<Regex> = LazyLock::new(|| pattern(r"^(#{1,6})\s+(.*)$"));
+static HEADING: LazyLock<Regex> = LazyLock::new(|| pattern(&format!(r"^(#{{1,6}}){SPACE}+(.*)$")));
 
 /// A page anchor: `<span id="…page42">`, `<a id="page-42">`, and the rest of
 /// the shapes an EPUB uses to say where a printed page began.
 pub static PAGE_ANCHOR: LazyLock<Regex> = LazyLock::new(|| {
-    pattern(
-        r#"(?i)<(?:span|a|div)\b[^>]*\bid\s*=\s*["'][^"']*?page[-_]?(\d+)[^"']*["'][^>]*>(?:</(?:span|a|div)>)?"#,
-    )
+    pattern(&format!(
+        r#"(?i)<(?:span|a|div)\b[^>]*\bid{SPACE}*={SPACE}*["'][^"']*?page[-_]?(\d+)[^"']*["'][^>]*>(?:</(?:span|a|div)>)?"#
+    ))
 });
 
 /// Clean one heading's text.

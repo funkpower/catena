@@ -20,7 +20,6 @@ use corpus_core::{exit, ndjson};
 #[command(
     version,
     about,
-    long_about = None,
     after_help = "\
 Example:
 

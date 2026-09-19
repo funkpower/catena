@@ -100,12 +100,25 @@ fn carry_tail(buf: &[String], overlap: usize) -> Vec<String> {
     out
 }
 
-/// Split anything still over the hard maximum, on token boundaries.
+/// Split anything still over the hard maximum, on token boundaries, and hand
+/// back each piece with its token count.
 ///
 /// Defence in depth. The structural passes above should have handled it; this
-/// is what guarantees the promise regardless.
-pub fn enforce_hard_max(text: &str, hard_max: usize) -> Vec<String> {
+/// is what guarantees the promise regardless. The counts come back with the
+/// pieces because they have just been computed, and counting them again is
+/// the second-largest cost in the whole chunker.
+pub fn enforce_hard_max(text: &str, hard_max: usize) -> Vec<(String, usize)> {
+    let tokens = textkit::count(text);
+    if tokens <= hard_max {
+        return vec![(text.to_string(), tokens)];
+    }
     textkit::split_at_token_limit(text, hard_max)
+        .into_iter()
+        .map(|piece| {
+            let tokens = textkit::count(&piece);
+            (piece, tokens)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -179,8 +192,9 @@ mod tests {
     #[test]
     fn nothing_leaves_the_packer_over_the_hard_maximum() {
         let long = "word ".repeat(2000);
-        for piece in enforce_hard_max(&long, 100) {
-            assert!(textkit::count(&piece) <= 100);
+        for (piece, tokens) in enforce_hard_max(&long, 100) {
+            assert!(tokens <= 100);
+            assert_eq!(tokens, textkit::count(&piece));
         }
     }
 }

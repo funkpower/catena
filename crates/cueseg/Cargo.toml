@@ -11,6 +11,7 @@ repository.workspace = true
 clap.workspace = true
 corpus-core.workspace = true
 cuekit.workspace = true
+fancy-regex.workspace = true
 regex.workspace = true
 schemars.workspace = true
 serde.workspace = true

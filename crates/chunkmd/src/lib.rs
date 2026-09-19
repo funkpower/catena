@@ -28,23 +28,24 @@ pub use pack::Budgets;
 pub fn chunk(markdown: &str, budgets: &Budgets) -> Vec<Chunk> {
     let pages = pages::split_by_page(markdown);
     let chapters = pages::chapters(markdown);
-    let by_page = pages::page_chapters(&chapters);
     let by_offset = pages::ChapterIndex::new(&chapters);
 
     let mut chunks: Vec<Chunk> = Vec::new();
     for page in pages {
         for packed in pack::page(page.text, budgets) {
-            for piece in pack::enforce_hard_max(&packed, budgets.hard_max) {
-                let tokens = textkit::count(&piece);
+            for (piece, tokens) in pack::enforce_hard_max(&packed, budgets.hard_max) {
                 if tokens < budgets.min_tokens {
                     continue;
                 }
                 // A page-based chapter when the document has page markers;
                 // the byte offset otherwise, which is what carries EPUBs
-                // that have headings but no page anchors.
+                // that have headings but no page anchors. Page zero counts as
+                // no page at all, which is what the Python's truth test makes
+                // of it.
                 let chapter = page
                     .number
-                    .and_then(|number| by_page.get(&number).copied())
+                    .filter(|number| *number != 0)
+                    .and_then(|number| pages::chapter_of_page(&chapters, number))
                     .or_else(|| by_offset.at(page.offset));
 
                 let idx = chunks.len() as u32;

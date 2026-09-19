@@ -18,7 +18,6 @@ use corpus_core::{exit, ndjson};
 #[command(
     version,
     about,
-    long_about = None,
     after_help = "\
 Example:
 
@@ -63,9 +62,9 @@ fn main() -> ExitCode {
 
     let markdown = match read(args.path.as_deref()) {
         Ok(markdown) => markdown,
-        Err(e) => {
-            eprintln!("chunkmd: {e}");
-            return ExitCode::from(exit::IO);
+        Err((code, why)) => {
+            eprintln!("chunkmd: {why}");
+            return ExitCode::from(code);
         }
     };
 
@@ -118,13 +117,21 @@ fn sane(budgets: &Budgets) -> Result<(), String> {
     Ok(())
 }
 
-fn read(path: Option<&std::path::Path>) -> std::io::Result<String> {
-    match path {
-        Some(path) => std::fs::read_to_string(path),
-        None => {
-            let mut markdown = String::new();
-            std::io::stdin().read_to_string(&mut markdown)?;
-            Ok(markdown)
+/// Read the input, distinguishing a file that cannot be read from one that
+/// is not text: the first is an I/O failure and the second is bad input, and
+/// a caller routing on the exit code needs to tell them apart.
+fn read(path: Option<&std::path::Path>) -> Result<String, (u8, String)> {
+    let bytes = match path {
+        Some(path) => {
+            std::fs::read(path).map_err(|e| (exit::IO, format!("{}: {e}", path.display())))
         }
-    }
+        None => {
+            let mut bytes = Vec::new();
+            std::io::stdin()
+                .read_to_end(&mut bytes)
+                .map(|_| bytes)
+                .map_err(|e| (exit::IO, e.to_string()))
+        }
+    }?;
+    String::from_utf8(bytes).map_err(|e| (exit::DATA, format!("input is not UTF-8: {e}")))
 }

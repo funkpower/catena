@@ -4,16 +4,18 @@
 //! and chapter boundaries as headings. Both are needed on every chunk: a
 //! passage a reader cannot locate in the book is a passage they cannot check.
 
-use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use regex::Regex;
+use textkit::pattern::SPACE;
 
-static PAGE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"<!--\s*Page\s+(\d+)\s*-->").expect("a valid pattern"));
+static PAGE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!(r"<!--{SPACE}*Page{SPACE}+(\d+){SPACE}*-->")).expect("a valid pattern")
+});
 
-static HEADING: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?m)^(#{1,3})\s+(.+)$").expect("a valid pattern"));
+static HEADING: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!(r"(?m)^(#{{1,3}}){SPACE}+(.+)$")).expect("a valid pattern")
+});
 
 /// One page's worth of text, and where it started in the source.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -166,31 +168,33 @@ impl<'a> ChapterIndex<'a> {
     }
 }
 
-/// Map each page number to the chapter covering it.
+/// The chapter covering a page, if any.
 ///
 /// Where chapters overlap — which happens when two headings land on one page
 /// — the later one wins, because that is the one a reader scrolling down
 /// would be under.
-pub fn page_chapters(chapters: &[Chapter]) -> HashMap<u32, &str> {
-    let mut out = HashMap::new();
-    for chapter in chapters {
-        let Some(start) = chapter.start_page else {
-            continue;
-        };
-        // A zero end page means the same thing as no end page: this chapter
-        // is one page long as far as anyone can tell.
-        let end = match chapter.end_page {
-            Some(0) | None => start,
-            Some(end) => end,
-        };
-        if end < start {
-            continue;
-        }
-        for page in start..=end {
-            out.insert(page, chapter.title.as_str());
-        }
-    }
-    out
+///
+/// Scanned rather than indexed into a map of every page. A document has tens
+/// of chapters and a scan of them costs nothing, where a map costs one entry
+/// per page in every chapter's span: a single mistyped marker reading
+/// `<!-- Page 20231115 -->` would ask for a gigabyte of them.
+pub fn chapter_of_page(chapters: &[Chapter], page: u32) -> Option<&str> {
+    chapters
+        .iter()
+        .filter(|chapter| {
+            let Some(start) = chapter.start_page else {
+                return false;
+            };
+            // A zero end page means the same thing as no end page: this
+            // chapter is one page long as far as anyone can tell.
+            let end = match chapter.end_page {
+                Some(0) | None => start,
+                Some(end) => end,
+            };
+            (start..=end.max(start)).contains(&page) && end >= start
+        })
+        .next_back()
+        .map(|chapter| chapter.title.as_str())
 }
 
 fn trim(text: &str) -> &str {
@@ -264,10 +268,10 @@ mod tests {
         assert_eq!(found[0].start_page, Some(1));
         assert_eq!(found[0].end_page, Some(4));
         assert_eq!(found[1].start_page, Some(4));
-        let by_page = page_chapters(&found);
-        assert_eq!(by_page.get(&1), Some(&"One"));
-        assert_eq!(by_page.get(&3), Some(&"One"));
-        assert_eq!(by_page.get(&4), Some(&"Two"));
+        assert_eq!(chapter_of_page(&found, 1), Some("One"));
+        assert_eq!(chapter_of_page(&found, 3), Some("One"));
+        assert_eq!(chapter_of_page(&found, 4), Some("Two"));
+        assert_eq!(chapter_of_page(&found, 9), None);
     }
 
     #[test]

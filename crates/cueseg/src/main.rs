@@ -21,7 +21,6 @@ use cuekit::Cue;
 #[command(
     version,
     about,
-    long_about = None,
     after_help = "\
 Example:
 

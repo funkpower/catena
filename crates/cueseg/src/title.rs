@@ -3,17 +3,22 @@
 use std::sync::LazyLock;
 
 use regex::Regex;
+use textkit::pattern::{SPACE, WORD_END, WORD_START};
 
 /// Hesitations. A chapter called "Um Yeah So I Think" is worse than no title.
-static FILLER: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)\b(um+|uh+|ah+|er+)\b").expect("a valid pattern"));
+static FILLER: LazyLock<fancy_regex::Regex> = LazyLock::new(|| {
+    fancy_regex::Regex::new(&format!(r"(?i){WORD_START}(um+|uh+|ah+|er+){WORD_END}"))
+        .expect("a valid pattern")
+});
 
 /// The most common discourse marker in recorded speech.
-static YOU_KNOW: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)\byou know\b").expect("a valid pattern"));
+static YOU_KNOW: LazyLock<fancy_regex::Regex> = LazyLock::new(|| {
+    fancy_regex::Regex::new(&format!(r"(?i){WORD_START}you know{WORD_END}"))
+        .expect("a valid pattern")
+});
 
 static SPACE_RUN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"[\s\x{1c}-\x{1f}]+").expect("a valid pattern"));
+    LazyLock::new(|| Regex::new(&format!(r"{SPACE}+")).expect("a valid pattern"));
 
 /// Anything that does not belong in a title.
 static NOT_TITLE: LazyLock<Regex> =

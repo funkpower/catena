@@ -58,26 +58,62 @@ emitting chunks with no page number, which is the honest answer.
 only reachable from the PDF conversion path. Covered by
 `mdscrub::pages::tests::text_with_no_page_boundaries_is_left_exactly_as_it_was`.
 
-## chunkmd, role and footnote patterns — `\s` excludes four control characters
+## Every ported pattern — the two engines disagree about `\d` and `(?i)`
 
-**Python:** `\s` in a `str` pattern matches the Unicode `White_Space`
-property *and* `U+001C`–`U+001F`, the four ASCII information separators.
+**Python:** `re` compiles against the Unicode version of the interpreter;
+`(?i)` folds `ı` and `İ` onto `i`.
 
-**Rust:** `regex` and `fancy-regex` match the `White_Space` property only, so
-those four characters are not whitespace to a ported pattern.
+**Rust:** `regex` compiles against the Unicode version it was built with, and
+`(?i)` uses simple case folding, which leaves the dotless and dotted `i`
+alone.
 
-**Why this is acceptable:** every one of those codepoints is deleted by
-`mdscrub` before a chunker sees it — they fall inside the control-character
-class that a text column rejects. For the pattern to behave differently, a
-document would have to reach `chunkmd` without having been cleaned, and carry
-an information separator in exactly the position where a pattern expects
-whitespace.
+**Why this is acceptable:** `\s`, `\w` and `\b` were the differences that
+mattered and they are closed — every ported pattern now spells Python's
+classes explicitly, from `textkit::pattern`. What is left is a `\d` that
+disagrees only on decimal digits added between the two Unicode versions
+(Garay, added in Unicode 16, is the current example), and a case fold that
+disagrees only for Turkish dotless `i`. A chapter heading reading
+`Bıblıography` is classified as body text here and as a bibliography there;
+a page marker written in Garay digits reads here and does not there.
 
-Note that this does **not** apply to the sentence and paragraph splitters in
-`textkit`, which match Python's definition exactly — see
-`textkit::segment::is_space`. Those decide chunk boundaries, so the four
-characters are handled there rather than argued about.
+Both will drift again at every dependency bump, which is the real reason this
+entry exists: the golden files pin one pair of Unicode versions, and a change
+to either shows up as a parity failure rather than as a silent difference.
 
-**Measured:** zero differences over the parity corpus; the sample in
-`parity/src/sample.rs` includes `U+001C` deliberately and the token counts
-agree over all ten thousand lines.
+**Measured:** zero differences over the parity corpus. Found by brute-forcing
+every code point below `U+11000` through both engines: `\d` differs on ten,
+`(?i)` on three.
+
+## chunkmd — a page number too large for the field saturates
+
+**Python:** integers are unbounded, so `<!-- Page 99999999999 -->` records
+page 99,999,999,999.
+
+**Rust:** the page field is a 32-bit number and saturates at 4,294,967,295.
+
+**Why this is acceptable:** the number is a page number. A document with four
+billion pages does not exist, and the alternative — a 64-bit field — would
+make every chunk record wider to carry a value nothing can produce. The
+saturation is deliberate rather than a wrap, so the wrong answer is at least
+obviously wrong.
+
+**Measured:** no document in any corpus this was run against has a page
+marker above five digits.
+
+## chunkmd — a hard maximum of zero yields nothing rather than raising
+
+**Python:** `_enforce_hard_max` with `hard_max=0` raises `ValueError:
+range() arg 3 must not be zero`.
+
+**Rust:** `chunkmd::chunk` returns no chunks, since no piece could satisfy
+the limit.
+
+**Why this is acceptable:** the command-line tool rejects it before reading
+any input, so this is reachable only by a library caller, and a filter that
+returns nothing for a budget that permits nothing is the more useful answer
+of the two. Every other degenerate budget — overlap at or above target, a
+hard maximum below the target, a minimum of zero — agrees with the Python
+exactly.
+
+**Measured:** checked against the oracle for all of those combinations; only
+the zero hard maximum differs.
