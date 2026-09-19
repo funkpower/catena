@@ -126,6 +126,7 @@ for chunk in chunkmd::chunk(&markdown, &Budgets::default()) {
 ## See also
 
 - [`mdscrub`](../mdscrub/README.md) — what to run before this.
+- [`mdsplit`](../mdsplit/README.md) — when the file holds more than one work.
 - [`cuepack`](../cuepack/README.md) — the same record, from a recording.
 - [`emb`](../emb/README.md) — turning the text into vectors.
 - [The records](../../docs/records.md) — the shape this writes.

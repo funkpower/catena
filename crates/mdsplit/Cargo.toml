@@ -1,0 +1,25 @@
+[package]
+name = "mdsplit"
+description = "Splits one markdown file into the works inside it."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+catena-cli.workspace = true
+clap.workspace = true
+corpus-core.workspace = true
+regex.workspace = true
+schemars.workspace = true
+serde.workspace = true
+textkit.workspace = true
+thiserror.workspace = true
+unicode-normalization.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -140,5 +140,6 @@ wants only one of them.
 
 ## See also
 
+- [`mdsplit`](../mdsplit/README.md) — when the file holds more than one work.
 - [`chunkmd`](../chunkmd/README.md) — what to do with the markdown once it is clean.
 - [`pdftriage`](../pdftriage/README.md) — whether the text was worth extracting at all.

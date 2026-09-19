@@ -19,7 +19,7 @@ type Written = Result<Vec<String>, String>;
 type Job = (&'static str, fn() -> Written);
 
 fn main() -> ExitCode {
-    let jobs: [Job; 14] = [
+    let jobs: [Job; 15] = [
         ("tokens", tokens),
         ("unescape", unescape),
         ("chunkmd", chunkmd),
@@ -34,6 +34,7 @@ fn main() -> ExitCode {
         ("slug", slug),
         ("author", author),
         ("vocab", vocab),
+        ("mdsplit", mdsplit),
     ];
 
     for (name, job) in jobs {
@@ -75,6 +76,21 @@ fn unescape() -> Written {
     let path = dir.join("entities.jsonl");
     std::fs::write(&path, decoded).map_err(|e| e.to_string())?;
     Ok(vec![path.display().to_string()])
+}
+
+fn mdsplit() -> Written {
+    let dir = parity::golden("mdsplit");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let mut written = Vec::new();
+    for case in parity::cases("mdsplit") {
+        let markdown = std::fs::read_to_string(&case).map_err(|e| e.to_string())?;
+        let sections = parity::run_oracle("mdsplit.py", &markdown)?;
+        let path = dir.join(format!("{}.json", parity::case_name(&case)));
+        std::fs::write(&path, sections).map_err(|e| e.to_string())?;
+        written.push(path.display().to_string());
+    }
+    Ok(written)
 }
 
 fn vocab() -> Written {
