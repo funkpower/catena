@@ -19,6 +19,7 @@ pdftriage = { path = "crates/pdftriage", version = "0.1.0" }
 cuenorm = { path = "crates/cuenorm", version = "0.1.0" }
 cueseg = { path = "crates/cueseg", version = "0.1.0" }
 rrf = { path = "crates/rrf", version = "0.1.0" }
+cuepack = { path = "crates/cuepack", version = "0.1.0" }
 
 clap = { version = "4", features = ["derive"] }
 fancy-regex = "0.16"

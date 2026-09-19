@@ -19,7 +19,7 @@ type Written = Result<Vec<String>, String>;
 type Job = (&'static str, fn() -> Written);
 
 fn main() -> ExitCode {
-    let jobs: [Job; 8] = [
+    let jobs: [Job; 9] = [
         ("tokens", tokens),
         ("unescape", unescape),
         ("chunkmd", chunkmd),
@@ -28,6 +28,7 @@ fn main() -> ExitCode {
         ("cuenorm", cuenorm),
         ("cueseg", cueseg),
         ("rrf", rrf),
+        ("cuepack", cuepack),
     ];
 
     for (name, job) in jobs {
@@ -69,6 +70,29 @@ fn unescape() -> Written {
     let path = dir.join("entities.jsonl");
     std::fs::write(&path, decoded).map_err(|e| e.to_string())?;
     Ok(vec![path.display().to_string()])
+}
+
+fn cuepack() -> Written {
+    let dir = parity::golden("cuepack");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let budgets = [("default", 75.0, 512), ("small", 12.0, 24)];
+    let mut written = Vec::new();
+    for case in parity::cases_with_extension("cuepack", "ndjson") {
+        let name = parity::case_name(&case);
+        let cues = std::fs::read_to_string(&case).map_err(|e| e.to_string())?;
+        for (set, seconds, max_tokens) in budgets {
+            let packed = parity::run_oracle_with(
+                "cuepack.py",
+                &[seconds.to_string(), max_tokens.to_string()],
+                &cues,
+            )?;
+            let path = dir.join(format!("{name}.{set}.ndjson"));
+            std::fs::write(&path, packed).map_err(|e| e.to_string())?;
+            written.push(path.display().to_string());
+        }
+    }
+    Ok(written)
 }
 
 fn rrf() -> Written {

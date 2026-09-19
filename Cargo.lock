@@ -188,6 +188,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cuepack"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "corpus-core",
+ "cuekit",
+ "textkit",
+]
+
+[[package]]
 name = "cueseg"
 version = "0.1.0"
 dependencies = [
@@ -283,6 +293,7 @@ dependencies = [
  "chunkmd",
  "corpus-core",
  "cuekit",
+ "cuepack",
  "cueseg",
  "mdscrub",
  "pdftriage",

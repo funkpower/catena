@@ -16,6 +16,7 @@ python = []
 [dependencies]
 chunkmd.workspace = true
 cuekit.workspace = true
+cuepack.workspace = true
 cueseg.workspace = true
 mdscrub.workspace = true
 pdftriage.workspace = true

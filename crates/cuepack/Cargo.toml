@@ -1,0 +1,17 @@
+[package]
+name = "cuepack"
+description = "Packs cues into passages worth embedding, keeping the times they were said at."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+clap.workspace = true
+corpus-core.workspace = true
+cuekit.workspace = true
+textkit.workspace = true
+
+[lints]
+workspace = true
