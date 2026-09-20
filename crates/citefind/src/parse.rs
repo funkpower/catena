@@ -210,6 +210,22 @@ static BARE_CITE: LazyLock<Regex> = LazyLock::new(|| {
     .expect("a valid pattern")
 });
 
+/// A note that keys a topic to a short cite: `Mate selection: Buss, 1989;
+/// Symons, 1979.` The topic is the author's own words about their own
+/// argument; the cites name works given in full in the bibliography.
+static KEYED_CITE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?ix) ^ [^:;,]{3,60} :          # the topic, in the note's own words
+        (?: \s* (?:and\s+|see\s+)?
+            \p{Lu}[\p{L}'\u{2019}\-]{1,24}          # a surname
+            (?: \s+ (?:and|&) \s+ \p{Lu}[\p{L}'\u{2019}\-]{1,24}
+              | \s+ et \s+ al\.? )?                 # or two, or et al.
+            \s*,\s* (?:1[4-9]|20)\d{2} [a-z]?       # and the year
+            \s* [;,]? )+ \.? \s* $",
+    )
+    .expect("a valid pattern")
+});
+
 /// A text cited by the critical series it is printed in rather than by its
 /// own name: `PG 4: 264`, `CSEL 34.2, 12`, `NPNF 2/5: 430`. Migne and the
 /// rest are shelves, not works, and the work is not named here.
@@ -393,6 +409,13 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
     }
     // A short cite points at a full entry elsewhere, the way `ibid.` points
     // at the note above. The author and the year it does give are kept.
+    // A keyed cite names no author of its own — `Mate selection:` is the
+    // note's own words — so nothing is carried off it but the year.
+    if is_keyed_cite(text) {
+        out.continuation = true;
+        out.year = year(text);
+        return Some(out);
+    }
     if is_short_cite(text) {
         out.continuation = true;
         out.year = year(text);
@@ -546,7 +569,9 @@ fn span(pattern: &Regex, text: &str) -> (Option<String>, Option<(usize, usize)>)
     let Some(inner) = (1..=4).find_map(|at| found.get(at)) else {
         return (None, None);
     };
-    let cleaned = tidy_title(&strip_markup(inner.as_str()));
+    // A span the style marked as a title is a title, whatever it opens on:
+    // `*1 & 2 Thessalonians*` is a book of the Bible, not a page number.
+    let cleaned = tidy_marked_title(&strip_markup(inner.as_str()));
     match cleaned.is_empty() {
         true => (None, None),
         false => (Some(cleaned), Some((whole.start(), whole.end()))),
@@ -802,6 +827,16 @@ fn strip_markup(text: &str) -> String {
     without_tags.replace(['*', '_'], "").trim().to_string()
 }
 
+/// Whether a note is one or more topics keyed to short cites and nothing
+/// else: `Mate selection: Buss, 1989; Symons, 1979. Jealousy: Buss, 2000.`
+fn is_keyed_cite(text: &str) -> bool {
+    let parts = sentences(text);
+    !parts.is_empty()
+        && parts
+            .iter()
+            .all(|part| KEYED_CITE.is_match(part.trim_end_matches('.')))
+}
+
 /// Whether every part of an entry is a short cite and nothing more.
 fn is_short_cite(text: &str) -> bool {
     let parts: Vec<&str> = text
@@ -947,6 +982,32 @@ fn looks_like_a_year(text: &str) -> bool {
         Err(_) => false,
     }
 }
+
+/// The same, for a run the style itself marked as a title.
+///
+/// The rule against a title opening on a number is about a page reference
+/// picked up by mistake. Inside quotation marks or italics there is no
+/// mistake to make: `*1 & 2 Thessalonians*` is what the entry says the work
+/// is called.
+fn tidy_marked_title(raw: &str) -> String {
+    let text = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    let text = text.trim_end_matches('\\');
+    let text =
+        text.trim_matches(|c: char| ",.;:'\u{2018}\u{2019}".contains(c) || c.is_whitespace());
+    let text = TRAILING_VOLUME.replace(text, "");
+    let text = text.trim_end_matches(|c: char| ",.;: ".contains(c));
+    match MARKED_NOT_A_TITLE.is_match(text) || !quotes_balance(text) {
+        true => String::new(),
+        false => text.to_string(),
+    }
+}
+
+/// What a marked-up title still may not be: two entries run together, or a
+/// reference to where a work is rather than what it is.
+static MARKED_NOT_A_TITLE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?ix) \bpp?\.\s*\d | ; | \bibid\b | \\ | ,\s+(?:eds?|trans)\.\s+\p{Lu}")
+        .expect("a valid pattern")
+});
 
 /// Strip the punctuation a style leaves inside its own title delimiters.
 fn tidy_title(raw: &str) -> String {
@@ -1818,6 +1879,31 @@ mod tests {
         ] {
             assert!(one(note, None).is_none(), "{note}");
         }
+    }
+
+    #[test]
+    fn a_topic_keyed_to_short_cites_names_no_work_and_no_author() {
+        // A notes section that reads `Mate selection: Buss, 1989` is keying
+        // the author's own words to works given in full elsewhere. The topic
+        // is not a name and there is nothing here to resolve.
+        let found = read("Mate selection: Buss, 1989; Symons, 1979. Jealousy: Buss, 2000.");
+        assert!(found.continuation);
+        assert!(found.authors.is_empty(), "{found:#?}");
+        assert!(found.title.is_none());
+        assert!(found.missing().is_empty());
+
+        // An entry held together by commas with an imprint at the end looks
+        // similar and is a reference.
+        let real = read("Miller, David, On Nationality, Oxford: Clarendon Press, 1995");
+        assert_eq!(real.authors, ["Miller, David"]);
+        assert_eq!(real.title.as_deref(), Some("On Nationality"));
+    }
+
+    #[test]
+    fn a_title_the_style_marked_may_open_on_a_number() {
+        // `*1 & 2 Thessalonians*` is two books of the Bible, not a page.
+        let found = read("Bruce, F. F. (1982), *1 & 2 Thessalonians*, Waco, TX: Word.");
+        assert_eq!(found.title.as_deref(), Some("1 & 2 Thessalonians"));
     }
 
     #[test]
