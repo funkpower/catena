@@ -66,10 +66,17 @@ static NOTE_MARKER: LazyLock<FancyRegex> = LazyLock::new(|| {
 });
 
 /// What makes a note bibliographic rather than discursive.
+/// What a citation looks like inside a note entry.
+///
+/// The year alternative wants Python's `\b`, which is true when exactly one
+/// side is a word character. What follows it here is a digit, so the half
+/// that applies is the one asserting the character *before* is not a word
+/// character. `WORD_END` would ask the opposite and refuse `(1740-1811)`,
+/// where the year is preceded by a dash and a date.
 static CITE_SIGNAL: LazyLock<FancyRegex> = LazyLock::new(|| {
     FancyRegex::new(&format!(
         r"(?ix)
-    \((?:[^()]*{WORD_END})?(?:1[5-9]|20)\d{{2}}\)   # parenthesised year: (Oxford, 1998)
+    \((?:[^()]*{WORD_START})?(?:1[5-9]|20)\d{{2}}\)  # parenthesised year: (Oxford, 1998)
   | {WORD_START}pp?\.{SPACE}*\d                      # p. 12 / pp. 12-34
   | {WORD_START}vol\.{SPACE}*\d                      # vol. 2
   | {WORD_START}Ibid{WORD_END}
@@ -132,6 +139,20 @@ mod tests {
     #[test]
     fn the_structural_marker_settles_it_on_its_own() {
         assert!(looks_like_citations(&format!("{SENTINEL}See above.")));
+    }
+
+    #[test]
+    fn a_year_preceded_by_a_dash_is_still_a_citation() {
+        // `(1740\u{2013}1811)` and `(Niter\u{f3}i, 1860\u{2013}1937)`: the year is
+        // preceded by a character that is not a word character, which is the
+        // half of a word boundary that applies when what follows is a digit.
+        // Both are real entries out of a converted book, where the
+        // parenthesised year was the only citation signal in the chunk.
+        let notes = "11\\. Tiradentes was a hero. In this painting by Ant\u{f4}nio Parreiras \
+                     (Niter\u{f3}i, 1860\u{2013}1937), he is immortalized.\n\n\
+                     12\\. Many peoples came from Africa. Carlos Juli\u{e3}o \
+                     (1740\u{2013}1811) was a Portuguese-Italian artist.\n";
+        assert!(looks_like_citations(notes));
     }
 
     #[test]
