@@ -8,9 +8,8 @@
 
 use std::sync::LazyLock;
 
-use fancy_regex::Regex as Boundaried;
 use regex::Regex;
-use textkit::pattern::{SPACE, WORD_END, WORD_START};
+use textkit::pattern::SPACE;
 
 fn pattern(source: &str) -> Regex {
     Regex::new(source).expect("a valid pattern")
@@ -37,11 +36,21 @@ static HEADING: LazyLock<Regex> = LazyLock::new(|| pattern(&format!(r"^(#{{1,6}}
 
 /// A page anchor: `<span id="…page42">`, `<a id="page-42">`, and the rest of
 /// the shapes an EPUB uses to say where a printed page began.
-pub static PAGE_ANCHOR: LazyLock<Boundaried> = LazyLock::new(|| {
-    Boundaried::new(&format!(
-        r#"(?i)<(?:span|a|div){WORD_END}[^>]*{WORD_START}id{SPACE}*={SPACE}*["'][^"']*?page[-_]?(\d+)[^"']*["'][^>]*>(?:</(?:span|a|div)>)?"#
-    ))
-    .expect("a valid pattern")
+///
+/// On the backtracking engine, as the Python is. A tag carrying an `id` that
+/// is not a page — `<span id="filepos1024631">` is what a Kindle conversion
+/// leaves behind, and one real book has forty-four of them — makes the two
+/// `[^"']` runs and the two `[^>]` runs try every split between them before
+/// giving up. On a megabyte of markdown that does not finish. The engine here
+/// cannot backtrack, so no input can make it.
+///
+/// The word boundaries are this engine's `\b` rather than Python's, which
+/// differ only around combining marks and connector punctuation — neither of
+/// which occurs between `<span` and `id` in anything a converter emits.
+pub static PAGE_ANCHOR: LazyLock<Regex> = LazyLock::new(|| {
+    pattern(
+        r#"(?i)<(?:span|a|div)\b[^>]*\bid[\s]*=[\s]*["'][^"']*?page[-_]?(\d+)[^"']*["'][^>]*>(?:</(?:span|a|div)>)?"#,
+    )
 });
 
 /// Clean one heading's text.
@@ -73,7 +82,6 @@ pub fn clean_all(markdown: &str) -> String {
         let raw = &found[2];
         let pages: Vec<u32> = PAGE_ANCHOR
             .captures_iter(raw)
-            .filter_map(Result::ok)
             .map(|anchor| textkit::decimal(&anchor[1]))
             .collect();
         let cleaned = clean(&PAGE_ANCHOR.replace_all(raw, ""));
@@ -96,7 +104,7 @@ pub fn clean_all(markdown: &str) -> String {
 /// rather than a piece of its text.
 pub fn anchors_to_markers(markdown: &str) -> String {
     PAGE_ANCHOR
-        .replace_all(markdown, |found: &fancy_regex::Captures| {
+        .replace_all(markdown, |found: &regex::Captures| {
             format!("\n\n<!-- Page {} -->\n\n", &found[1])
         })
         .into_owned()
@@ -105,6 +113,22 @@ pub fn anchors_to_markers(markdown: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tag_whose_id_is_not_a_page_finishes() {
+        // What a Kindle conversion leaves behind, forty-four times in one
+        // real book. On a backtracking engine the two `[^"']` runs and the
+        // two `[^>]` runs try every split between them before giving up, and
+        // on a megabyte of it that never returns.
+        let junk = "<span id=\"filepos1024631\">text</span>\n\n".repeat(400);
+        let markdown = format!("# Heading\n\n{junk}<span id=\"page42\"></span>\n");
+        let out = anchors_to_markers(&markdown);
+        assert!(
+            out.contains("<!-- Page 42 -->"),
+            "the real anchor is still found"
+        );
+        assert!(out.contains("filepos1024631"), "the others are left alone");
+    }
 
     #[test]
     fn a_link_wrapper_comes_off() {
