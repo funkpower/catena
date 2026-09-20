@@ -565,7 +565,15 @@ fn author_date(text: &str) -> Option<(usize, usize)> {
     let head = &text[..span.0];
     // A rule of dashes stands in for the author of the entry above, and an
     // author-date entry may open on one: `—— (1994), Christianizing Homer`.
-    if head.chars().count() > 120 || !(reads_as_names(head) || repeats_author(head)) {
+    // Only a bare rule, though: `\_\_\_\_\_. "Die Frage nach der Echtheit."
+    // *Theologische Blätter* 20 (1941)` opens on one too, and everything
+    // between it and the year is the title and the journal.
+    let bare_rule = REPEATED_AUTHOR.find(head).is_some_and(|found| {
+        head[found.end()..]
+            .trim_matches(|c: char| ".,; ".contains(c))
+            .is_empty()
+    });
+    if head.chars().count() > 120 || !(reads_as_names(head) || bare_rule) {
         return None;
     }
     // Something has to follow the year, or there is no title to find.
@@ -1415,6 +1423,22 @@ mod tests {
             found.title.as_deref(),
             Some("Christianizing Homer: The Odyssey, Plato, and the Acts of Andrew")
         );
+    }
+
+    #[test]
+    fn a_rule_of_dashes_stands_for_the_author_and_nothing_else() {
+        // The dash opens the entry, and everything between it and the year
+        // is the title and the journal — not more of the author.
+        let found = read(
+            "\\_\\_\\_\\_\\_. \u{201c}Die Frage nach der Echtheit von Matth. 16, \
+             17-19.\u{201d} *Theologische Blatter* 20 (1941): 26-30.",
+        );
+        assert_eq!(
+            found.title.as_deref(),
+            Some("Die Frage nach der Echtheit von Matth. 16, 17-19")
+        );
+        assert_eq!(found.container.as_deref(), Some("Theologische Blatter"));
+        assert_eq!(found.year, Some(1941));
     }
 
     #[test]
