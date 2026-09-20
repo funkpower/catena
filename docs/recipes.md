@@ -214,6 +214,109 @@ $ pandoc -t commonmark chapter.xhtml | mdscrub | chunkmd --min-tokens 10
 Every chunk carries the page it came from and the chapter it sits under, which
 is what lets a search result cite itself.
 
+## What a book leans on
+
+The bibliography is the one part of a book that is already structured. Every
+entry names a work, and most name it in one of a handful of shapes that have
+not changed in a century — so `citefind` reads it without asking anybody
+anything.
+
+```
+$ citefind bibliography.md | head -1
+{"v":1,"idx":0,"text":"Abogunrin, S. O. “The Three Variant Accounts of Peter’s Call: A Critical and Theological Examination of the Texts.” *New Testament Studies* 31 (1985): 587–602.","marker":null,"authors":["Abogunrin, S. O."],"year":1985,"title":"The Three Variant Accounts of Peter’s Call: A Critical and Theological Examination of the Texts","container":"New Testament Studies","pages":"587–602","ids":[],"kind":"article","continuation":false,"unsettled":[]}
+```
+
+Whose work a book rests on, counted:
+
+```sh
+citefind bibliography.md \
+  | jq -r 'select(.authors | length > 0) | .authors[0]' \
+  | sort | uniq -c | sort -rn | head
+```
+
+```
+  64 Yates
+  26 Quigley
+  23 Bulgakov, Sergius
+  17 Lorenz, K.
+```
+
+What it reads, and what it reaches for:
+
+```sh
+citefind bibliography.md | jq -r .kind | sort | uniq -c | sort -rn
+```
+
+```
+4200 other
+3356 book
+ 808 chapter
+ 700 article
+ 300 web
+```
+
+The identifiers it finds, checked and resolved against a register:
+
+```sh
+citefind bibliography.md \
+  | jq -r '.ids[]? | select(.kind == "doi") | .id' \
+  | idnorm | bibfetch
+```
+
+### Across a whole shelf
+
+Every book's bibliography, cut out of the converted markdown and read:
+
+```sh
+for f in converted/*.md; do
+  awk '/^#+ *(Bibliography|References|Works Cited|Notes)/{on=1} on' "$f" \
+    | citefind 2>/dev/null \
+    | jq -c --arg from "$(basename "$f" .md)" '. + {citing: $from}'
+done > citations.ndjson
+```
+
+Over thirty converted books that was 14,481 references, 10,536 of them naming
+a work, in about a second. A book whose heading matched but whose section was
+empty exits `1` and says so on stderr, which is why the loop sends it
+nowhere.
+
+Which works the shelf agrees on — cited by the most different books:
+
+```sh
+jq -r 'select(.title) | [.citing, (.title | ascii_downcase)] | @tsv' citations.ndjson \
+  | sort -u | cut -f2 | uniq -c | sort -rn | head
+```
+
+Counted per citing book rather than per entry, so a work cited forty times in
+one bibliography still counts once. On a shelf whose books share a subject
+this is the spine of the field; on one that does not, it is mostly ones.
+
+That is a citation graph, built out of the books themselves, with nothing
+running but a parser.
+
+### What it could not read
+
+Every record names the fields it could not settle. A bibliography set in a
+style the parser does not know, or a chunk that began part-way through an
+entry, shows up here rather than as a confident wrong answer:
+
+```sh
+citefind bibliography.md | jq -r 'select(.unsettled | length > 0) | .text'
+```
+
+`--prompt` writes a question about exactly those entries and no others, for a
+model of your choosing. Nothing is sent from here:
+
+```sh
+citefind --prompt bibliography.md | ollama run qwen3:8b > reply.json
+citefind --merge reply.json bibliography.md
+```
+
+A reply fills in only the fields that were asked about; a model that
+volunteers a better title for an entry whose title was read off the page is
+overruled. Most bibliographies have nothing to ask about, and `--prompt`
+exits `1` and writes nothing when that is so.
+
 ## A collected edition into one record per work
 
 Forty books in one file, indexed whole, means a query for any of them returns a

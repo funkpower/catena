@@ -139,18 +139,14 @@ interpretation of it and somebody will want to check.
 ## How it cuts
 
 **A page of notes** is cut at its note numbers, in any of the shapes
-conversion leaves them: `12.`, `[12]`, `fn39.`, a superscript, or a
-back-reference link. The pattern is the one
+conversion leaves them: `12.`, `[12]`, `fn39.`, a superscript, a number run
+straight into the text, or a back-reference link. The pattern is the one
 [`chunkmd`](../chunkmd/README.md) uses to recognise a page of notes, so the
-two cannot drift apart, with one form added — a link pointing at another file
-rather than at a fragment. `chunkmd` is deciding whether a chunk is a page of
-notes and can afford to miss one marker in thirty; here a missed marker runs
-two references together.
-
-A note that cites nothing is dropped. A page of notes mixes bibliographic
-notes with discursive ones, and a remark about the argument is not a
-reference — and one that runs on for six sentences with no imprint, no page
-reference and no identifier is a remark whatever else it mentions.
+two cannot drift apart, with two forms added — a link pointing at another
+file rather than at a fragment, and an author-date entry carrying none of the
+punctuation `chunkmd` looks for. `chunkmd` is deciding whether a chunk is a
+page of notes and can afford to miss one marker in thirty; here a missed
+marker runs two references together.
 
 A note that cites **several works** becomes several records, cut at the
 semicolons that separate them, each keeping the note's number. A full stop
@@ -159,7 +155,8 @@ from the title in every bibliography entry ever written.
 
 Where the first note number sits a long way into the block, what precedes it
 is the body of the page rather than a note that lost its number, and it is
-left out.
+left out. The copyright line a digitised book prints at the foot of every
+page is cut off the end of whatever note it landed on.
 
 **A bibliography** numbers nothing, so the signal is layout: a blank line
 between entries, a hanging indent under each, or the surname-comma opening
@@ -168,32 +165,61 @@ is the one used. When it carries none of them the fallback is one entry per
 line, which is right for a list that was never wrapped and visibly wrong for
 one that was.
 
+## The forms it reads
+
+| Form | Example |
+|---|---|
+| Bibliography | `Smith, John. *The Making of the Second Estate*. Oxford: Clarendon Press, 1998.` |
+| Author-date | `Peirce, C. S. (1878). How to make our ideas clear. *Popular Science Monthly*, 12, 286-302.` |
+| Author-date, no brackets | `Altmann, M. 1951, A Study of Behaviour. Sociometry 14, 351-354.` |
+| Chicago note | `John MacGowan, The Imperial History of China (1897), p. 154.` |
+| Chicago short note | `Unger, Dutch Shipbuilding, 33-4` |
+| Commas only | `Miller, David, On Nationality, Oxford: Clarendon Press, 1995` |
+| Commas and a place | `Cheyne, T. K., Founders of Old Testament Criticism, London, 1893.` |
+| Chapter in a book | `Brown, Peter. "Sorcery…" In *Witchcraft Confessions*, ed. Mary Douglas, 17-45. London: Tavistock, 1970.` |
+
+**Where the italics sit decides what they are.** In `Peirce (1878). Plain
+title. *Popular Science Monthly*` they come after the title and name the
+journal; in `Goffman (1963). *Stigma* Penguin` they open the tail and are the
+title. The same goes for quotation marks.
+
+A rule of dashes where the author should be means the author of the entry
+above — the style says so, and the entry it refers to is the one immediately
+before — so it is filled in.
+
 ## What it will not do
 
 **Resolve `ibid.`** A continuation refers to whatever was cited before it,
 which is a fact about the surrounding page and not about the entry. It is
-flagged `continuation` and left alone, and it is left out of `--prompt`
-entirely — there is nothing in it to ask about.
+flagged `continuation` and left alone, and left out of `--prompt` entirely.
+
+The same goes for a **short cite**: `Spade 1980, 12.` and `Lowrie and
+Fletcher, p. 133` point at a full entry elsewhere in the same bibliography.
+The author and year they do give are kept; no reading of that line will
+produce a title.
 
 **Report a title it did not find.** An entry held together by commas alone,
 with no names to anchor it, yields no title rather than its own text echoed
 back. Nor does a run carrying a page reference or a semicolon count as one:
-that is two entries run together, or a reference to a work rather than the
-name of one.
+that is two entries run together. A quotation mark with no partner means the
+cut landed inside a title — unless it is the last character, which is a
+stray an opening mark was lost from.
 
 **Take chapter and verse for a work.** `Matthew 4:17` and `Cf. Deuteronomy
-18:15-19; Isaiah 53` are scripture references, which is most of what the notes
-of a theological book are. Nobody is looking for the publisher of Galatians,
-so they are not references and no record is written for them.
+18:15-19; Isaiah 53` are scripture references, which is most of what the
+notes of a theological book are. So is `PG 4: 264` — Migne, and CSEL, NPNF,
+SC and the rest are shelves, not works, and the work is not named there.
 
 **Name a place of publication as the publisher.** `(London, 1973)` says where
 a book was published and not by whom, so `container` stays empty. The place
 is still in `text`.
 
-A rule of dashes where the author should be is the exception, and a
-deliberate one: `———. *The Second Book*.` means the author of the entry above,
-the style says so, and the entry it refers to is the one immediately before.
-That is read and filled in.
+**Mistake the back matter for the bibliography.** A contributor's biography
+opens exactly as a Chicago note does — `S. Marc Cohen is Professor of…` — and
+a note that opens by thanking people cites nothing however many names it
+carries. Neither is a reference. Nor is a page footer a browser printed, nor
+a note that runs on for six sentences with no imprint, no page reference and
+no identifier.
 
 ## As a library
 

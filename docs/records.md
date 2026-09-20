@@ -111,6 +111,14 @@ has a shape of its own, described where that tool is:
   and the call that would do it.
 - [`pdfgutter`](../crates/pdfgutter/README.md) — whether a scan is two pages
   to a sheet, and what each sampled page measured.
+- [`citefind`](../crates/citefind/README.md) — one reference out of a
+  bibliography, and the fields it could not read off the entry.
+- [`bookmeta`](../crates/bookmeta/README.md) — what a file says about itself.
+- [`tocfind`](../crates/tocfind/README.md) — one entry of a table of contents.
+- [`seriesof`](../crates/seriesof/README.md) — what a title says about its
+  series.
+- [`idnorm`](../crates/idnorm/README.md) — an identifier as it arrived and as
+  it should be stored.
 
 ## Getting the schemas
 

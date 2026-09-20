@@ -322,8 +322,11 @@ static CITATION_SIGNAL: LazyLock<Regex> = LazyLock::new(|| {
 
 /// A rule of dashes standing in for the author of the entry above, which is
 /// how every style avoids printing the same name forty times running.
-static REPEATED_AUTHOR: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^\s*(?:[—–]+|-{3,}|_{3,})").expect("a valid pattern"));
+static REPEATED_AUTHOR: LazyLock<Regex> = LazyLock::new(|| {
+    // Pandoc escapes an underscore, so a rule of them arrives as
+    // `\_\_\_\_\_` rather than `_____`.
+    Regex::new(r"^\s*(?:[—–]+|-{3,}|(?:\\?_){3,})").expect("a valid pattern")
+});
 
 /// Whether an entry defers to the one above it for its author.
 pub fn repeats_author(text: &str) -> bool {
@@ -1687,6 +1690,16 @@ mod tests {
         let several = read("Trentman 1970; Spade 1980.");
         assert!(several.continuation);
         assert_eq!(several.authors, ["Trentman", "Spade"]);
+
+        // Pandoc escapes an underscore, so a rule of them arrives escaped.
+        let escaped = read(
+            "\\_\\_\\_\\_\\_. *The Community of the Beloved Disciple*. New York: Paulist, 1979.",
+        );
+        assert_eq!(
+            escaped.title.as_deref(),
+            Some("The Community of the Beloved Disciple")
+        );
+        assert!(repeats_author(&escaped.text));
 
         // One name, two years: `Spade 1975 and 1980.`
         let years = read("Spade 1975 and 1980.");
