@@ -160,6 +160,35 @@ static BIOGRAPHY: LazyLock<Regex> = LazyLock::new(|| {
     .expect("a valid pattern")
 });
 
+/// What a browser prints at the foot of a page: the address it came from,
+/// which page of how many, and when it was printed. A book assembled out of
+/// printed web pages carries one on every page, and none of them is a
+/// reference to anything.
+static PRINT_FURNITURE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?ix) ^ https?://\S+
+        (?: \s* \( \s* \d+ \s+ of \s+ \d+ \s* \) )?   # (54 of 100)
+        (?: \s* \[ [^\]]{0,40} \] )?                    # [4/7/2002 1:48:08 PM]
+        \s* $",
+    )
+    .expect("a valid pattern")
+});
+
+/// A short cite: a surname, a year, and at most a page. `Spade 1980, 12.`
+/// and `Trentman 1970; Spade 1980.` name a work the entry does not — the
+/// full one is elsewhere in the same bibliography — so there is nothing in
+/// them to read and nothing to ask anybody about.
+static SHORT_CITE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?ix) ^ (?:(?:see|cf\.?|and)\s+)?
+        \p{Lu}[\p{L}'’\-]{1,24}(?:\s+(?:and|&)\s+\p{Lu}[\p{L}'’\-]{1,24})?
+        \s+ (?:1[4-9]|20)\d{2} [a-z]?
+        (?: \s* ,\s* (?:pp?\.\s*)? \d{1,4}(?:[-–]\d{1,4})? )?
+        \.? $",
+    )
+    .expect("a valid pattern")
+});
+
 /// A page reference or a bracketed imprint: what a citation has and a remark
 /// about the argument does not.
 static CITATION_ANCHOR: LazyLock<Regex> = LazyLock::new(|| {
@@ -248,8 +277,17 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
     if !CITATION_SIGNAL.is_match(text) {
         return None;
     }
-    if is_scripture(text) || BIOGRAPHY.is_match(text) {
+    if is_scripture(text) || BIOGRAPHY.is_match(text) || PRINT_FURNITURE.is_match(text) {
         return None;
+    }
+    // A short cite points at a full entry elsewhere, the way `ibid.` points
+    // at the note above. The author and the year it does give are kept.
+    if is_short_cite(text) {
+        out.continuation = true;
+        out.year = year(text);
+        out.pages = pages(text);
+        out.authors = short_cite_authors(text);
+        return Some(out);
     }
     // A note that runs on for six sentences with no imprint, no page
     // reference and no identifier is a remark about the argument. The LLM
@@ -485,6 +523,33 @@ fn reads_as_names(head: &str) -> bool {
 fn strip_markup(text: &str) -> String {
     let without_tags = MARKUP_TAG.replace_all(text, "");
     without_tags.replace(['*', '_'], "").trim().to_string()
+}
+
+/// Whether every part of an entry is a short cite and nothing more.
+fn is_short_cite(text: &str) -> bool {
+    let parts: Vec<&str> = text
+        .split(';')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .collect();
+    !parts.is_empty() && parts.iter().all(|part| SHORT_CITE.is_match(part))
+}
+
+/// The surnames a short cite names, in the order it names them.
+fn short_cite_authors(text: &str) -> Vec<String> {
+    text.split(';')
+        .filter_map(|part| {
+            let part = LEAD_IN.replace(part.trim(), "").trim().to_string();
+            let name: Vec<&str> = part
+                .split_whitespace()
+                .take_while(|word| !word.chars().next().is_some_and(|c| c.is_ascii_digit()))
+                .collect();
+            match name.is_empty() {
+                true => None,
+                false => Some(name.join(" ")),
+            }
+        })
+        .collect()
 }
 
 /// Whether an entry is chapter and verse and nothing else.
@@ -1202,6 +1267,39 @@ mod tests {
             )
             .is_some()
         );
+    }
+
+    #[test]
+    fn what_a_browser_printed_at_the_foot_of_a_page_is_not_a_reference() {
+        for junk in [
+            "http://www.u.arizona.edu/~chalmers/biblio/1.html (54 of 100) [4/7/2002 1:48:08 PM]",
+            "http://www.u.arizona.edu/~chalmers/papers/content95.html",
+            "https://example.org/a/b (3 of 9)",
+        ] {
+            assert!(one(junk, None).is_none(), "{junk}");
+        }
+        // A URL that is part of a reference still is one.
+        let real = read(
+            "Chalmers, D. (1996). *The Conscious Mind*. Oxford University Press. http://consc.net/book",
+        );
+        assert_eq!(real.title.as_deref(), Some("The Conscious Mind"));
+    }
+
+    #[test]
+    fn a_short_cite_names_a_work_it_does_not_name() {
+        // `Spade 1980` points at the full entry elsewhere in the same
+        // bibliography, the way `ibid.` points at the note above.
+        let found = read("Spade 1980, 12.");
+        assert!(found.continuation);
+        assert_eq!(found.authors, ["Spade"]);
+        assert_eq!(found.year, Some(1980));
+        assert_eq!(found.title, None);
+        // Nothing to ask anybody about, so nothing does.
+        assert!(found.missing().is_empty());
+
+        let several = read("Trentman 1970; Spade 1980.");
+        assert!(several.continuation);
+        assert_eq!(several.authors, ["Trentman", "Spade"]);
     }
 
     #[test]
