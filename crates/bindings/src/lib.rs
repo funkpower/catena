@@ -215,6 +215,17 @@ pub fn parse_identifier(text: &str) -> Option<idnorm::Identifier> {
     idnorm::parse(text)
 }
 
+/// The best author a record's own title and front matter can offer.
+///
+/// `None` when neither says anything that reads as a person's name, which is
+/// the honest answer for a scanned book with no title page.
+pub fn suggest_author(
+    title: &str,
+    front_matter: Option<&str>,
+) -> Option<bibclean::author::Suggestion> {
+    bibclean::author::best(title, front_matter)
+}
+
 /// Whether a chunk of body text carries footnote or endnote citations.
 ///
 /// The structural signal a converter leaves on EPUB3 note definitions first;
@@ -267,6 +278,17 @@ mod tests {
         );
         assert_eq!(scrub_markdown(MARKDOWN), mdscrub::scrub(MARKDOWN));
         assert_eq!(count_tokens("a passage"), textkit::count("a passage"));
+    }
+
+    #[test]
+    fn the_author_surface_agrees_with_the_library_underneath() {
+        const TITLE: &str = "Aquinas (Companion)";
+        const FRONT: &str = "THE CAMBRIDGE COMPANION TO AQUINAS\n\nedited by Norman Kretzmann";
+        assert_eq!(
+            suggest_author(TITLE, Some(FRONT)),
+            bibclean::author::best(TITLE, Some(FRONT))
+        );
+        assert!(suggest_author("", None).is_none());
     }
 
     #[test]

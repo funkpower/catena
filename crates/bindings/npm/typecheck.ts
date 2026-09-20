@@ -4,9 +4,9 @@
 import {
   chunkMarkdown, scrub, countTokens, parseSubtitles, packCues,
   splitCollection, fuseHits, identify, seriesOf, parseIdentifier, segmentCues, cueWindows,
-  findCitations, citationPrompt, mergeCitationReply,
+  findCitations, citationPrompt, mergeCitationReply, suggestAuthor,
   type Chunk, type Cue, type Section, type Hit, type Doc, type SeriesProposal, type Identifier, type Segment,
-  type Reference,
+  type Reference, type AuthorSuggestion,
 } from "./dist/web/catena.js";
 
 const chunks: Chunk[] = chunkMarkdown("# One\n\nbody\n", 512, 64, 50, 768);
@@ -46,6 +46,9 @@ fuseHits(hits);
 const proposal: SeriesProposal | undefined = seriesOf("The Philokalia Vol 3");
 const volume: number | undefined = proposal?.volume;
 seriesOf("Aquinas (Companion)", "Cambridge");
+
+const suggested: AuthorSuggestion | undefined = suggestAuthor("Aquinas", "by Thomas Aquinas");
+void suggested?.confidence;
 
 const references: Reference[] = findCitations("Smith, John. *A Title*. Oxford: Clarendon Press, 1998.");
 const unsettled: string[] = references[0].unsettled;

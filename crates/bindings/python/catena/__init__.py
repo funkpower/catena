@@ -28,6 +28,7 @@ from ._catena import (
     segment_cues,
     series_of,
     split_collection,
+    suggest_author,
 )
 
 __all__ = [
@@ -48,4 +49,5 @@ __all__ = [
     "segment_cues",
     "series_of",
     "split_collection",
+    "suggest_author",
 ]

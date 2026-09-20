@@ -98,6 +98,11 @@ char *catena_series_of(const char *title, const char *author);
  * one — an answer, not an error. */
 char *catena_parse_identifier(const char *text);
 
+/* The best author a record's own title and front matter can offer. Returns a
+ * JSON suggestion, or NULL when neither names a person — an answer, not an
+ * error. `front_matter` may be NULL. */
+char *catena_suggest_author(const char *title, const char *front_matter);
+
 /* Whether a chunk of body text carries footnote or endnote citations.
  * Returns 1 for yes, 0 for no, -1 on error. */
 int catena_looks_like_footnote_citations(const char *text);

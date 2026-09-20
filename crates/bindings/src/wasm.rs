@@ -97,6 +97,17 @@ export interface Identifier {
   url?: string;
 }
 
+/** A name a record's own text can offer, and how far to trust it. */
+export interface AuthorSuggestion {
+  author: string;
+  /** Which signal produced it. */
+  method: string;
+  confidence: number;
+  /** The text it was read from, so a person can check it. */
+  evidence: string;
+  isbn: string | null;
+}
+
 /** One reference out of a bibliography or a page of notes. */
 export interface Reference {
   v: number;
@@ -305,6 +316,17 @@ pub fn identify(name: &str, data: &[u8]) -> Result<JsValue, JsValue> {
     to_js(&crate::identify(name, data))
 }
 
+/// The best author a record's own title and front matter can offer.
+///
+/// `undefined` when neither says anything that reads as a person's name.
+#[wasm_bindgen(js_name = suggestAuthor, skip_typescript)]
+pub fn suggest_author(title: &str, front_matter: Option<String>) -> Result<JsValue, JsValue> {
+    match crate::suggest_author(title, front_matter.as_deref()) {
+        Some(found) => to_js(&found),
+        None => Ok(JsValue::UNDEFINED),
+    }
+}
+
 /// Whether a chunk of body text carries footnote or endnote citations.
 #[wasm_bindgen(js_name = looksLikeFootnoteCitations)]
 pub fn looks_like_footnote_citations(text: &str) -> bool {
@@ -371,6 +393,7 @@ export function cueWindows(cues: Cue[]): string[];
 export function splitCollection(markdown: string): Section[];
 export function fuseHits(hits: Hit[], k?: number, weights?: Record<string, number>, limit?: number): Hit[];
 export function identify(name: string, data: Uint8Array): Doc;
+export function suggestAuthor(title: string, front_matter?: string): AuthorSuggestion | undefined;
 export function findCitations(text: string): Reference[];
 export function citationPrompt(references: Reference[]): string | undefined;
 export function mergeCitationReply(references: Reference[], reply: string): Reference[];

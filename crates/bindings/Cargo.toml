@@ -29,6 +29,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 booksniff.workspace = true
+bibclean.workspace = true
 chunkmd.workspace = true
 citefind.workspace = true
 corpus-core.workspace = true

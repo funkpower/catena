@@ -220,6 +220,22 @@ fn identify<'py>(py: Python<'py>, name: &str, data: &[u8]) -> PyResult<Bound<'py
     to_py(py, &crate::identify(name, data))
 }
 
+/// The best author a record's own title and front matter can offer.
+///
+/// `None` when neither says anything that reads as a person's name.
+#[pyfunction]
+#[pyo3(signature = (title, front_matter = None))]
+fn suggest_author<'py>(
+    py: Python<'py>,
+    title: &str,
+    front_matter: Option<&str>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    match crate::suggest_author(title, front_matter) {
+        Some(found) => Ok(Some(to_py(py, &found)?)),
+        None => Ok(None),
+    }
+}
+
 /// Whether a chunk of body text carries footnote or endnote citations.
 #[pyfunction]
 fn looks_like_footnote_citations(text: &str) -> bool {
@@ -297,6 +313,7 @@ fn _catena(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(identify, module)?)?;
     module.add_function(wrap_pyfunction!(find_citations, module)?)?;
     module.add_function(wrap_pyfunction!(looks_like_footnote_citations, module)?)?;
+    module.add_function(wrap_pyfunction!(suggest_author, module)?)?;
     module.add_function(wrap_pyfunction!(citation_prompt, module)?)?;
     module.add_function(wrap_pyfunction!(merge_citation_reply, module)?)?;
     module.add_function(wrap_pyfunction!(series_of, module)?)?;

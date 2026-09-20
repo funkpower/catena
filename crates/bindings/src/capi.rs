@@ -417,6 +417,35 @@ pub unsafe extern "C" fn catena_identify(
     give_json(&crate::identify(name, bytes))
 }
 
+/// The best author a record's own title and front matter can offer. Returns
+/// a JSON suggestion, or NULL when neither says anything that reads as a
+/// name — an answer, not an error.
+///
+/// # Safety
+///
+/// `title` must be NUL-terminated UTF-8; `front_matter` likewise, or NULL.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn catena_suggest_author(
+    title: *const c_char,
+    front_matter: *const c_char,
+) -> *mut c_char {
+    clear_error();
+    let Some(title) = (unsafe { borrow(title, "title") }) else {
+        return ptr::null_mut();
+    };
+    let front = match front_matter.is_null() {
+        true => None,
+        false => match unsafe { borrow(front_matter, "front_matter") } {
+            Some(front) => Some(front),
+            None => return ptr::null_mut(),
+        },
+    };
+    match crate::suggest_author(title, front) {
+        Some(found) => give_json(&found),
+        None => ptr::null_mut(),
+    }
+}
+
 /// Whether a chunk of body text carries footnote or endnote citations.
 /// Returns 1 for yes, 0 for no, -1 on error.
 ///
