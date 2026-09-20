@@ -158,6 +158,33 @@ be the flag.
 module compiles to nothing, so `--all-features` on a host build does not reach
 it; the gate checks it separately against `wasm32-unknown-unknown`.
 
+## Swapping a stage over
+
+A binding that returns *nearly* the same answer as the code it replaces is
+worse than no binding: the pipeline keeps running and the corpus quietly
+changes underneath it. `tools/shadow.py` is the check — it runs both
+implementations over a directory of real files and reports every place they
+disagree.
+
+```
+$ tools/shadow.py --stage chunk --corpus /path/to/converted
+shadow: chunk — book_pipeline.chunk.chunk_markdown against catena, over 60 files
+
+shadow: 60 agreed, 0 disagreed, 0 could not be read
+```
+
+It writes nothing, touches no database, and exits `1` if anything disagreed,
+so it drops into a script. Where the two differ on a long text it says where —
+`differ at character 2038 of 2038/1641` — rather than printing two
+identical-looking prefixes.
+
+It also refuses to run against a checkout that has moved on from the commit
+the port was made against, because that measures the drift rather than the
+port and reports failures that are nobody's bug. `--any-commit` overrides it.
+
+Run it before the swap and again after. The stages it knows are `chunk`,
+`scrub` and `tokens`; adding one is a three-line entry in `STAGES`.
+
 ## As a Rust library
 
 The same surface, without a binding in the way:
