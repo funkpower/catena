@@ -126,7 +126,6 @@ static NOT_A_TITLE: LazyLock<Regex> = LazyLock::new(|| {
     | ;                                # two entries run together
     | \bibid\b
     | \\                               # an escape conversion left behind
-    | ,\s+(?:eds?|trans)\.\s+\p{Lu}     # ran past the title into a credit
     "#,
     )
     .expect("a valid pattern")
@@ -672,29 +671,6 @@ fn comma_form(text: &str) -> Option<(Vec<String>, Option<String>, Option<String>
     if parts.len() < 4 {
         return None;
     }
-    // The imprint is whichever comma-part carries the colon. Found by
-    // counting commas rather than by where a pattern matched: a pattern for
-    // `Place: Publisher` starts at the comma before the place, which is
-    // exactly where the title ends, and the two cannot both have it.
-    // The last part with a colon, not the first: `Theories of Nationalism: A
-    // Critical Introduction, Basingstoke: Palgrave` has two, and the imprint
-    // is the one at the end.
-    // The imprint is whichever comma-part carries the colon — the last one,
-    // because a title has a colon in it as often as an imprint does. Failing
-    // that, an entry ending on a year has its imprint at the end: `Cheyne,
-    // T. K., Founders of Old Testament Criticism, London, 1893.`
-    let at = match parts.iter().rposition(|part| part.contains(':')) {
-        Some(at) => at,
-        None => {
-            let last = parts.last()?.trim().trim_end_matches('.');
-            if !looks_like_a_year(last) || parts.len() < 4 {
-                return None;
-            }
-            // The part before the year is where it was published, which is
-            // not a publisher and not kept.
-            parts.len() - 2
-        }
-    };
 
     // `Miller, David` is the usual opening, and `Procopius` on its own is the
     // other one. Whichever reads as a name, the title starts after it.
@@ -704,7 +680,37 @@ fn comma_form(text: &str) -> Option<(Vec<String>, Option<String>, Option<String>
         false if reads_as_names(parts[0]) => (authors(parts[0]), 1),
         false => return None,
     };
-    if names.is_empty() || at <= used {
+    if names.is_empty() {
+        return None;
+    }
+
+    // The imprint is whichever comma-part carries the colon, counted in
+    // commas rather than matched by a pattern: a pattern for `Place:
+    // Publisher` starts at the comma before the place, which is exactly
+    // where the title ends, and the two cannot both have it. The last such
+    // part, because a title has a colon in it as often as an imprint does —
+    // and if the only one is inside the title, the colon says nothing about
+    // where the imprint is and the year does.
+    let colon = parts
+        .iter()
+        .enumerate()
+        .rev()
+        .find(|(at, part)| *at > used && part.contains(':'))
+        .map(|(at, _)| at);
+    let at = match colon {
+        Some(at) => at,
+        None => {
+            // `Cheyne, T. K., Founders of Old Testament Criticism, London,
+            // 1893.` — the year is last and the place before it, which is
+            // not a publisher and is not kept.
+            let last = parts.last()?.trim().trim_end_matches('.');
+            if !looks_like_a_year(last) {
+                return None;
+            }
+            parts.len() - 2
+        }
+    };
+    if at <= used {
         return None;
     }
 
@@ -712,8 +718,7 @@ fn comma_form(text: &str) -> Option<(Vec<String>, Option<String>, Option<String>
     if title.chars().count() < 4 {
         return None;
     }
-    // Where the colon was is a publisher; where the year was is a place, and
-    // a place is not kept.
+    // Where the colon was is a publisher; where the year was is a place.
     let publisher = match parts[at].contains(':') {
         true => tidy_container(parts[at]),
         false => None,
@@ -994,7 +999,9 @@ fn tidy_marked_title(raw: &str) -> String {
     let text = text.trim_end_matches('\\');
     let text =
         text.trim_matches(|c: char| ",.;:'\u{2018}\u{2019}".contains(c) || c.is_whitespace());
-    let text = TRAILING_VOLUME.replace(text, "");
+    let without_volume = TRAILING_VOLUME.replace(text, "").into_owned();
+    let text = TRAILING_CREDIT.replace(&without_volume, "").into_owned();
+    let text = text.as_str();
     let text = text.trim_end_matches(|c: char| ",.;: ".contains(c));
     match MARKED_NOT_A_TITLE.is_match(text) || !quotes_balance(text) {
         true => String::new(),
@@ -1005,7 +1012,13 @@ fn tidy_marked_title(raw: &str) -> String {
 /// What a marked-up title still may not be: two entries run together, or a
 /// reference to where a work is rather than what it is.
 static MARKED_NOT_A_TITLE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?ix) \bpp?\.\s*\d | ; | \bibid\b | \\ | ,\s+(?:eds?|trans)\.\s+\p{Lu}")
+    Regex::new(r"(?ix) \bpp?\.\s*\d | ; | \bibid\b | \\").expect("a valid pattern")
+});
+
+/// An editor's or translator's credit following a title: `Saturae XIV, ed.
+/// J. D. Duff`. It belongs to the entry, not to the work's name.
+static TRAILING_CREDIT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i),\s+(?:eds?|trans|translated\s+by|comp)\.?\s+\p{Lu}.*$")
         .expect("a valid pattern")
 });
 
@@ -1028,7 +1041,9 @@ fn tidy_title(raw: &str) -> String {
         text.trim_matches(|c: char| ",.;:'\u{2018}\u{2019}".contains(c) || c.is_whitespace());
     // `Geschichte des Papsttums, Vol. 2` names the work and then which volume
     // of it. The volume is where in the work, not what the work is called.
-    let text = TRAILING_VOLUME.replace(text, "");
+    let without_volume = TRAILING_VOLUME.replace(text, "").into_owned();
+    let text = TRAILING_CREDIT.replace(&without_volume, "").into_owned();
+    let text = text.as_str();
     let text = text.trim_end_matches(|c: char| ",.;: ".contains(c));
     // A run that opens on a page number, or carries one, is two entries run
     // together or a reference to a work rather than the name of one. Better
@@ -1773,6 +1788,30 @@ mod tests {
         assert!(bare.continuation);
         assert_eq!(bare.authors, ["Lowrie and Fletcher", "Anderson"]);
         assert!(bare.missing().is_empty());
+    }
+
+    #[test]
+    fn a_colon_inside_the_title_does_not_hide_the_imprint() {
+        // The only colon here is the title's own, so it says nothing about
+        // where the imprint is — and the year at the end does.
+        let found = read(
+            "Kymlicka, Will, Politics in the Vernacular: Nationalism, \
+             Multiculturalism and Citizenship, Oxford, 2001",
+        );
+        assert_eq!(found.authors, ["Kymlicka, Will"]);
+        assert_eq!(
+            found.title.as_deref(),
+            Some("Politics in the Vernacular: Nationalism, Multiculturalism and Citizenship")
+        );
+        assert_eq!(found.year, Some(2001));
+    }
+
+    #[test]
+    fn an_editors_credit_is_trimmed_off_a_title_not_grounds_to_drop_it() {
+        let found = read("Juvenal, Saturae XIV, ed. J. D. Duff (Cambridge, 1962), p. 9.");
+        assert_eq!(found.authors, ["Juvenal"]);
+        assert_eq!(found.title.as_deref(), Some("Saturae XIV"));
+        assert_eq!(found.pages.as_deref(), Some("9"));
     }
 
     #[test]
