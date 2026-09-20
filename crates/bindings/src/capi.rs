@@ -417,6 +417,21 @@ pub unsafe extern "C" fn catena_identify(
     give_json(&crate::identify(name, bytes))
 }
 
+/// Whether a chunk of body text carries footnote or endnote citations.
+/// Returns 1 for yes, 0 for no, -1 on error.
+///
+/// # Safety
+///
+/// `text` must be NUL-terminated UTF-8.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn catena_looks_like_footnote_citations(text: *const c_char) -> i32 {
+    clear_error();
+    let Some(text) = (unsafe { borrow(text, "text") }) else {
+        return -1;
+    };
+    i32::from(crate::looks_like_footnote_citations(text))
+}
+
 /// Read the references out of a bibliography or a page of notes. Returns a
 /// JSON array, one object per reference.
 ///

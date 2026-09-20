@@ -215,6 +215,14 @@ pub fn parse_identifier(text: &str) -> Option<idnorm::Identifier> {
     idnorm::parse(text)
 }
 
+/// Whether a chunk of body text carries footnote or endnote citations.
+///
+/// The structural signal a converter leaves on EPUB3 note definitions first;
+/// otherwise the numbered-note markers and what sits after them.
+pub fn looks_like_footnote_citations(text: &str) -> bool {
+    chunkmd::footnote::looks_like_citations(text)
+}
+
 /// Read the references out of a bibliography or a page of notes.
 ///
 /// Each carries `unsettled`: the fields that could not be read off the entry,
@@ -259,6 +267,18 @@ mod tests {
         );
         assert_eq!(scrub_markdown(MARKDOWN), mdscrub::scrub(MARKDOWN));
         assert_eq!(count_tokens("a passage"), textkit::count("a passage"));
+    }
+
+    #[test]
+    fn the_footnote_signal_agrees_with_the_library_underneath() {
+        const NOTES: &str = "1. John Smith, *A Title* (Oxford: Clarendon Press, 1998), 183.\n\
+                             2. Jane Doe, *Another* (Cambridge: University Press, 2001), p. 12.";
+        assert!(looks_like_footnote_citations(NOTES));
+        assert_eq!(
+            looks_like_footnote_citations(NOTES),
+            chunkmd::footnote::looks_like_citations(NOTES)
+        );
+        assert!(!looks_like_footnote_citations("Just a paragraph of prose."));
     }
 
     #[test]

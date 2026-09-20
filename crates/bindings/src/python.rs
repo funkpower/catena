@@ -220,6 +220,12 @@ fn identify<'py>(py: Python<'py>, name: &str, data: &[u8]) -> PyResult<Bound<'py
     to_py(py, &crate::identify(name, data))
 }
 
+/// Whether a chunk of body text carries footnote or endnote citations.
+#[pyfunction]
+fn looks_like_footnote_citations(text: &str) -> bool {
+    crate::looks_like_footnote_citations(text)
+}
+
 /// Read the references out of a bibliography or a page of notes.
 #[pyfunction]
 fn find_citations<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyList>> {
@@ -290,6 +296,7 @@ fn _catena(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(fuse_hits, module)?)?;
     module.add_function(wrap_pyfunction!(identify, module)?)?;
     module.add_function(wrap_pyfunction!(find_citations, module)?)?;
+    module.add_function(wrap_pyfunction!(looks_like_footnote_citations, module)?)?;
     module.add_function(wrap_pyfunction!(citation_prompt, module)?)?;
     module.add_function(wrap_pyfunction!(merge_citation_reply, module)?)?;
     module.add_function(wrap_pyfunction!(series_of, module)?)?;

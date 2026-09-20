@@ -305,6 +305,12 @@ pub fn identify(name: &str, data: &[u8]) -> Result<JsValue, JsValue> {
     to_js(&crate::identify(name, data))
 }
 
+/// Whether a chunk of body text carries footnote or endnote citations.
+#[wasm_bindgen(js_name = looksLikeFootnoteCitations)]
+pub fn looks_like_footnote_citations(text: &str) -> bool {
+    crate::looks_like_footnote_citations(text)
+}
+
 /// Read the references out of a bibliography or a page of notes.
 #[wasm_bindgen(js_name = findCitations, skip_typescript)]
 pub fn find_citations(text: &str) -> Result<JsValue, JsValue> {

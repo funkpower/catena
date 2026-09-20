@@ -79,6 +79,7 @@ except ValueError as why:
 | `series_of` | [`seriesof`](../seriesof/README.md) |
 | `parse_identifier` | [`idnorm`](../idnorm/README.md) |
 | `find_citations` | [`citefind`](../citefind/README.md) |
+| `looks_like_footnote_citations` | whether a body chunk carries notes worth reading |
 | `citation_prompt` | the question `citefind --prompt` writes |
 | `merge_citation_reply` | what `citefind --merge` does with the answer |
 

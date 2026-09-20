@@ -98,6 +98,10 @@ char *catena_series_of(const char *title, const char *author);
  * one — an answer, not an error. */
 char *catena_parse_identifier(const char *text);
 
+/* Whether a chunk of body text carries footnote or endnote citations.
+ * Returns 1 for yes, 0 for no, -1 on error. */
+int catena_looks_like_footnote_citations(const char *text);
+
 /* Read the references out of a bibliography or a page of notes. Returns a
  * JSON array, one object per reference. */
 char *catena_find_citations(const char *text);
