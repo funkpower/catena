@@ -135,10 +135,21 @@ static NOT_A_TITLE: LazyLock<Regex> = LazyLock::new(|| {
 /// a theological book largely are.
 static VERSE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"(?i)^(?:cf\.?|see|and)?\s*(?:[1-4]\s+)?\p{L}[\p{L}.]{2,14}\.?\s+\d{1,3}(?::\d{1,3}(?:[-–]\d{1,3})?)?\.?$",
+        r"(?ix)
+        ^(?:(?:also|cf|see|and|vv?)\.?\s+)*      # 'Cf.', 'also cf.', 'see'
+         (?:[1-4]\s+)?                          # 1 Peter, 2 Corinthians
+         (?:\p{L}[\p{L}.]{2,14}\.?\s+)?         # the book, where it is named
+         \d{1,3}(?:[:.]\d{1,3})?                # chapter, and verse
+         (?:[-–]\d{1,3})?                       # through to another
+        \.?$",
     )
     .expect("a valid pattern")
 });
+
+/// A note number sitting inside a run of verses, which is where conversion
+/// leaves it when several notes share one line.
+static EMBEDDED_MARKER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\s\d{1,3}\.\s").expect("a valid pattern"));
 
 /// A page reference or a bracketed imprint: what a citation has and a remark
 /// about the argument does not.
@@ -457,12 +468,20 @@ fn strip_markup(text: &str) -> String {
 /// and still not a work: `Cf. Deuteronomy 18:15-19; Isaiah 53; Acts 1:6`.
 fn is_scripture(text: &str) -> bool {
     let text = text.trim_start_matches(['.', ' ']);
+    let text = EMBEDDED_MARKER.replace_all(text, ";");
     let parts: Vec<&str> = text
-        .split(';')
+        .split([';', ','])
         .map(str::trim)
         .filter(|part| !part.is_empty())
         .collect();
-    !parts.is_empty() && parts.iter().all(|part| VERSE.is_match(part))
+    if parts.is_empty() || !parts.iter().all(|part| VERSE.is_match(part)) {
+        return false;
+    }
+    // A run of bare numbers is not scripture just because it could follow
+    // from some book named elsewhere. One of them has to name the book.
+    parts
+        .iter()
+        .any(|part| part.chars().any(char::is_alphabetic))
 }
 
 /// Every identifier the entry carries, normalised.
@@ -1108,9 +1127,12 @@ mod tests {
     fn chapter_and_verse_is_not_a_work_in_a_bibliography() {
         for verse in [
             "Matthew 4:17",
-            ". Cf. Deuteronomy 18:15-19; Isaiah 53; Acts 1:6",
+            ". Cf. Deuteronomy 18:15-19; Isaiah 53; Acts 1:6; 2:16-36; 1 Peter 2:6-8",
             "1 Peter 2:6-8",
             "Matthew 13:43; cf Exodus 34:29-35",
+            "Cf. Matthew 3:7-9; Acts 1:8; 11:1-18; 15:16-17; Galatians 3:14;28",
+            "Colossians 1:18,24; Romans 12:5; 1 Corinthians 12:12-13. 19. 2 Corinthians 11:2",
+            "Galatians 6:15-16; also cf. John. 1:11-13; Romans 2:28-29; James 1:1 13. Romans 9-11",
         ] {
             assert!(one(verse, None).is_none(), "{verse}");
         }

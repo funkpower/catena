@@ -74,6 +74,19 @@ static FILE_ANCHOR: LazyLock<Regex> = LazyLock::new(|| {
         .expect("a valid pattern")
 });
 
+/// What citefind counts as citing something on top of what `chunkmd` does:
+/// a year of publication with a number after it, which is every author-date
+/// entry ever set — `Altmann, M. 1951, A Study of Behaviour. Sociometry 14,
+/// 351-354.` names an author, a year, a journal and a page range, and
+/// carries none of the punctuation `chunkmd` looks for.
+///
+/// Wider than `chunkmd`'s for the same reason the marker pattern is: it is
+/// deciding whether a chunk is a page of notes, where one missed entry in
+/// thirty changes nothing, and this is deciding whether a reference exists.
+/// What gets through and is not a reference is refused when it is read.
+static LOCAL_SIGNAL: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)\b(?:1[4-9]|20)\d{2}\b.*?\d").expect("a valid pattern"));
+
 /// A bullet or a blockquote marker, which conversion puts in front of a note
 /// often enough to matter. A leading `*` is left alone: it opens an italic
 /// title as often as it opens a list.
@@ -175,7 +188,7 @@ fn numbered_notes(text: &str) -> Vec<Entry> {
     for (at, start) in starts.iter().enumerate() {
         let end = starts.get(at + 1).copied().unwrap_or(text.len());
         let raw = &text[*start..end];
-        if !chunkmd::footnote::cites_something(raw) {
+        if !chunkmd::footnote::cites_something(raw) && !LOCAL_SIGNAL.is_match(raw) {
             continue;
         }
         out.push(strip_marker(raw));
@@ -364,6 +377,18 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["1", "3"]
         );
+    }
+
+    #[test]
+    fn an_author_date_note_carries_none_of_the_punctuation_chunkmd_looks_for() {
+        // Author, year, journal, volume, pages — and not one bracketed year,
+        // `p.`, `ed.` or `Press,` among them.
+        let page = "\
+1. Altmann, M. 1951, A Study of Behaviour in a Horse-Mule Group. Sociometry 14, 351-354.
+2. Huxley, J. S. 1957: Evolution in Action. London.";
+        let found = entries(page);
+        assert_eq!(found.len(), 2, "{found:#?}");
+        assert!(found[0].text.starts_with("Altmann"), "{:?}", found[0]);
     }
 
     #[test]
