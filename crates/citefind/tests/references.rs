@@ -172,6 +172,47 @@ fn a_reply_that_is_not_json_is_refused_rather_than_half_applied() {
 }
 
 #[test]
+fn a_note_that_cites_two_works_gives_two_records() {
+    let found = read(
+        "12. Theodor W. Adorno, *Negative Dialectics*, trans. E. B. Ashton (London, 1973), 365; \
+         Jeffrey C. Alexander, \"On the Social Construction of Moral Universals,\" *Cultural Trauma* 5 (2002), 196.\n\
+         13. Smith, John. Thinking, Fast and Slow. New York: Farrar, Straus and Giroux, 2011.",
+    );
+    assert_eq!(found.len(), 3, "{found:#?}");
+    // Both halves of note 12 are note 12.
+    assert_eq!(
+        found
+            .iter()
+            .map(|one| one.marker.as_deref())
+            .collect::<Vec<_>>(),
+        [Some("12"), Some("12"), Some("13")]
+    );
+    assert_eq!(found[0].title.as_deref(), Some("Negative Dialectics"));
+    assert_eq!(
+        found[1].title.as_deref(),
+        Some("On the Social Construction of Moral Universals")
+    );
+    // The full stop between an author and a title is not a separator, or
+    // every bibliography entry ever written would come apart at it.
+    assert_eq!(found[2].title.as_deref(), Some("Thinking, Fast and Slow"));
+}
+
+#[test]
+fn the_body_of_a_page_is_not_the_first_of_the_notes_at_its_foot() {
+    let page = format!(
+        "{}\n\n1. John MacGowan, *The Imperial History of China* (London: Curzon, 1897), p. 154.\n\
+         2. Johanna Bockman, *Markets in the Name of Socialism* (Stanford, CA: Stanford University Press, 2011), 40.",
+        "The obligation ran both ways, and contemporaries said so plainly whenever they were asked. ".repeat(8)
+    );
+    let found = read(&page);
+    assert_eq!(found.len(), 2, "{found:#?}");
+    assert!(
+        found.iter().all(|one| !one.text.contains("obligation")),
+        "{found:#?}"
+    );
+}
+
+#[test]
 fn nothing_citation_shaped_gives_nothing() {
     assert!(read("Bibliography\n\nSee below.\n\n233\n").is_empty());
 }

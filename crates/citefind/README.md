@@ -145,7 +145,17 @@ two references together.
 
 A note that cites nothing is dropped. A page of notes mixes bibliographic
 notes with discursive ones, and a remark about the argument is not a
-reference.
+reference — and one that runs on for six sentences with no imprint, no page
+reference and no identifier is a remark whatever else it mentions.
+
+A note that cites **several works** becomes several records, cut at the
+semicolons that separate them, each keeping the note's number. A full stop
+separates works in a note too, and is not used: it also separates the author
+from the title in every bibliography entry ever written.
+
+Where the first note number sits a long way into the block, what precedes it
+is the body of the page rather than a note that lost its number, and it is
+left out.
 
 **A bibliography** numbers nothing, so the signal is layout: a blank line
 between entries, a hanging indent under each, or the surname-comma opening
@@ -163,7 +173,13 @@ entirely — there is nothing in it to ask about.
 
 **Report a title it did not find.** An entry held together by commas alone,
 with no names to anchor it, yields no title rather than its own text echoed
-back.
+back. Nor does a run carrying a page reference or a semicolon count as one:
+that is two entries run together, or a reference to a work rather than the
+name of one.
+
+**Name a place of publication as the publisher.** `(London, 1973)` says where
+a book was published and not by whom, so `container` stays empty. The place
+is still in `text`.
 
 A rule of dashes where the author should be is the exception, and a
 deliberate one: `———. *The Second Book*.` means the author of the entry above,

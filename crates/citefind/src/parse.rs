@@ -108,6 +108,33 @@ static ROLE: LazyLock<Regex> = LazyLock::new(|| {
         .expect("a valid pattern")
 });
 
+/// What a title never is: an opening that is a page or a volume number, or a
+/// run that carries a page reference or a semicolon — both of which mean two
+/// entries were run together, or that this was never an entry at all.
+static NOT_A_TITLE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)^[\d\p{Pd}]|\bpp?\.\s*\d|;|\bvol\.\s*\d|\bibid\b").expect("a valid pattern")
+});
+
+/// A page reference or a bracketed imprint: what a citation has and a remark
+/// about the argument does not.
+static CITATION_ANCHOR: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\bpp?\.\s*\d|\bvol\.\s*\d|\bno\.\s*\d").expect("a valid pattern")
+});
+
+/// How many sentences a reference runs to before it is prose.
+///
+/// A full entry in the heaviest style — names, title, an edited volume, an
+/// imprint, pages — is five. A discursive endnote runs on past that, and the
+/// three it is checked against are the signals a citation carries anyway.
+const MAX_SENTENCES: usize = 5;
+
+/// A credit standing where the container would be: `trans. E. B. Ashton`,
+/// `edited by Mary Douglas`. A role is not a journal and not a publisher.
+static ROLE_CREDIT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)^(?:trans(?:lated)?|ed(?:ited)?|eds|comp(?:iled)?|rev(?:ised)?|intro(?:duction)?|with)\b\.?(?:\s+by\b)?")
+        .expect("a valid pattern")
+});
+
 /// A run of text that is nothing but an identifier.
 static IDENTIFIER_ONLY: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)^(?:arxiv:|doi:|https?://|isbn|issn|\b10\.\d{4})\S*\.?$")
@@ -176,6 +203,16 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
     if !CITATION_SIGNAL.is_match(text) {
         return None;
     }
+    // A note that runs on for six sentences with no imprint, no page
+    // reference and no identifier is a remark about the argument. The LLM
+    // path this replaces was told to skip those; a parser has to decide.
+    if sentences(text).len() > MAX_SENTENCES
+        && !IMPRINT.is_match(text)
+        && !CITATION_ANCHOR.is_match(text)
+        && ids(text).is_empty()
+    {
+        return None;
+    }
 
     out.ids = ids(text);
     out.year = year(text);
@@ -237,6 +274,12 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
         out.authors = found_authors;
         out.title = found_title;
         out.container = found_container;
+    }
+    // A title the reading refused comes back empty rather than absent,
+    // because the refusal happens where the trimming does. An empty title is
+    // an absent one, and `unsettled` should say so.
+    if out.title.as_deref().is_some_and(str::is_empty) {
+        out.title = None;
     }
     out.kind = kind(text, &out);
 
@@ -467,8 +510,14 @@ fn looks_like_a_year(text: &str) -> bool {
 /// Strip the punctuation a style leaves inside its own title delimiters.
 fn tidy_title(raw: &str) -> String {
     let text = raw.split_whitespace().collect::<Vec<_>>().join(" ");
-    text.trim_matches(|c: char| ",.;:".contains(c) || c.is_whitespace())
-        .to_string()
+    let text = text.trim_matches(|c: char| ",.;:".contains(c) || c.is_whitespace());
+    // A run that opens on a page number, or carries one, is two entries run
+    // together or a reference to a work rather than the name of one. Better
+    // to have no title and say so than to report that as one.
+    match NOT_A_TITLE.is_match(text) {
+        true => String::new(),
+        false => text.to_string(),
+    }
 }
 
 /// Who wrote it, from the run of text before the title.
@@ -575,7 +624,7 @@ fn is_name(text: &str) -> bool {
 }
 
 /// What the work appeared in: a journal, or a book's publisher.
-fn container(_whole: &str, after: &str) -> Option<String> {
+fn container(whole: &str, after: &str) -> Option<String> {
     // A book names its publisher in an imprint after the title, whether
     // bracketed or not. Only after the title: a title with a colon in it —
     // and half of them have one — would otherwise read as an imprint.
@@ -584,14 +633,42 @@ fn container(_whole: &str, after: &str) -> Option<String> {
             return Some(publisher);
         }
     }
-    // A journal sits between the title and the volume.
+    // A journal sits between the title and the volume, but a credit can sit
+    // in front of it — `*Negative Dialectics*, trans. E. B. Ashton` — and a
+    // translator is neither a journal nor a publisher.
     let tail = after.trim_start_matches(|c: char| ",.;:\"”'’ ".contains(c));
+    let tail = match ROLE_CREDIT.find(tail) {
+        Some(found) => match tail[found.end()..].find([',', ';', '(']) {
+            Some(at) => tail[found.end() + at + 1..].trim_start(),
+            None => "",
+        },
+        None => tail,
+    };
     let end = VOLUME
         .find(tail)
         .map(|found| found.start())
         .or_else(|| tail.find(['(', '.', ';']))
         .unwrap_or(tail.len());
-    tidy_container(&tail[..end])
+    let found = tidy_container(&tail[..end])?;
+    // `(London, 1973)` names a place and a year and no publisher. Reporting
+    // the place as the publisher would be a plausible wrong answer, and the
+    // place is still there in `text` for anyone who wants it.
+    match is_place_of_publication(whole, &found) {
+        true => None,
+        false => Some(found),
+    }
+}
+
+/// Whether a candidate is the place a book was published rather than its
+/// publisher: it sits inside brackets with the year and nothing else.
+fn is_place_of_publication(whole: &str, found: &str) -> bool {
+    let needle = format!("({found}, ");
+    let Some(at) = whole.find(&needle) else {
+        return false;
+    };
+    let rest = &whole[at + needle.len()..];
+    let year: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    year.len() == 4 && rest[year.len()..].starts_with(')')
 }
 
 /// Reduce a run of text to the name of the thing a work appeared in.
@@ -1004,6 +1081,39 @@ mod tests {
             "A. J. P. Taylor, The Struggle for Mastery in Europe 1848-1918 (Oxford: Oxford University Press, 1954), p. 102.",
         );
         assert_eq!(found.pages.as_deref(), Some("102"));
+    }
+
+    #[test]
+    fn a_translator_is_not_the_journal_it_stands_in_front_of() {
+        let found = read(
+            "Theodor W. Adorno, *Negative Dialectics*, trans. E. B. Ashton (London, 1973), 365.",
+        );
+        assert_eq!(found.title.as_deref(), Some("Negative Dialectics"));
+        // `(London, 1973)` names a place and a year and no publisher at all.
+        assert_eq!(found.container, None);
+        assert_eq!(found.pages.as_deref(), Some("365"));
+    }
+
+    #[test]
+    fn a_remark_about_the_argument_is_not_a_reference() {
+        let found = one(
+            "Attention is a limited resource. Many psychologists have remarked \
+             on this. It follows that what a person attends to is what they \
+             come to know. The point is developed at length below. I am \
+             grateful to the seminar for pressing me on it.",
+            None,
+        );
+        assert!(found.is_none(), "{found:#?}");
+    }
+
+    #[test]
+    fn a_page_reference_is_not_a_title() {
+        // Two notes run together, or a note that names no work at all.
+        let found = read(
+            "See Hefele-Leclerq (1909), 72-7, though Diekamp (1899) should have concluded the debate.",
+        );
+        assert_eq!(found.title, None, "{found:#?}");
+        assert!(found.missing().contains(&"title"));
     }
 
     #[test]

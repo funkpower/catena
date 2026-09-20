@@ -25,6 +25,13 @@ pub struct Entry {
     pub marker: Option<String>,
 }
 
+/// How far into a block the first note number may sit before what precedes
+/// it is read as something other than a note.
+///
+/// About the length of one full reference. Past that it is the body of the
+/// page, sitting above the notes at its foot.
+const HEAD_LIMIT: usize = 400;
+
 /// At least this many numbered notes before the numbering is believed.
 ///
 /// Two: one is a stray list item, and a real page of notes has more.
@@ -80,10 +87,64 @@ static ID_MARKER: LazyLock<Regex> =
 /// Cut a block into entries.
 pub fn entries(text: &str) -> Vec<Entry> {
     let numbered = numbered_notes(text);
-    if numbered.len() >= MIN_NOTES {
-        return numbered;
+    let cut = match numbered.len() >= MIN_NOTES {
+        true => numbered,
+        false => unnumbered(text),
+    };
+    cut.into_iter().flat_map(divide).collect()
+}
+
+/// The least an entry can be and still be one, on either side of a split.
+const MIN_WORK: usize = 25;
+
+/// Where another citation begins inside one entry: a semicolon, and then a
+/// name with a comma after it.
+///
+/// A semicolon and nothing else. A full stop separates works in a note too,
+/// but it also separates the author from the title in every bibliography
+/// entry ever written — `Kahneman, Daniel. Thinking, Fast and Slow.` would
+/// come apart at the one place it must not.
+static ANOTHER_WORK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#";\s+(?:(?i:see(?:\s+also)?|cf\.|and)\s+)?[\p{Lu}][\p{L}.'’\-]{1,24}(?:\s+[\p{Lu}][\p{L}.'’\-]{1,24}){0,3},\s+[\p{Lu}\*_"“‘]"#,
+    )
+    .expect("a valid pattern")
+});
+
+/// Cut one entry into the works it cites.
+///
+/// A note commonly cites two or three in a row, separated by semicolons —
+/// `Adorno, *Negative Dialectics* (London, 1973), 365; Alexander, "On the
+/// Social Construction of Moral Universals", 196`. They are distinct works
+/// and each deserves its own record. The note number is kept on all of them,
+/// because all of them are that note.
+fn divide(entry: Entry) -> Vec<Entry> {
+    let mut out = Vec::new();
+    let mut rest = entry.text.as_str();
+    while let Some(found) = ANOTHER_WORK.find(rest) {
+        // The separator belongs to neither side, and both sides have to be
+        // long enough to be a citation rather than an abbreviation.
+        let (before, after) = (
+            &rest[..found.start()],
+            rest[found.start() + 1..].trim_start(),
+        );
+        if before.chars().count() < MIN_WORK || after.chars().count() < MIN_WORK {
+            break;
+        }
+        out.push(before.trim().to_string());
+        rest = after;
     }
-    unnumbered(text)
+    if out.is_empty() {
+        return vec![entry];
+    }
+    out.push(rest.trim().to_string());
+    out.into_iter()
+        .filter(|text| !text.is_empty())
+        .map(|text| Entry {
+            text,
+            marker: entry.marker.clone(),
+        })
+        .collect()
 }
 
 /// Entries cut at their note numbers.
@@ -102,9 +163,11 @@ fn numbered_notes(text: &str) -> Vec<Entry> {
         return Vec::new();
     }
     // Whatever is in front of the first marker is the first note, when the
-    // marker it carried was one neither pattern knows. Dropping it would
-    // lose a reference silently, which is the one thing a cut must not do.
-    if starts[0] > 0 {
+    // marker it carried was one neither pattern knows — but only when it is
+    // about the length of a reference. A page of body text with its notes
+    // at the foot has a marker a long way in, and everything above it is the
+    // page, not a note that lost its number.
+    if (1..=HEAD_LIMIT).contains(&starts[0]) {
         starts.insert(0, 0);
     }
 
