@@ -84,6 +84,13 @@ static IMPRINT: LazyLock<Regex> = LazyLock::new(|| {
         .expect("a valid pattern")
 });
 
+/// The same, but only where it follows something. A title with a colon in
+/// it — `Subordination and Equivalence: The Nature and Role of Woman` — is
+/// an imprint by the pattern above when the pattern may match at the start.
+static IMPRINT_AFTER: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"[(.,;]\s*[\p{Lu}][^:;()\d]{1,40}:\s*[^;()]{2,80}").expect("a valid pattern")
+});
+
 /// Words that name a publisher rather than a journal.
 static PUBLISHER_WORD: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(?:press|publisher|publishing|books|verlag|editions?|university|imprint|&\s*co\b|ltd\b|inc\b)")
@@ -117,7 +124,6 @@ static NOT_A_TITLE: LazyLock<Regex> = LazyLock::new(|| {
       ^[\d\p{Pd}]                      # opens on a page or a volume number
     | \bpp?\.\s*\d                     # carries a page reference
     | ;                                # two entries run together
-    | \bvol\.\s*\d
     | \bibid\b
     | \\                               # an escape conversion left behind
     | ,\s+(?:eds?|trans)\.\s+\p{Lu}     # ran past the title into a credit
@@ -189,6 +195,32 @@ static SHORT_CITE: LazyLock<Regex> = LazyLock::new(|| {
     .expect("a valid pattern")
 });
 
+/// A name and a locator with nothing between them: `Lowrie and Fletcher,
+/// p. 133`, `Anderson, p. 400`. Like a short cite with a year, this points
+/// at a work it does not name.
+static BARE_CITE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?ix) ^ (?:(?:see|cf\.?|and|also)\s+)*
+        \p{Lu}[\p{L}'’\-]{1,24}
+        (?:\s+(?:and|&)\s+\p{Lu}[\p{L}'’\-]{1,24})?
+        \s*,\s* (?:pp?\.|ff?\.|vol\.|no\.)\s*
+        \d{1,5}(?:[-–—]\d{1,5})? \.? $",
+    )
+    .expect("a valid pattern")
+});
+
+/// A text cited by the critical series it is printed in rather than by its
+/// own name: `PG 4: 264`, `CSEL 34.2, 12`, `NPNF 2/5: 430`. Migne and the
+/// rest are shelves, not works, and the work is not named here.
+static SERIES_CITE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?x) ^ (?:PG|PL|CSEL|CCSL|CCSG|SC|NPNF|ANF|GCS|PO|CSCO|ACO|ACW|FC|LCL|SVS)
+        \s* \d{0,3} (?:[/.]\d{1,3})* \s* :? \s*
+        [\d\s,:.–-]* \.? $",
+    )
+    .expect("a valid pattern")
+});
+
 /// A page reference or a bracketed imprint: what a citation has and a remark
 /// about the argument does not.
 static CITATION_ANCHOR: LazyLock<Regex> = LazyLock::new(|| {
@@ -223,8 +255,21 @@ static MARKUP_TAG: LazyLock<Regex> =
 /// Nothing in it is marked up, so the commas and the brackets are all there
 /// is to divide it by.
 static NOTE_FORM: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^([^,()]{2,60}),\s+([^()]{4,300}?)\s*\(([^()]*(?:1[4-9]|20)\d{2}[a-z]?)\)")
-        .expect("a valid pattern")
+    Regex::new(
+        r"(?x) ^([^,()]{2,60}),\s+([^()]{4,300}?)\s*
+          \( ( [^()]* (?: (?:1[4-9]|20)\d{2}[a-z]? | :\s*\p{Lu} ) [^()]* ) \)",
+    )
+    .expect("a valid pattern")
+});
+
+/// A volume or part trailing a title: `…, Vol. 2`, `…, bk. iv`.
+static TRAILING_VOLUME: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i),\s*(?:vol|bk|pt|sect?)\.?\s*[\divxlcdm]+\s*$").expect("a valid pattern")
+});
+
+/// The word that introduces a locator, which is where the name stops.
+static LOCATOR_WORD: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)^(?:pp?|ff?|vol|bk|ch|no|n|sec)\.?,?$").expect("a valid pattern")
 });
 
 /// A locator: where in the work, rather than what the work is. A page, a
@@ -363,7 +408,15 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
             };
         } else {
             let parts = sentences(tail);
-            out.title = parts.first().map(|first| tidy_title(&strip_markup(first)));
+            // `…, Subordination and Equivalence: …, Washington: University
+            // Press of America.` has no stop between the title and the
+            // imprint, so the imprint is where the title ends.
+            out.title = parts.first().map(|first| {
+                let cut = IMPRINT_AFTER
+                    .find(first)
+                    .map_or(first.len(), |found| found.start());
+                tidy_title(&strip_markup(&first[..cut]))
+            });
             out.container = match (emphasised, emphasised_at) {
                 (Some(journal), Some(at)) if after_year(at) => tidy_container(&journal),
                 _ => parts.get(1).and_then(|second| tidy_container(second)),
@@ -479,7 +532,14 @@ fn note_form(text: &str) -> Option<(Vec<String>, Option<String>, Option<String>)
     if title.chars().count() < 4 {
         return None;
     }
-    Some((names, Some(title), tidy_container(&found[3])))
+    // `(Tübingen, 1933)` names a place and a year; only a bracket with a
+    // colon or a publisher's name in it names a publisher.
+    let imprint = found[3].trim();
+    let publisher = match imprint.contains(':') || PUBLISHER_WORD.is_match(imprint) {
+        true => tidy_container(imprint),
+        false => None,
+    };
+    Some((names, Some(title), publisher))
 }
 
 /// Read an entry whose only punctuation is commas.
@@ -504,7 +564,22 @@ fn comma_form(text: &str) -> Option<(Vec<String>, Option<String>, Option<String>
     // The last part with a colon, not the first: `Theories of Nationalism: A
     // Critical Introduction, Basingstoke: Palgrave` has two, and the imprint
     // is the one at the end.
-    let at = parts.iter().rposition(|part| part.contains(':'))?;
+    // The imprint is whichever comma-part carries the colon — the last one,
+    // because a title has a colon in it as often as an imprint does. Failing
+    // that, an entry ending on a year has its imprint at the end: `Cheyne,
+    // T. K., Founders of Old Testament Criticism, London, 1893.`
+    let at = match parts.iter().rposition(|part| part.contains(':')) {
+        Some(at) => at,
+        None => {
+            let last = parts.last()?.trim().trim_end_matches('.');
+            if !looks_like_a_year(last) || parts.len() < 4 {
+                return None;
+            }
+            // The part before the year is where it was published, which is
+            // not a publisher and not kept.
+            parts.len() - 2
+        }
+    };
 
     // `Miller, David` is the usual opening, and `Procopius` on its own is the
     // other one. Whichever reads as a name, the title starts after it.
@@ -522,7 +597,13 @@ fn comma_form(text: &str) -> Option<(Vec<String>, Option<String>, Option<String>
     if title.chars().count() < 4 {
         return None;
     }
-    Some((names, Some(title), tidy_container(parts[at])))
+    // Where the colon was is a publisher; where the year was is a place, and
+    // a place is not kept.
+    let publisher = match parts[at].contains(':') {
+        true => tidy_container(parts[at]),
+        false => None,
+    };
+    Some((names, Some(title), publisher))
 }
 
 /// Read a short note: a surname, a short title, and where in it.
@@ -552,25 +633,42 @@ fn short_note(text: &str) -> Option<(Vec<String>, Option<String>, Option<String>
     if !LOCATOR.is_match(last) || looks_like_a_year(last) {
         return None;
     }
-    let names = authors(parts[0]);
+    // `Krochmal, N., Moreh Nebukhe ha-Zeman` puts the initials in a part of
+    // their own; they belong to the name, not to the title.
+    let named = match parts.get(1).is_some_and(|part| is_initials(part)) {
+        true => 2,
+        false => 1,
+    };
+    let names = authors(&parts[..named].join(", "));
     if names.is_empty() {
         return None;
     }
     // The title runs from after the name to the first locator.
     let end = parts
         .iter()
-        .skip(1)
+        .skip(named)
         .position(|part| LOCATOR.is_match(part.trim_end_matches('.')))
-        .map(|at| at + 1)
+        .map(|at| at + named)
         .unwrap_or(parts.len());
-    if end <= 1 {
+    if end <= named {
         return None;
     }
-    let title = tidy_title(&strip_markup(&parts[1..end].join(", ")));
+    let title = tidy_title(&strip_markup(&parts[named..end].join(", ")));
     match title.chars().count() >= 4 {
         true => Some((names, Some(title), None)),
         false => None,
     }
+}
+
+/// Whether a run is nothing but initials: `N.`, `T. K.`, `J. R. R.`
+fn is_initials(text: &str) -> bool {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    !words.is_empty()
+        && words.len() <= 4
+        && words.iter().all(|word| {
+            let core = word.trim_end_matches('.');
+            core.chars().count() == 1 && core.chars().all(char::is_uppercase)
+        })
 }
 
 /// Whether a run of text is names and nothing else.
@@ -602,7 +700,10 @@ fn is_short_cite(text: &str) -> bool {
         .map(str::trim)
         .filter(|part| !part.is_empty())
         .collect();
-    !parts.is_empty() && parts.iter().all(|part| SHORT_CITE.is_match(part))
+    !parts.is_empty()
+        && parts
+            .iter()
+            .all(|part| SHORT_CITE.is_match(part) || BARE_CITE.is_match(part))
 }
 
 /// The surnames a short cite names, in the order it names them.
@@ -610,13 +711,19 @@ fn short_cite_authors(text: &str) -> Vec<String> {
     text.split(';')
         .filter_map(|part| {
             let part = LEAD_IN.replace(part.trim(), "").trim().to_string();
+            // Up to the year or the locator, whichever the cite carries.
             let name: Vec<&str> = part
                 .split_whitespace()
-                .take_while(|word| !word.chars().next().is_some_and(|c| c.is_ascii_digit()))
+                .take_while(|word| {
+                    !word.chars().next().is_some_and(|c| c.is_ascii_digit())
+                        && !LOCATOR_WORD.is_match(word)
+                })
                 .collect();
+            let name = name.join(" ");
+            let name = name.trim_end_matches([',', '.', ';', ' ']);
             match name.is_empty() {
                 true => None,
-                false => Some(name.join(" ")),
+                false => Some(restore_initial(name)),
             }
         })
         .collect()
@@ -634,7 +741,11 @@ fn is_scripture(text: &str) -> bool {
         .map(str::trim)
         .filter(|part| !part.is_empty())
         .collect();
-    if parts.is_empty() || !parts.iter().all(|part| VERSE.is_match(part)) {
+    if parts.is_empty()
+        || !parts
+            .iter()
+            .all(|part| VERSE.is_match(part) || SERIES_CITE.is_match(part))
+    {
         return false;
     }
     // A run of bare numbers is not scripture just because it could follow
@@ -738,6 +849,10 @@ fn tidy_title(raw: &str) -> String {
     // title's, and only the outermost pair is trimmed.
     let text =
         text.trim_matches(|c: char| ",.;:'\u{2018}\u{2019}".contains(c) || c.is_whitespace());
+    // `Geschichte des Papsttums, Vol. 2` names the work and then which volume
+    // of it. The volume is where in the work, not what the work is called.
+    let text = TRAILING_VOLUME.replace(text, "");
+    let text = text.trim_end_matches(|c: char| ",.;: ".contains(c));
     // A run that opens on a page number, or carries one, is two entries run
     // together or a reference to a work rather than the name of one. Better
     // to have no title and say so than to report that as one.
@@ -1314,6 +1429,62 @@ mod tests {
         assert_eq!(found.title.as_deref(), Some("On Nationality"));
         assert_eq!(found.container.as_deref(), Some("Clarendon Press"));
         assert_eq!(found.year, Some(1995));
+    }
+
+    #[test]
+    fn the_chicago_forms_a_history_or_a_theology_book_sets_its_notes_in() {
+        // A place and a year, no colon and no publisher word anywhere.
+        let place = read("Cheyne, T. K., Founders of Old Testament Criticism, London, 1893.");
+        assert_eq!(place.authors, ["Cheyne, T. K."]);
+        assert_eq!(
+            place.title.as_deref(),
+            Some("Founders of Old Testament Criticism")
+        );
+        assert_eq!(place.year, Some(1893));
+        // London is where it was published, not who published it.
+        assert_eq!(place.container, None);
+
+        // A volume is where in the work, not what the work is called.
+        let volume =
+            read("Erich Caspar, Geschichte des Papsttums, Vol. 2 (Tubingen, 1933), pp. 587-89");
+        assert_eq!(volume.title.as_deref(), Some("Geschichte des Papsttums"));
+        assert_eq!(volume.container, None);
+        assert_eq!(volume.pages.as_deref(), Some("587-89"));
+
+        // A bracketed imprint need not carry a year.
+        let undated =
+            read("St Valerian, Homilies (Washington D.C.: Catholic University of America Press).");
+        assert_eq!(undated.title.as_deref(), Some("Homilies"));
+        assert_eq!(
+            undated.container.as_deref(),
+            Some("Catholic University of America Press")
+        );
+
+        // A title with a colon in it is not an imprint.
+        let colon = read(
+            "BORRESEN, K. E. (1981), Subordination and Equivalence: The Nature \
+             and Role of Woman, Washington: University Press of America.",
+        );
+        assert_eq!(
+            colon.title.as_deref(),
+            Some("Subordination and Equivalence: The Nature and Role of Woman")
+        );
+    }
+
+    #[test]
+    fn a_work_cited_by_the_shelf_it_sits_on_is_not_named() {
+        // Migne and the rest are series, not works.
+        for series in [
+            "PG 4: 264, 337, 360, 393, 405; PG 91: 1312-13",
+            "NPNF 2/5: 430",
+        ] {
+            assert!(one(series, None).is_none(), "{series}");
+        }
+        // A name and a page with nothing between them names no work either.
+        let bare = read("Lowrie and Fletcher, p. 133; Anderson, p. 400.");
+        assert!(bare.continuation);
+        assert_eq!(bare.authors, ["Lowrie and Fletcher", "Anderson"]);
+        assert!(bare.missing().is_empty());
     }
 
     #[test]
