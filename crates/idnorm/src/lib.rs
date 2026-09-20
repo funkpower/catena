@@ -180,8 +180,6 @@ fn isbn(input: &str) -> Option<Identifier> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn an_identifier_copied_out_of_a_pdf_is_full_of_nothing() {
         // A typesetter's zero-width spaces, where the line was allowed to
