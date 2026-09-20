@@ -162,28 +162,21 @@ it; the gate checks it separately against `wasm32-unknown-unknown`.
 
 A binding that returns *nearly* the same answer as the code it replaces is
 worse than no binding: the pipeline keeps running and the corpus quietly
-changes underneath it. `tools/shadow.py` is the check — it runs both
-implementations over a directory of real files and reports every place they
-disagree.
+changes underneath it.
 
-```
-$ tools/shadow.py --stage chunk --corpus /path/to/converted
-shadow: chunk — book_pipeline.chunk.chunk_markdown against catena, over 60 files
+So before swapping anything, run both implementations over a directory of real
+files and compare the answers field by field — not a sample, and not the test
+fixtures, which are the inputs somebody already thought of. The things that
+find divergences are the documents nobody chose.
 
-shadow: 60 agreed, 0 disagreed, 0 could not be read
-```
+Two details worth the trouble:
 
-It writes nothing, touches no database, and exits `1` if anything disagreed,
-so it drops into a script. Where the two differ on a long text it says where —
-`differ at character 2038 of 2038/1641` — rather than printing two
-identical-looking prefixes.
-
-It also refuses to run against a checkout that has moved on from the commit
-the port was made against, because that measures the drift rather than the
-port and reports failures that are nobody's bug. `--any-commit` overrides it.
-
-Run it before the swap and again after. The stages it knows are `chunk`,
-`scrub` and `tokens`; adding one is a three-line entry in `STAGES`.
+- **Compare against the code you are actually replacing.** A checkout that has
+  moved on since the port measures the drift rather than the port, and reports
+  failures that are nobody's bug.
+- **Check that the comparison can fail.** Feed one side a deliberately wrong
+  setting and confirm it is reported. A check that cannot fail proves nothing,
+  and one that silently compares nothing looks exactly like success.
 
 ## As a Rust library
 
