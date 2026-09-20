@@ -119,8 +119,6 @@ static NOT_A_TITLE: LazyLock<Regex> = LazyLock::new(|| {
     | ;                                # two entries run together
     | \bvol\.\s*\d
     | \bibid\b
-    | [”“"]                            # a quotation mark the capture did not
-                                       # take, so the cut landed inside a title
     | \\                               # an escape conversion left behind
     | ,\s+(?:eds?|trans)\.\s+\p{Lu}     # ran past the title into a credit
     "#,
@@ -150,6 +148,17 @@ static VERSE: LazyLock<Regex> = LazyLock::new(|| {
 /// leaves it when several notes share one line.
 static EMBEDDED_MARKER: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\s\d{1,3}\.\s").expect("a valid pattern"));
+
+/// A contributor's note: a name, and then what they are. It opens exactly
+/// as a Chicago note does — `S. Marc Cohen, ...` — and the verb gives it
+/// away. These sit in the same back matter as the endnotes and are not
+/// references to anything.
+static BIOGRAPHY: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?i)^\*{0,2}\p{Lu}[^*\n]{2,60}?\*{0,2}\s+(?:is|was)\s+(?:a|an|the|professor|emeritus|emerita|lecturer|reader|assistant|associate|senior|currently|director|head|editor|author)\b",
+    )
+    .expect("a valid pattern")
+});
 
 /// A page reference or a bracketed imprint: what a citation has and a remark
 /// about the argument does not.
@@ -239,7 +248,7 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
     if !CITATION_SIGNAL.is_match(text) {
         return None;
     }
-    if is_scripture(text) {
+    if is_scripture(text) || BIOGRAPHY.is_match(text) {
         return None;
     }
     // A note that runs on for six sentences with no imprint, no page
@@ -272,14 +281,27 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
         let tail_at = text.len() - tail.len();
         // Quotation marks count as the title only where they open the tail.
         // Further in they are a quotation inside a title, not the title.
-        let opens_tail = quoted_at.is_some_and(|at| at.0 + 2 >= tail_at && at.0 <= tail_at + 2);
+        let opens = |at: Option<(usize, usize)>| {
+            at.is_some_and(|at| at.0 + 2 >= tail_at && at.0 <= tail_at + 2)
+        };
         let after_year = |at: (usize, usize)| at.0 >= year_at.1;
 
-        if opens_tail {
-            out.title = quoted;
-            let at = quoted_at.expect("a span");
-            out.container = match (emphasised, emphasised_at) {
-                (Some(book), Some(book_at)) if book_at.0 >= at.1 => tidy_container(&book),
+        // Whatever is marked up at the head of the tail is the work cited.
+        // Italics stand for the journal in `Peirce (1878). Plain title.
+        // *Popular Science Monthly*` — where they come after the title — and
+        // for the title itself in `Goffman (1963). *Stigma* Penguin`, where
+        // they open it. Which it is depends on where they sit, not on what
+        // they are.
+        let head = match (opens(quoted_at), opens(emphasised_at)) {
+            (true, _) => quoted.clone().zip(quoted_at),
+            (_, true) => emphasised.clone().zip(emphasised_at),
+            _ => None,
+        };
+
+        if let Some((title, at)) = head {
+            out.title = Some(title);
+            out.container = match (&emphasised, emphasised_at) {
+                (Some(book), Some(book_at)) if book_at.0 >= at.1 => tidy_container(book),
                 _ => container(text, &text[at.1..]),
             };
         } else {
@@ -419,7 +441,10 @@ fn comma_form(text: &str) -> Option<(Vec<String>, Option<String>, Option<String>
     // counting commas rather than by where a pattern matched: a pattern for
     // `Place: Publisher` starts at the comma before the place, which is
     // exactly where the title ends, and the two cannot both have it.
-    let at = parts.iter().position(|part| part.contains(':'))?;
+    // The last part with a colon, not the first: `Theories of Nationalism: A
+    // Critical Introduction, Basingstoke: Palgrave` has two, and the imprint
+    // is the one at the end.
+    let at = parts.iter().rposition(|part| part.contains(':'))?;
 
     // `Miller, David` is the usual opening, and `Procopius` on its own is the
     // other one. Whichever reads as a name, the title starts after it.
@@ -571,14 +596,29 @@ fn looks_like_a_year(text: &str) -> bool {
 /// Strip the punctuation a style leaves inside its own title delimiters.
 fn tidy_title(raw: &str) -> String {
     let text = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    // A trailing backslash is a line break conversion left behind, not part
+    // of anything.
+    let text = text.trim_end_matches('\\');
     let text = text.trim_matches(|c: char| ",.;:".contains(c) || c.is_whitespace());
     // A run that opens on a page number, or carries one, is two entries run
     // together or a reference to a work rather than the name of one. Better
     // to have no title and say so than to report that as one.
-    match NOT_A_TITLE.is_match(text) {
-        true => String::new(),
-        false => text.to_string(),
+    if NOT_A_TITLE.is_match(text) || !quotes_balance(text) {
+        return String::new();
     }
+    text.to_string()
+}
+
+/// Whether every quotation mark in a run has its partner.
+///
+/// `What's the Meaning of "This"?` is a title with a quotation inside it.
+/// `Mediterraneans." In Rethinking the Mediterranean` is the tail of a title
+/// whose opening is on the page before. One quotation mark tells them apart.
+fn quotes_balance(text: &str) -> bool {
+    let straight = text.matches('"').count();
+    let opened = text.matches('\u{201c}').count();
+    let closed = text.matches('\u{201d}').count();
+    straight % 2 == 0 && opened == closed
 }
 
 /// Who wrote it, from the run of text before the title.
@@ -669,19 +709,28 @@ fn is_name(text: &str) -> bool {
     if text.to_lowercase().contains("ed.") || text.to_lowercase().contains("trans.") {
         return false;
     }
-    // A lowercase word in the middle of a name is a particle or a sentence,
-    // and there are only so many particles.
+    // A lowercase word in the middle of a name is a particle, an initial the
+    // scan read in lower case, or a sentence — and there are only so many
+    // particles.
     let sentence = words.iter().any(|word| {
         let core = word.trim_matches(|c: char| !c.is_alphanumeric());
         core.chars().next().is_some_and(char::is_lowercase)
+            && core.chars().count() > 1
             && !PARTICLES.contains(&core.to_lowercase().as_str())
     });
     if sentence {
         return false;
     }
-    words
-        .first()
-        .is_some_and(|word| word.chars().next().is_some_and(char::is_uppercase))
+    // `de la Torre, Carlos` opens on a particle and is still a name; what it
+    // must not be is a run with no capital in it anywhere.
+    let first = words[0].trim_matches(|c: char| !c.is_alphanumeric());
+    let opens_well = first.chars().next().is_some_and(char::is_uppercase)
+        || PARTICLES.contains(&first.to_lowercase().as_str())
+        || first.chars().count() == 1;
+    opens_well
+        && words
+            .iter()
+            .any(|word| word.chars().next().is_some_and(char::is_uppercase))
 }
 
 /// What the work appeared in: a journal, or a book's publisher.
@@ -843,7 +892,7 @@ fn sentences(text: &str) -> Vec<&str> {
     let mut start = 0;
     let mut at = 0;
     while at < bytes.len() {
-        if bytes[at] == b'.' {
+        if matches!(bytes[at], b'.' | b'?' | b'!') {
             let before = text[start..at].trim_end();
             let last = before
                 .rsplit(|c: char| c.is_whitespace())
@@ -870,8 +919,11 @@ fn sentences(text: &str) -> Vec<&str> {
                     | "repr"
             );
             let followed_by_space = bytes.get(at + 1).is_some_and(|c| *c == b' ');
-            if !initial && !abbreviated && followed_by_space {
-                out.push(text[start..at].trim());
+            // A question mark or an exclamation is always a stop; a full
+            // stop is one unless it belongs to an initial or an abbreviation.
+            let stop = bytes[at] != b'.' || (!initial && !abbreviated);
+            if stop && followed_by_space {
+                out.push(text[start..=at].trim_end_matches('.').trim());
                 start = at + 1;
             }
         }
@@ -1055,13 +1107,19 @@ mod tests {
 
     #[test]
     fn a_contributors_biography_is_not_a_citation() {
-        // Opens exactly as a Chicago note does and then runs on for three
-        // sentences, which a citation does not.
-        let found = read(
+        // Opens exactly as a Chicago note does — a name, a comma — and then
+        // says what the person is. These sit in the same back matter as the
+        // endnotes and refer to nothing.
+        for bio in [
             "Thomas L. Sheridan, SJ, is Professor Emeritus of Theology at St \
              Peter's College. He is the author of Newman on Justification (1967).",
-        );
-        assert!(found.authors.is_empty(), "{found:#?}");
+            "**S. Marc Cohen** is Professor of Philosophy at the University of \
+             Washington, where he teaches the history of ancient philosophy.",
+            "William J. Gavin was a Professor of Philosophy at the University \
+             of Southern Maine for 34 years.",
+        ] {
+            assert!(one(bio, None).is_none(), "{bio}");
+        }
     }
 
     #[test]
@@ -1213,14 +1271,33 @@ mod tests {
     }
 
     #[test]
-    fn a_title_that_ran_on_into_the_publisher_is_not_reported() {
+    fn italics_at_the_head_of_the_tail_are_the_title_and_not_the_journal() {
+        // `Peirce (1878). Plain title. *Popular Science Monthly*` puts the
+        // journal in italics after the title; `Goodwin (1990). *Title*
+        // Publisher` puts the title in them. Where they sit decides which.
         let found = read(
-            "Goodwin, F. K. and Jamison, K. R. (1990). Manicdepressive illness \
+            "Goodwin, F. K. and Jamison, K. R. (1990). *Manicdepressive illness* \
              Oxford University Press, New York.\\",
         );
         assert_eq!(found.authors, ["Goodwin, F. K.", "Jamison, K. R."]);
         assert_eq!(found.year, Some(1990));
-        assert_eq!(found.title, None, "{found:#?}");
+        assert_eq!(found.title.as_deref(), Some("Manicdepressive illness"));
+    }
+
+    #[test]
+    fn a_title_may_quote_something_but_not_half_quote_it() {
+        let quoting =
+            read("Austin, D. F. 1990. What's the Meaning of \"This\"? Cornell University Press.");
+        assert_eq!(
+            quoting.title.as_deref(),
+            Some("What's the Meaning of \"This\"?")
+        );
+        // One quotation mark means the opening is on the page before.
+        let cut = read(
+            "Mediterraneans.\" In Rethinking the Mediterranean, ed. William V. \
+             Harris, 64-93. Oxford: Oxford University Press, 2005.",
+        );
+        assert_eq!(cut.title, None, "{cut:#?}");
     }
 
     #[test]

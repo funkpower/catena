@@ -87,6 +87,11 @@ static FILE_ANCHOR: LazyLock<Regex> = LazyLock::new(|| {
 static LOCAL_SIGNAL: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?s)\b(?:1[4-9]|20)\d{2}\b.*?\d").expect("a valid pattern"));
 
+/// A note number run straight into the text with no space: `36Armaud Puig`.
+/// Conversion does this when the marker was a superscript.
+static GLUED_NUMBER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"^(\d{1,3})(?:\p{Lu}|\*|“|")"#).expect("a valid pattern"));
+
 /// A bullet or a blockquote marker, which conversion puts in front of a note
 /// often enough to matter. A leading `*` is left alone: it opens an italic
 /// title as often as it opens a list.
@@ -268,6 +273,14 @@ fn strip_marker(raw: &str) -> Entry {
                 .trim_start_matches(|c: char| ".) ".contains(c))
                 .to_string(),
             marker: Some(found[1].to_string()),
+        };
+    }
+
+    if let Some(found) = GLUED_NUMBER.captures(&bare) {
+        let marker = found[1].to_string();
+        return Entry {
+            text: text[from[marker.len()]..].to_string(),
+            marker: Some(marker),
         };
     }
 
