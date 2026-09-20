@@ -94,6 +94,28 @@ static CITE_SIGNAL: LazyLock<FancyRegex> = LazyLock::new(|| {
     .expect("a valid pattern")
 });
 
+/// Where each numbered note begins, in reading order.
+///
+/// Public because splitting a page of notes into the notes on it is the same
+/// knowledge as recognising one, and two copies of the pattern above would
+/// drift apart.
+pub fn note_starts(text: &str) -> Vec<usize> {
+    NOTE_MARKER
+        .find_iter(text)
+        .filter_map(Result::ok)
+        .map(|found| found.start())
+        .collect()
+}
+
+/// Whether an entry reads as a citation rather than as a remark.
+///
+/// Also public: a note that cites nothing is a note a bibliography has no
+/// use for, and the caller deciding that should ask the same question this
+/// module asks.
+pub fn cites_something(entry: &str) -> bool {
+    CITE_SIGNAL.is_match(entry).unwrap_or(false)
+}
+
 /// Whether a chunk carries footnote or endnote citation material.
 ///
 /// The structural signal first, when the source had one. Otherwise each note
@@ -104,11 +126,7 @@ pub fn looks_like_citations(text: &str) -> bool {
         return true;
     }
 
-    let starts: Vec<usize> = NOTE_MARKER
-        .find_iter(text)
-        .filter_map(Result::ok)
-        .map(|found| found.start())
-        .collect();
+    let starts = note_starts(text);
     if starts.len() < MIN_CITED_NOTES {
         return false;
     }
@@ -117,7 +135,7 @@ pub fn looks_like_citations(text: &str) -> bool {
     for (at, start) in starts.iter().enumerate() {
         let end = starts.get(at + 1).copied().unwrap_or(text.len());
         let entry: String = text[*start..end].chars().take(ENTRY_WINDOW).collect();
-        if CITE_SIGNAL.is_match(&entry).unwrap_or(false) {
+        if cites_something(&entry) {
             cited += 1;
             if cited >= MIN_CITED_NOTES {
                 return true;

@@ -88,6 +88,31 @@ char *catena_fuse_hits(const char *hits,
  * record. */
 char *catena_identify(const char *name, const uint8_t *data, size_t len);
 
+/* The series a title belongs to. Returns a JSON proposal, or NULL when the
+ * title says nothing about a series — an answer, not an error. `author` may
+ * be NULL. */
+char *catena_series_of(const char *title, const char *author);
+
+/* Read an identifier — a DOI, ISSN, ISBN or arXiv id — out of whatever it
+ * arrived wrapped in. Returns a JSON record, or NULL when the string is not
+ * one — an answer, not an error. */
+char *catena_parse_identifier(const char *text);
+
+/* Read the references out of a bibliography or a page of notes. Returns a
+ * JSON array, one object per reference. */
+char *catena_find_citations(const char *text);
+
+/* The question to put to a model about the references that did not parse.
+ * `references` is the JSON array catena_find_citations returned. Returns the
+ * prompt as a JSON string, or NULL when every reference settled — an answer,
+ * not an error. */
+char *catena_citation_prompt(const char *references);
+
+/* Fill in what did not parse from a model's reply. Returns the JSON array
+ * with the answer applied, or NULL and an error when the reply is not one
+ * JSON object. */
+char *catena_merge_citation_reply(const char *references, const char *reply);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

@@ -78,6 +78,9 @@ except ValueError as why:
 | `identify` | [`booksniff`](../booksniff/README.md) |
 | `series_of` | [`seriesof`](../seriesof/README.md) |
 | `parse_identifier` | [`idnorm`](../idnorm/README.md) |
+| `find_citations` | [`citefind`](../citefind/README.md) |
+| `citation_prompt` | the question `citefind --prompt` writes |
+| `merge_citation_reply` | what `citefind --merge` does with the answer |
 
 The tools that are not here are the ones a binding would gain nothing over a
 subprocess for: they read files, shell out to another program, or talk to a

@@ -220,6 +220,34 @@ fn identify<'py>(py: Python<'py>, name: &str, data: &[u8]) -> PyResult<Bound<'py
     to_py(py, &crate::identify(name, data))
 }
 
+/// Read the references out of a bibliography or a page of notes.
+#[pyfunction]
+fn find_citations<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyList>> {
+    list_to_py(py, &crate::find_citations(text))
+}
+
+/// The question to put to a model about the references that did not parse.
+///
+/// `None` when every one of them settled, because there is nothing to ask.
+#[pyfunction]
+fn citation_prompt(references: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    let references: Vec<citefind::Reference> = from_py_list(references)?;
+    Ok(crate::citation_prompt(&references))
+}
+
+/// Fill in what did not parse from a model's reply.
+#[pyfunction]
+fn merge_citation_reply<'py>(
+    py: Python<'py>,
+    references: &Bound<'py, PyAny>,
+    reply: &str,
+) -> PyResult<Bound<'py, PyList>> {
+    let references: Vec<citefind::Reference> = from_py_list(references)?;
+    let merged = crate::merge_citation_reply(&references, reply)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    list_to_py(py, &merged)
+}
+
 /// The series a title belongs to, and which volume of it this is.
 ///
 /// `None` when the title says nothing about a series, which is most titles.
@@ -261,6 +289,9 @@ fn _catena(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(split_collection, module)?)?;
     module.add_function(wrap_pyfunction!(fuse_hits, module)?)?;
     module.add_function(wrap_pyfunction!(identify, module)?)?;
+    module.add_function(wrap_pyfunction!(find_citations, module)?)?;
+    module.add_function(wrap_pyfunction!(citation_prompt, module)?)?;
+    module.add_function(wrap_pyfunction!(merge_citation_reply, module)?)?;
     module.add_function(wrap_pyfunction!(series_of, module)?)?;
     module.add_function(wrap_pyfunction!(parse_identifier, module)?)?;
     Ok(())

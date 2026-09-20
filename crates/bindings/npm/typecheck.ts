@@ -4,7 +4,9 @@
 import {
   chunkMarkdown, scrub, countTokens, parseSubtitles, packCues,
   splitCollection, fuseHits, identify, seriesOf, parseIdentifier, segmentCues, cueWindows,
+  findCitations, citationPrompt, mergeCitationReply,
   type Chunk, type Cue, type Section, type Hit, type Doc, type SeriesProposal, type Identifier, type Segment,
+  type Reference,
 } from "./dist/web/catena.js";
 
 const chunks: Chunk[] = chunkMarkdown("# One\n\nbody\n", 512, 64, 50, 768);
@@ -44,6 +46,14 @@ fuseHits(hits);
 const proposal: SeriesProposal | undefined = seriesOf("The Philokalia Vol 3");
 const volume: number | undefined = proposal?.volume;
 seriesOf("Aquinas (Companion)", "Cambridge");
+
+const references: Reference[] = findCitations("Smith, John. *A Title*. Oxford: Clarendon Press, 1998.");
+const unsettled: string[] = references[0].unsettled;
+const ask: string | undefined = citationPrompt(references);
+const filled: Reference[] = mergeCitationReply(references, "{}");
+void unsettled;
+void ask;
+void filled;
 
 const ident: Identifier | undefined = parseIdentifier("10.1000/182");
 const checksum: boolean | null | undefined = ident?.checksum;

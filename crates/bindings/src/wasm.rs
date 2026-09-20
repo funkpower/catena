@@ -97,6 +97,31 @@ export interface Identifier {
   url?: string;
 }
 
+/** One reference out of a bibliography or a page of notes. */
+export interface Reference {
+  v: number;
+  idx: number;
+  /** The entry as it appeared, whitespace collapsed. */
+  text: string;
+  /** The note number it carried, where it carried one. */
+  marker?: string;
+  /** The names, in the order and the form the entry gave them. */
+  authors: string[];
+  year?: number;
+  /** The work cited — for an article the article, not the journal. */
+  title?: string;
+  /** The journal it appeared in, or the publisher of a book. */
+  container?: string;
+  pages?: string;
+  ids: { kind: string; id: string }[];
+  /** "book", "article", "chapter", "web" or "other". */
+  kind: string;
+  /** Whether it only points back at an earlier entry. */
+  continuation: boolean;
+  /** The fields that could not be read off the entry. */
+  unsettled: string[];
+}
+
 /** What a title says about its series. */
 export interface SeriesProposal {
   v: number;
@@ -280,6 +305,32 @@ pub fn identify(name: &str, data: &[u8]) -> Result<JsValue, JsValue> {
     to_js(&crate::identify(name, data))
 }
 
+/// Read the references out of a bibliography or a page of notes.
+#[wasm_bindgen(js_name = findCitations, skip_typescript)]
+pub fn find_citations(text: &str) -> Result<JsValue, JsValue> {
+    to_js(&crate::find_citations(text))
+}
+
+/// The question to put to a model about the references that did not parse.
+///
+/// `undefined` when every one of them settled.
+#[wasm_bindgen(js_name = citationPrompt, skip_typescript)]
+pub fn citation_prompt(references: JsValue) -> Result<JsValue, JsValue> {
+    let references: Vec<citefind::Reference> = from_js(references, "references")?;
+    match crate::citation_prompt(&references) {
+        Some(prompt) => to_js(&prompt),
+        None => Ok(JsValue::UNDEFINED),
+    }
+}
+
+/// Fill in what did not parse from a model's reply.
+#[wasm_bindgen(js_name = mergeCitationReply, skip_typescript)]
+pub fn merge_citation_reply(references: JsValue, reply: &str) -> Result<JsValue, JsValue> {
+    let references: Vec<citefind::Reference> = from_js(references, "references")?;
+    let merged = crate::merge_citation_reply(&references, reply).map_err(JsValue::from)?;
+    to_js(&merged)
+}
+
 /// The series a title belongs to, and which volume of it this is.
 ///
 /// `undefined` when the title says nothing about a series.
@@ -314,6 +365,9 @@ export function cueWindows(cues: Cue[]): string[];
 export function splitCollection(markdown: string): Section[];
 export function fuseHits(hits: Hit[], k?: number, weights?: Record<string, number>, limit?: number): Hit[];
 export function identify(name: string, data: Uint8Array): Doc;
+export function findCitations(text: string): Reference[];
+export function citationPrompt(references: Reference[]): string | undefined;
+export function mergeCitationReply(references: Reference[], reply: string): Reference[];
 export function seriesOf(title: string, author?: string): SeriesProposal | undefined;
 export function parseIdentifier(text: string): Identifier | undefined;
 "#;

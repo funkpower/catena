@@ -417,6 +417,82 @@ pub unsafe extern "C" fn catena_identify(
     give_json(&crate::identify(name, bytes))
 }
 
+/// Read the references out of a bibliography or a page of notes. Returns a
+/// JSON array, one object per reference.
+///
+/// # Safety
+///
+/// `text` must be NUL-terminated UTF-8.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn catena_find_citations(text: *const c_char) -> *mut c_char {
+    clear_error();
+    let Some(text) = (unsafe { borrow(text, "text") }) else {
+        return ptr::null_mut();
+    };
+    give_json(&crate::find_citations(text))
+}
+
+/// The question to put to a model about the references that did not parse.
+/// Takes the JSON array `catena_find_citations` returned. Returns the prompt
+/// as a JSON string, or NULL when every reference settled — an answer, not an
+/// error: `catena_last_error` is NULL in that case.
+///
+/// # Safety
+///
+/// `references` must be NUL-terminated UTF-8 holding a JSON array.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn catena_citation_prompt(references: *const c_char) -> *mut c_char {
+    clear_error();
+    let Some(references) = (unsafe { borrow(references, "references") }) else {
+        return ptr::null_mut();
+    };
+    let references: Vec<citefind::Reference> = match serde_json::from_str(references) {
+        Ok(references) => references,
+        Err(why) => {
+            set_error(why.to_string());
+            return ptr::null_mut();
+        }
+    };
+    match crate::citation_prompt(&references) {
+        Some(prompt) => give_json(&prompt),
+        None => ptr::null_mut(),
+    }
+}
+
+/// Fill in what did not parse from a model's reply. Returns the JSON array
+/// with the answer applied, or NULL and an error when the reply is not one
+/// JSON object.
+///
+/// # Safety
+///
+/// `references` and `reply` must be NUL-terminated UTF-8.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn catena_merge_citation_reply(
+    references: *const c_char,
+    reply: *const c_char,
+) -> *mut c_char {
+    clear_error();
+    let (Some(references), Some(reply)) = (unsafe { borrow(references, "references") }, unsafe {
+        borrow(reply, "reply")
+    }) else {
+        return ptr::null_mut();
+    };
+    let references: Vec<citefind::Reference> = match serde_json::from_str(references) {
+        Ok(references) => references,
+        Err(why) => {
+            set_error(why.to_string());
+            return ptr::null_mut();
+        }
+    };
+    match crate::merge_citation_reply(&references, reply) {
+        Ok(merged) => give_json(&merged),
+        Err(why) => {
+            set_error(why);
+            ptr::null_mut()
+        }
+    }
+}
+
 /// The series a title belongs to. Returns a JSON proposal, or NULL when the
 /// title says nothing about a series — which is most titles, and not an
 /// error: `catena_last_error` is NULL in that case.

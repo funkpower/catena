@@ -215,6 +215,31 @@ pub fn parse_identifier(text: &str) -> Option<idnorm::Identifier> {
     idnorm::parse(text)
 }
 
+/// Read the references out of a bibliography or a page of notes.
+///
+/// Each carries `unsettled`: the fields that could not be read off the entry,
+/// named so a caller can ask somebody else about exactly those and no more.
+pub fn find_citations(text: &str) -> Vec<citefind::Reference> {
+    citefind::read(text)
+}
+
+/// Compose the question to put to a model about the references that did not
+/// parse. `None` when every one of them settled.
+pub fn citation_prompt(references: &[citefind::Reference]) -> Option<String> {
+    citefind::prompt::compose(references)
+}
+
+/// Fill in what did not parse from a model's reply, and return the references
+/// with the answer applied. `Err` when the reply is not one JSON object.
+pub fn merge_citation_reply(
+    references: &[citefind::Reference],
+    reply: &str,
+) -> Result<Vec<citefind::Reference>, String> {
+    let mut references = references.to_vec();
+    citefind::prompt::merge(&mut references, reply)?;
+    Ok(references)
+}
+
 /// The series a title belongs to, and which volume of it this is.
 pub fn series_of(title: &str, author: Option<&str>) -> Option<seriesof::Proposal> {
     seriesof::series_of(title, author)
@@ -234,6 +259,25 @@ mod tests {
         );
         assert_eq!(scrub_markdown(MARKDOWN), mdscrub::scrub(MARKDOWN));
         assert_eq!(count_tokens("a passage"), textkit::count("a passage"));
+    }
+
+    #[test]
+    fn the_citation_surface_agrees_with_the_library_underneath() {
+        const REFS: &str = "Smith, John. *A Title*. Oxford: Clarendon Press, 1998.\n\nMarron, Kevin Ritual Abuse, Seal Books, 1988";
+        let found = find_citations(REFS);
+        assert_eq!(found, citefind::read(REFS));
+
+        // The clean entry settles and the comma-only one does not, so there
+        // is a question to ask and it is about the second alone.
+        let prompt = citation_prompt(&found).expect("something unsettled");
+        assert!(!prompt.contains("Clarendon"), "{prompt}");
+        assert!(prompt.contains("Ritual Abuse"), "{prompt}");
+
+        let merged = merge_citation_reply(&found, r#"{"1": {"authors": ["Marron, Kevin"]}}"#)
+            .expect("a reply");
+        assert_eq!(merged[1].authors, ["Marron, Kevin"]);
+        assert_eq!(merged[0], found[0]);
+        assert!(merge_citation_reply(&found, "not json").is_err());
     }
 
     #[test]

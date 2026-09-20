@@ -1,0 +1,22 @@
+[package]
+name = "citefind"
+description = "The references in a bibliography or a page of notes, one record each."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+catena-cli.workspace = true
+chunkmd.workspace = true
+clap.workspace = true
+corpus-core.workspace = true
+idnorm.workspace = true
+regex.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
