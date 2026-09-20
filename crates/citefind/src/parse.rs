@@ -245,6 +245,14 @@ static CITATION_ANCHOR: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\bpp?\.\s*\d|\bvol\.\s*\d|\bno\.\s*\d").expect("a valid pattern")
 });
 
+/// How many words a reference runs to before it is prose.
+///
+/// The longest real entry in the corpus sample — a chapter in an edited
+/// volume, with two titles, an editor, an imprint and a page range — is
+/// under sixty. A hundred and twenty is generous and still nowhere near a
+/// paragraph of body text.
+const MAX_WORDS: usize = 120;
+
 /// How many sentences a reference runs to before it is prose.
 ///
 /// A full entry in the heaviest style — names, title, an edited volume, an
@@ -379,13 +387,18 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
         out.authors = short_cite_authors(text);
         return Some(out);
     }
-    // A note that runs on for six sentences with no imprint, no page
-    // reference and no identifier is a remark about the argument. The LLM
-    // path this replaces was told to skip those; a parser has to decide.
-    if sentences(text).len() > MAX_SENTENCES
-        && !IMPRINT.is_match(text)
-        && !CITATION_ANCHOR.is_match(text)
-        && ids(text).is_empty()
+    // A note that runs on past a few sentences, or past a couple of hundred
+    // words, is a remark about the argument. The LLM path this replaces was
+    // told to skip those; a parser has to decide.
+    //
+    // A page reference or an identifier buys an exemption, because a note
+    // that cites a work and then discusses it is still a citation. An
+    // imprint does not: a colon in running prose — `his 1945 report,
+    // Science: The Endless Frontier` — is shaped exactly like `Place:
+    // Publisher`, and used to let whole paragraphs of body text through.
+    let exempt = CITATION_ANCHOR.is_match(text) || !ids(text).is_empty();
+    if !exempt
+        && (sentences(text).len() > MAX_SENTENCES || text.split_whitespace().count() > MAX_WORDS)
     {
         return None;
     }
@@ -1777,6 +1790,36 @@ mod tests {
         // `(London, 1973)` names a place and a year and no publisher at all.
         assert_eq!(found.container, None);
         assert_eq!(found.pages.as_deref(), Some("365"));
+    }
+
+    #[test]
+    fn a_colon_in_running_prose_is_not_an_imprint() {
+        // Six sentences of body text, with `his 1945 report, Science: The
+        // Endless Frontier` in the middle of it — shaped exactly like
+        // `Place: Publisher`, which used to buy the whole paragraph an
+        // exemption from the prose test.
+        let prose = "Thirdly, not all fields of science were seen as equally \
+            relevant to the war effort. Bush himself was an electrical \
+            engineer; his chief lieutenants were drawn from the physical \
+            sciences. Weapons such as radar drew heavily upon such \
+            disciplines. OSRD was busily creating an electronic environment \
+            for war. At any rate, physics emerged from the war as the most \
+            prestigious discipline. And finally, Bush proposed - most \
+            famously in his 1945 report, Science: The Endless Frontier - \
+            that Washington continue to play a leading role.";
+        assert!(one(prose, None).is_none(), "{prose}");
+
+        // A long entry that cites something is still a citation: the page
+        // range is what buys the exemption, not the colon.
+        let chapter = read(
+            "Heder, Stephen P. 'The Kampuchean-Vietnamese Conflict.' In David \
+             W.P. Elliott, ed. *The Third Indochina Conflict.* Boulder: \
+             Westview Press. 1981. pp. 21-67.",
+        );
+        assert_eq!(
+            chapter.title.as_deref(),
+            Some("The Third Indochina Conflict")
+        );
     }
 
     #[test]
