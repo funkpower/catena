@@ -220,6 +220,29 @@ fn identify<'py>(py: Python<'py>, name: &str, data: &[u8]) -> PyResult<Bound<'py
     to_py(py, &crate::identify(name, data))
 }
 
+/// The subject a heading means under a scheme, or `None`.
+#[pyfunction]
+fn canonical_subject(scheme: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String>> {
+    Ok(crate::canonical_subject(&from_py(scheme)?, name))
+}
+
+/// The subjects a book should carry under a scheme.
+#[pyfunction]
+#[pyo3(signature = (scheme, subjects, title = None))]
+fn compose_subjects(
+    scheme: &Bound<'_, PyAny>,
+    subjects: Vec<String>,
+    title: Option<&str>,
+) -> PyResult<Vec<String>> {
+    Ok(crate::compose_subjects(&from_py(scheme)?, &subjects, title))
+}
+
+/// Whether a book carries no heading the scheme recognises.
+#[pyfunction]
+fn needs_subject(scheme: &Bound<'_, PyAny>, existing: Vec<String>) -> PyResult<bool> {
+    Ok(crate::needs_subject(&from_py(scheme)?, &existing))
+}
+
 /// The best author a record's own title and front matter can offer.
 ///
 /// `None` when neither says anything that reads as a person's name.
@@ -314,6 +337,9 @@ fn _catena(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(find_citations, module)?)?;
     module.add_function(wrap_pyfunction!(looks_like_footnote_citations, module)?)?;
     module.add_function(wrap_pyfunction!(suggest_author, module)?)?;
+    module.add_function(wrap_pyfunction!(needs_subject, module)?)?;
+    module.add_function(wrap_pyfunction!(compose_subjects, module)?)?;
+    module.add_function(wrap_pyfunction!(canonical_subject, module)?)?;
     module.add_function(wrap_pyfunction!(citation_prompt, module)?)?;
     module.add_function(wrap_pyfunction!(merge_citation_reply, module)?)?;
     module.add_function(wrap_pyfunction!(series_of, module)?)?;

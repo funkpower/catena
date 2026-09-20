@@ -215,6 +215,30 @@ pub fn parse_identifier(text: &str) -> Option<idnorm::Identifier> {
     idnorm::parse(text)
 }
 
+/// What a closed subject scheme says about a set of headings.
+///
+/// The scheme is supplied rather than built in — which subjects a collection
+/// uses is the most collection-specific thing there is. These take it as the
+/// record `bibclean` reads from a file.
+pub fn canonical_subject(scheme: &bibclean::scheme::Scheme, name: &str) -> Option<String> {
+    scheme.canonical(name).map(str::to_string)
+}
+
+/// The subjects a book should carry: the chosen ones, their parents, and
+/// nothing the title rules out.
+pub fn compose_subjects(
+    scheme: &bibclean::scheme::Scheme,
+    subjects: &[String],
+    title: Option<&str>,
+) -> Vec<String> {
+    scheme.compose(subjects, title)
+}
+
+/// Whether a book has no heading the scheme recognises.
+pub fn needs_subject(scheme: &bibclean::scheme::Scheme, existing: &[String]) -> bool {
+    scheme.needs_subject(existing)
+}
+
 /// The best author a record's own title and front matter can offer.
 ///
 /// `None` when neither says anything that reads as a person's name, which is

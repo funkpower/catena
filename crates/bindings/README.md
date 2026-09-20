@@ -81,6 +81,9 @@ except ValueError as why:
 | `find_citations` | [`citefind`](../citefind/README.md) |
 | `looks_like_footnote_citations` | whether a body chunk carries notes worth reading |
 | `suggest_author` | [`bibclean`](../bibclean/README.md)'s author recovery |
+| `canonical_subject` | what a closed subject scheme calls a heading |
+| `compose_subjects` | the subjects a book should carry under one |
+| `needs_subject` | whether it carries a heading the scheme knows |
 | `citation_prompt` | the question `citefind --prompt` writes |
 | `merge_citation_reply` | what `citefind --merge` does with the answer |
 
