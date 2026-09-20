@@ -130,7 +130,16 @@ static ID_MARKER: LazyLock<Regex> =
 /// Cut a block into entries.
 pub fn entries(text: &str) -> Vec<Entry> {
     let numbered = numbered_notes(text);
-    let cut = match numbered.len() >= MIN_NOTES {
+    // A bibliography is not a page of notes, however many of its lines begin
+    // on a number. `81. Reprinted in Mellor (1991):104-22.` is the second
+    // line of an entry whose first line ran out of room, and two of those on
+    // a page of twenty-three references used to cut the page in two and
+    // throw both halves away for running on.
+    let surnames = text
+        .lines()
+        .filter(|line| SURNAME_FIRST.is_match(line.trim_start()))
+        .count();
+    let cut = match numbered.len() >= MIN_NOTES && numbered.len() >= surnames {
         true => numbered,
         false => unnumbered(text),
     };
@@ -429,6 +438,33 @@ mod tests {
         assert_eq!(found[0].marker.as_deref(), Some("1"));
         assert_eq!(found[1].marker.as_deref(), Some("2"));
         assert!(found[0].text.starts_with("John Smith"), "{:?}", found[0]);
+    }
+
+    #[test]
+    fn a_line_of_a_bibliography_that_begins_on_a_number_is_not_a_note() {
+        // `81. Reprinted in Mellor (1991):104-22.` is the second line of an
+        // entry whose first line ran out of room. Two of those on a page of
+        // references used to cut the page into two enormous entries.
+        let page = "\
+Martin, C.B. and Heil, John (forthcoming) \u{201c}Rules and Powers,\u{201d} Philosophical
+             Perspectives.
+             Mele, Alfred R. (1987) Irrationality: An Essay on Akrasia, New York: Oxford.
+             Mellor, Hugh (1974) \u{201c}In Defense of Dispositions,\u{201d} Philosophical Review 83:157-
+             81. Reprinted in Mellor (1991):104-22.
+             Mellor, Hugh (1991) Matters of Metaphysics, Cambridge: Cambridge University
+             Press.";
+        let found = entries(page);
+        assert!(found.len() >= 4, "{found:#?}");
+        assert!(
+            found.iter().any(|e| e.text.starts_with("Mele")),
+            "{found:#?}"
+        );
+        assert!(
+            found
+                .iter()
+                .any(|e| e.text.starts_with("Mellor, Hugh (1991)")),
+            "{found:#?}"
+        );
     }
 
     #[test]
