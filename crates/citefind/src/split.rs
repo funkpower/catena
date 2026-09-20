@@ -227,40 +227,55 @@ fn numbered_notes(text: &str) -> Vec<Entry> {
 }
 
 /// Entries cut at whatever the layout offers.
+///
+/// A blank line between entries is the clearest signal there is, but it is
+/// not always between entries: a bibliography often has one after the
+/// running head and none at all between the references under it. So each
+/// block a blank line produces is looked at again, and cut by line where its
+/// lines are separate entries.
 fn unnumbered(text: &str) -> Vec<Entry> {
     let blocks: Vec<&str> = text
         .split("\n\n")
         .map(str::trim)
         .filter(|block| !block.is_empty())
         .collect();
-    if blocks.len() >= 2 {
-        return blocks.iter().map(|block| strip_marker(block)).collect();
-    }
 
-    let lines: Vec<&str> = text
+    let mut out: Vec<String> = Vec::new();
+    for block in &blocks {
+        out.extend(by_line(block));
+    }
+    out.iter().map(|entry| strip_marker(entry)).collect()
+}
+
+/// Cut one block into the entries its lines make, or leave it whole.
+///
+/// Two or more lines opening on a surname and a comma means the block is a
+/// list and those lines are where the entries start. Failing that, a hanging
+/// indent says which lines continue the one above.
+fn by_line(block: &str) -> Vec<String> {
+    let lines: Vec<&str> = block
         .lines()
         .filter(|line| !line.trim().is_empty())
         .collect();
     if lines.len() < 2 {
-        return lines.iter().map(|line| strip_marker(line)).collect();
+        return lines.iter().map(|line| line.trim().to_string()).collect();
     }
 
-    // A surname-comma opening on most lines means the list is one entry per
-    // line and any line without it is a wrap of the line above. Without that,
-    // fall back to the hanging indent, and without that to the lines
-    // themselves.
     let openers = lines
         .iter()
         .filter(|line| SURNAME_FIRST.is_match(line.trim_start()))
         .count();
-    let by_surname = openers >= 2 && openers * 2 >= lines.len();
+    // One is enough inside a block: a block is a single entry or a list of
+    // them, not a mixture, so the line that opens on a surname is where an
+    // entry starts and the lines that do not are its continuation.
+    let by_surname = openers >= 1;
 
     let mut out: Vec<String> = Vec::new();
     for line in &lines {
-        let indented = line.starts_with(' ') || line.starts_with('\t');
+        let is_indented = line.starts_with(' ') || line.starts_with('\t');
         let starts_entry = match by_surname {
             true => SURNAME_FIRST.is_match(line.trim_start()),
-            false => !indented,
+            false => !is_indented,
         };
         match (starts_entry, out.last_mut()) {
             (false, Some(previous)) => {
@@ -270,7 +285,7 @@ fn unnumbered(text: &str) -> Vec<Entry> {
             _ => out.push(line.trim().to_string()),
         }
     }
-    out.iter().map(|entry| strip_marker(entry)).collect()
+    out
 }
 
 /// Take the note number off the front of an entry, and tidy what is left.
@@ -465,6 +480,29 @@ Doe, Jane. Another Work Entirely. Cambridge, 2001.";
                 "Smith, John. The Title of the Book That Ran On. Oxford: Clarendon Press, 1998.",
                 "Doe, Jane. Another Work Entirely. Cambridge, 2001.",
             ]
+        );
+    }
+
+    #[test]
+    fn a_running_head_does_not_make_the_bibliography_under_it_one_entry() {
+        // The blank line here is after the running head, not between
+        // entries — and there is none at all between the references.
+        let page = "\
+Catherine H. Zuckert
+
+Rowe, C. J. 1996. \u{201c}The Politicus.\u{201d} In Form and Argument, ed. C. Gill. Oxford.
+Saunders, T. J. 1992. \u{201c}Plato\u{2019}s Later Political Thought.\u{201d} Cambridge.
+Scodel, H. R. 1987. Diaeresis and Myth in Plato\u{2019}s Statesman. G\u{f6}ttingen.
+Stalley, R. F. 1983. An Introduction to Plato\u{2019}s Laws. Oxford.";
+        let found = entries(page);
+        assert!(found.len() >= 4, "{found:#?}");
+        assert!(
+            found.iter().any(|e| e.text.starts_with("Saunders")),
+            "{found:#?}"
+        );
+        assert!(
+            found.iter().any(|e| e.text.starts_with("Stalley")),
+            "{found:#?}"
         );
     }
 
