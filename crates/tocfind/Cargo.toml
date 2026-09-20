@@ -1,0 +1,21 @@
+[package]
+name = "tocfind"
+description = "A book's own table of contents, out of its navigation document or outline."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+catena-cli.workspace = true
+clap.workspace = true
+corpus-core.workspace = true
+lopdf.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+zip.workspace = true
+
+[lints]
+workspace = true

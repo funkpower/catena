@@ -908,6 +908,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "langid"
+version = "0.1.0"
+dependencies = [
+ "catena-cli",
+ "clap",
+ "corpus-core",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1698,6 +1710,20 @@ name = "tinyvec"
 version = "1.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
+
+[[package]]
+name = "tocfind"
+version = "0.1.0"
+dependencies = [
+ "catena-cli",
+ "clap",
+ "corpus-core",
+ "lopdf",
+ "schemars",
+ "serde",
+ "serde_json",
+ "zip",
+]
 
 [[package]]
 name = "ttf-parser"

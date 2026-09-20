@@ -25,6 +25,8 @@ Each tool installs by name, so you can take one without taking the rest.
 |---|---|
 | [`booksniff`](crates/booksniff/README.md) | What a file actually is, whatever its name claims |
 | [`bookmeta`](crates/bookmeta/README.md) | The metadata a file already carries |
+| [`tocfind`](crates/tocfind/README.md) | A book's own table of contents |
+| [`langid`](crates/langid/README.md) | What language a document is in |
 | [`pdfgutter`](crates/pdfgutter/README.md) | Books scanned two pages to a sheet, split back into pages |
 | [`pdftriage`](crates/pdftriage/README.md) | Whether a PDF's text layer is worth reading, or whether it has to be OCRed |
 | [`bibclean`](crates/bibclean/README.md) | Catalogue records audited and repaired, with a reason for every change |
