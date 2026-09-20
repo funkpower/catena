@@ -234,6 +234,7 @@ dependencies = [
  "corpus-core",
  "cuekit",
  "cuepack",
+ "cueseg",
  "idnorm",
  "mdscrub",
  "mdsplit",

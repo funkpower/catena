@@ -158,6 +158,21 @@ fn pack_cues<'py>(
     list_to_py(py, &crate::pack_cues(&cues, budgets))
 }
 
+/// Cut a timed transcript into topic chapters.
+///
+/// `duration` is the recording's length in seconds; omit it and the last cue
+/// decides.
+#[pyfunction]
+#[pyo3(signature = (cues, *, duration = None))]
+fn segment_cues<'py>(
+    py: Python<'py>,
+    cues: &Bound<'py, PyAny>,
+    duration: Option<f64>,
+) -> PyResult<Bound<'py, PyList>> {
+    let cues: Vec<cuekit::Cue> = from_py_list(cues)?;
+    list_to_py(py, &crate::segment_cues(&cues, duration.unwrap_or(0.0)))
+}
+
 /// Split a collection into the works inside it.
 ///
 /// Raises `ValueError` when the document is one work rather than a
@@ -228,6 +243,7 @@ fn _catena(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(count_tokens, module)?)?;
     module.add_function(wrap_pyfunction!(parse_subtitles, module)?)?;
     module.add_function(wrap_pyfunction!(pack_cues, module)?)?;
+    module.add_function(wrap_pyfunction!(segment_cues, module)?)?;
     module.add_function(wrap_pyfunction!(split_collection, module)?)?;
     module.add_function(wrap_pyfunction!(fuse_hits, module)?)?;
     module.add_function(wrap_pyfunction!(identify, module)?)?;

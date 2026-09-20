@@ -64,6 +64,7 @@ except ValueError as why:
 | `count_tokens` | [`textkit`](../textkit/README.md) |
 | `parse_subtitles` | [`cuenorm`](../cuenorm/README.md) |
 | `pack_cues` | [`cuepack`](../cuepack/README.md) |
+| `segment_cues` | [`cueseg`](../cueseg/README.md) |
 | `split_collection` | [`mdsplit`](../mdsplit/README.md) |
 | `fuse_hits` | [`rrf`](../rrf/README.md) |
 | `identify` | [`booksniff`](../booksniff/README.md) |

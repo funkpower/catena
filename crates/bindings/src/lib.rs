@@ -128,6 +128,18 @@ pub fn pack_cues(cues: &[Cue], budgets: CueBudgets) -> Vec<Chunk> {
     )
 }
 
+/// Cut a timed transcript into topic chapters.
+///
+/// `duration` is how long the recording is, in seconds; it decides how many
+/// chapters to aim for. Zero or less means take it from the last cue.
+pub fn segment_cues(cues: &[Cue], duration: f64) -> Vec<cueseg::Segment> {
+    let duration = match duration > 0.0 {
+        true => duration,
+        false => cues.last().map_or(0.0, |cue| cue.end),
+    };
+    cueseg::segment(cues, duration)
+}
+
 /// Split a collection into the works inside it.
 ///
 /// `Err` when the document is one work rather than a collection, which is the
@@ -220,6 +232,28 @@ mod tests {
             CueBudgets::default().seconds,
             cuepack::Budgets::default().seconds
         );
+    }
+
+    #[test]
+    fn a_transcript_comes_back_as_chapters() {
+        // Long enough to be worth chaptering at all: the segmenter refuses
+        // to cut a recording into pieces shorter than its minimum.
+        let cues: Vec<Cue> = (0..1200)
+            .map(|i| Cue {
+                v: corpus_core::V,
+                start: i as f64 * 5.0,
+                end: i as f64 * 5.0 + 5.0,
+                text: match i % 2 {
+                    0 => "the mill stood at the northern end of the valley".into(),
+                    _ => "parliament dissolved itself again amid objections".into(),
+                },
+            })
+            .collect();
+        let chapters = segment_cues(&cues, 6000.0);
+        assert!(!chapters.is_empty());
+        assert_eq!(chapters, cueseg::segment(&cues, 6000.0));
+        // The duration can be left to the cues themselves.
+        assert_eq!(segment_cues(&cues, 0.0), cueseg::segment(&cues, 6000.0));
     }
 
     #[test]

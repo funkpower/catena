@@ -3,8 +3,8 @@
 // check, and nothing else would notice.
 import {
   chunkMarkdown, scrub, countTokens, parseSubtitles, packCues,
-  splitCollection, fuseHits, identify, seriesOf, parseIdentifier,
-  type Chunk, type Cue, type Section, type Hit, type Doc, type SeriesProposal, type Identifier,
+  splitCollection, fuseHits, identify, seriesOf, parseIdentifier, segmentCues,
+  type Chunk, type Cue, type Section, type Hit, type Doc, type SeriesProposal, type Identifier, type Segment,
 } from "./dist/web/catena.js";
 
 const chunks: Chunk[] = chunkMarkdown("# One\n\nbody\n", 512, 64, 50, 768);
@@ -18,6 +18,10 @@ const tokens: number = countTokens(clean);
 const cues: Cue[] = parseSubtitles("1\n00:00:01,000 --> 00:00:04,000\nline\n\n");
 const start: number = cues[0].start;
 const packed: Chunk[] = packCues(cues, 75, 512);
+
+const chapters: Segment[] = segmentCues(cues, 3600);
+const chapterTitle: string = chapters[0].title;
+segmentCues(cues);
 
 const works: Section[] = splitCollection("# One\n\nbody\n");
 const slug: string = works[0].slug;
@@ -42,4 +46,4 @@ seriesOf("Aquinas (Companion)", "Cambridge");
 const ident: Identifier | undefined = parseIdentifier("10.1000/182");
 const checksum: boolean | null | undefined = ident?.checksum;
 
-export const checked = [volume, checksum, page, chapter, flags, clean, tokens, start, packed, slug, fused, kind, notes];
+export const checked = [volume, checksum, chapterTitle, page, chapter, flags, clean, tokens, start, packed, slug, fused, kind, notes];

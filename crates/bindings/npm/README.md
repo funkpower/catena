@@ -45,6 +45,7 @@ try {
 | `countTokens` | Tokens, by the encoding the budgets count in |
 | `parseSubtitles` | SubRip, WebVTT or ASS into cues |
 | `packCues` | Cues into passages, keeping the times they were said at |
+| `segmentCues` | A timed transcript into topic chapters |
 | `splitCollection` | One markdown file into the works inside it |
 | `fuseHits` | Several ranked lists into one |
 | `identify` | What a file is, from its first bytes |

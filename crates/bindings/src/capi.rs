@@ -259,6 +259,29 @@ pub unsafe extern "C" fn catena_pack_cues(
     give_json(&crate::pack_cues(&cues, budgets))
 }
 
+/// Cut a timed transcript into topic chapters. `cues` is a JSON array of
+/// cues; returns a JSON array of segments.
+///
+/// A duration of zero or less is taken from the last cue.
+///
+/// # Safety
+///
+/// `cues` must be NUL-terminated UTF-8.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn catena_segment_cues(
+    cues: *const c_char,
+    duration: c_double,
+) -> *mut c_char {
+    clear_error();
+    let Some(cues) = (unsafe { borrow(cues, "cues") }) else {
+        return ptr::null_mut();
+    };
+    let Some(cues) = take_json::<Vec<cuekit::Cue>>(cues, "cues") else {
+        return ptr::null_mut();
+    };
+    give_json(&crate::segment_cues(&cues, duration))
+}
+
 /// Split a collection into the works inside it. Returns a JSON array of
 /// sections, or NULL when the document is one work rather than a collection —
 /// which is an answer, not a failure, and the reason is in

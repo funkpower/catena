@@ -50,6 +50,18 @@ export interface Cue {
   text: string;
 }
 
+/** One topic chapter of a recording. */
+export interface Segment {
+  v: number;
+  /** Seconds from the start of the recording. */
+  start: number;
+  end: number;
+  /** A title taken from the chapter's own first sentence. */
+  title: string;
+  /** The opening of the chapter, for a person choosing between them. */
+  excerpt: string;
+}
+
 /** One work inside a collection. */
 export interface Section {
   v: number;
@@ -196,6 +208,16 @@ pub fn pack_cues(
     to_js(&crate::pack_cues(&cues, budgets))
 }
 
+/// Cut a timed transcript into topic chapters.
+///
+/// `duration` is the recording's length in seconds; omit it and the last cue
+/// decides.
+#[wasm_bindgen(js_name = segmentCues, skip_typescript)]
+pub fn segment_cues(cues: JsValue, duration: Option<f64>) -> Result<JsValue, JsValue> {
+    let cues: Vec<cuekit::Cue> = from_js(cues, "cues")?;
+    to_js(&crate::segment_cues(&cues, duration.unwrap_or(0.0)))
+}
+
 /// Split a collection into the works inside it.
 ///
 /// Throws when the document is one work rather than a collection, which is
@@ -266,6 +288,7 @@ const SIGNATURES: &'static str = r#"
 export function chunkMarkdown(markdown: string, target?: number, overlap?: number, min_tokens?: number, hard_max?: number): Chunk[];
 export function parseSubtitles(content: string, keep_repeats?: boolean): Cue[];
 export function packCues(cues: Cue[], seconds?: number, max_tokens?: number): Chunk[];
+export function segmentCues(cues: Cue[], duration?: number): Segment[];
 export function splitCollection(markdown: string): Section[];
 export function fuseHits(hits: Hit[], k?: number, weights?: Record<string, number>, limit?: number): Hit[];
 export function identify(name: string, data: Uint8Array): Doc;

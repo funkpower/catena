@@ -20,6 +20,7 @@ from ._catena import (
     parse_identifier,
     parse_subtitles,
     scrub,
+    segment_cues,
     series_of,
     split_collection,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "parse_identifier",
     "parse_subtitles",
     "scrub",
+    "segment_cues",
     "series_of",
     "split_collection",
 ]
