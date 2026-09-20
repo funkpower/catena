@@ -249,7 +249,11 @@ fn strip_marker(raw: &str) -> Entry {
         let consumed = bare[..whole.end()].chars().count();
         let cut = from[consumed];
         return Entry {
-            text: text[cut..].trim_start().to_string(),
+            // `[4] . Smith, John` leaves the stop that belonged to the
+            // marker sitting in front of the entry.
+            text: text[cut..]
+                .trim_start_matches(|c: char| ".) ".contains(c))
+                .to_string(),
             marker: Some(found[1].to_string()),
         };
     }
@@ -423,6 +427,13 @@ Another Anonymous Work. Cambridge, 2001.";
         let entry = strip_marker("¹² Smith, *Title*, p. 4.");
         assert_eq!(entry.marker.as_deref(), Some("12"));
         assert_eq!(entry.text, "Smith, *Title*, p. 4.");
+    }
+
+    #[test]
+    fn a_stop_that_belonged_to_the_marker_does_not_start_the_entry() {
+        let entry = strip_marker("[4] . Smith, John. *A Real Book*. Oxford, 1998.");
+        assert_eq!(entry.marker.as_deref(), Some("4"));
+        assert_eq!(entry.text, "Smith, John. *A Real Book*. Oxford, 1998.");
     }
 
     #[test]

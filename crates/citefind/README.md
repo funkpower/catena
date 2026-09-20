@@ -181,6 +181,11 @@ back. Nor does a run carrying a page reference or a semicolon count as one:
 that is two entries run together, or a reference to a work rather than the
 name of one.
 
+**Take chapter and verse for a work.** `Matthew 4:17` and `Cf. Deuteronomy
+18:15-19; Isaiah 53` are scripture references, which is most of what the notes
+of a theological book are. Nobody is looking for the publisher of Galatians,
+so they are not references and no record is written for them.
+
 **Name a place of publication as the publisher.** `(London, 1973)` says where
 a book was published and not by whom, so `container` stays empty. The place
 is still in `text`.

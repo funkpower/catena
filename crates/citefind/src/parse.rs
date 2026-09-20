@@ -128,6 +128,18 @@ static NOT_A_TITLE: LazyLock<Regex> = LazyLock::new(|| {
     .expect("a valid pattern")
 });
 
+/// A reference to chapter and verse: `Matthew 4:17`, `1 Peter 2:6-8`.
+///
+/// A book of the Bible is not a work in a bibliography — nobody is looking
+/// for the publisher of Galatians — and a page of them is what the notes of
+/// a theological book largely are.
+static VERSE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?i)^(?:cf\.?|see|and)?\s*(?:[1-4]\s+)?\p{L}[\p{L}.]{2,14}\.?\s+\d{1,3}(?::\d{1,3}(?:[-–]\d{1,3})?)?\.?$",
+    )
+    .expect("a valid pattern")
+});
+
 /// A page reference or a bracketed imprint: what a citation has and a remark
 /// about the argument does not.
 static CITATION_ANCHOR: LazyLock<Regex> = LazyLock::new(|| {
@@ -214,6 +226,9 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
         return Some(out);
     }
     if !CITATION_SIGNAL.is_match(text) {
+        return None;
+    }
+    if is_scripture(text) {
         return None;
     }
     // A note that runs on for six sentences with no imprint, no page
@@ -434,6 +449,20 @@ fn reads_as_names(head: &str) -> bool {
 fn strip_markup(text: &str) -> String {
     let without_tags = MARKUP_TAG.replace_all(text, "");
     without_tags.replace(['*', '_'], "").trim().to_string()
+}
+
+/// Whether an entry is chapter and verse and nothing else.
+///
+/// Several of them separated by semicolons is still a scripture reference
+/// and still not a work: `Cf. Deuteronomy 18:15-19; Isaiah 53; Acts 1:6`.
+fn is_scripture(text: &str) -> bool {
+    let text = text.trim_start_matches(['.', ' ']);
+    let parts: Vec<&str> = text
+        .split(';')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .collect();
+    !parts.is_empty() && parts.iter().all(|part| VERSE.is_match(part))
 }
 
 /// Every identifier the entry carries, normalised.
@@ -1073,6 +1102,26 @@ mod tests {
         assert_eq!(found.kind, Kind::Article);
         // Naming arXiv as the journal would invent one.
         assert_eq!(found.container, None);
+    }
+
+    #[test]
+    fn chapter_and_verse_is_not_a_work_in_a_bibliography() {
+        for verse in [
+            "Matthew 4:17",
+            ". Cf. Deuteronomy 18:15-19; Isaiah 53; Acts 1:6",
+            "1 Peter 2:6-8",
+            "Matthew 13:43; cf Exodus 34:29-35",
+        ] {
+            assert!(one(verse, None).is_none(), "{verse}");
+        }
+        // A journal and its volume look similar and are not the same thing.
+        assert!(
+            one(
+                "Altmann, M. 1951, A Study of Behaviour. Sociometry 14, 351-354.",
+                None
+            )
+            .is_some()
+        );
     }
 
     #[test]
