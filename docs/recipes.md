@@ -5,6 +5,8 @@ is what the joins look like in practice — including the parts that are not in
 this suite, because a real pipeline has a database at the end of it.
 
 - [A shelf of files, sorted before anything else touches it](#a-shelf-of-files-sorted-before-anything-else-touches-it)
+- [A catalogue out of what the files already say](#a-catalogue-out-of-what-the-files-already-say)
+- [Asking a model, without this suite calling one](#asking-a-model-without-this-suite-calling-one)
 - [A scanned book into searchable passages](#a-scanned-book-into-searchable-passages)
 - [A collected edition into one record per work](#a-collected-edition-into-one-record-per-work)
 - [A podcast archive into passages you can cite to the second](#a-podcast-archive-into-passages-you-can-cite-to-the-second)
@@ -42,6 +44,93 @@ Split the shelf by what each file needs:
 ```sh
 jq -r 'select(.kind == "pdf")  | .path' manifest.ndjson > pdfs.txt
 jq -r 'select(.kind == "epub") | .path' manifest.ndjson > epubs.txt
+```
+
+## A catalogue out of what the files already say
+
+Before reaching for a network or a model, read what is already there. Every
+ebook format has somewhere to put the title, and almost every file has
+something written in it.
+
+```
+$ bookmeta library/*.epub | jq -r '[.title, .authors[0], (.identifiers.isbn // "—")] | @tsv'
+A Collection of Essays          George Orwell     —
+Adventures of Huckleberry Finn  Mark Twain        9781593081126
+Bloodline (Star Wars)           Claudia Gray      9781101885253
+The Pale-Faced Lie              David Crow        9780997487176
+Finding Vigano                  Robert Moynihan   —
+```
+
+That is free and offline. Three things build on it.
+
+**The ISBNs it found are worth confirming**, because a publisher's own file is
+not evidence the book exists as catalogued:
+
+```sh
+bookmeta library/*.epub \
+  | jq -r 'select(.identifiers.isbn) | .identifiers.isbn' \
+  | idnorm --quiet | bibfetch --polite you@example.org \
+  | jq -r 'select(.found | not) | "unknown to any register: \(.id)"'
+```
+
+**The books that said nothing** are the ones worth a person's attention, and
+the only ones worth a model's time:
+
+```sh
+bookmeta library/* | jq -r 'select(.title == null) | .path' > silent.txt
+```
+
+**Real chapter titles** come from the book rather than from a converter's
+guess:
+
+```
+$ tocfind enlightenment.epub | jq -r 'select(.depth == 0) | .title'
+1. Introduction: Radical Enlightenment and “Modernity” (1650–1850)
+Part I: The Origins of Democratic Modernity
+Part II: Human Rights and Revolution (1770–1830)
+Part III: Revolution and Competing Revolutionary Ideologies (1789–1830)
+```
+
+And the language, which decides which OCR to run and which model to embed
+with:
+
+```sh
+langid converted/*.md | jq -r 'select(.language != "en") | [.path, .name] | @tsv'
+```
+
+## Asking a model, without this suite calling one
+
+A tool here may compose a prompt. It does not send one. That keeps every
+answer the same on every run and every machine, and leaves the model, the
+machine and the GPU yours.
+
+```sh
+bookmeta --prompt --excerpt opening.txt scan.pdf \
+  | ollama run qwen3.5:9b \
+  | bookmeta --merge scan.pdf
+```
+
+Over the shelf, asking only about the files that said nothing:
+
+```sh
+while read -r f; do
+  pdftotext -l 3 "$f" - > /tmp/opening.txt
+  bookmeta --prompt --excerpt /tmp/opening.txt "$f" \
+    | ollama run qwen3.5:9b \
+    | bookmeta --merge "$f"
+done < silent.txt > filled.ndjson
+```
+
+Four things make that safe to depend on. Only the fields the file left blank
+are filled — a model does not get to overrule what the publisher wrote. A
+`null` is an absence, not a value. The prompt is versioned, and a record
+filled this way says which version did it. And a reply that is not one JSON
+object is refused rather than half-applied.
+
+What comes back is still a claim, so treat it as one:
+
+```sh
+jq -r 'select(.notes[]? | test("from a model")) | .path' filled.ndjson
 ```
 
 ## A scanned book into searchable passages
