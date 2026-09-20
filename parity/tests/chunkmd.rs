@@ -21,9 +21,43 @@ fn rust_records(markdown: &str, budgets: &chunkmd::Budgets) -> Vec<Value> {
         .collect()
 }
 
+/// Whether the only difference is a footnote flag the Rust sets and the
+/// Python does not.
+///
+/// `looks_like_citations` learnt to recognise a run of reference entries
+/// with nothing marking them — no numbers, no heading — which is how a
+/// reader or a companion sets its end-of-chapter reading list. The Python it
+/// was ported from never did, so it left those chunks unflagged and the
+/// citation stage never selected them. Recorded in KNOWN.md; additive only,
+/// so a flag the Python sets and the Rust does not is still a failure.
+fn only_gains_the_footnote_flag(ours: &Value, theirs: &Value) -> bool {
+    let flags = |v: &Value| -> Vec<String> {
+        v.get("flags")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|f| f.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let (mine, yours) = (flags(ours), flags(theirs));
+    if !yours.iter().all(|f| mine.contains(f)) {
+        return false;
+    }
+    let gained: Vec<&String> = mine.iter().filter(|f| !yours.contains(f)).collect();
+    if gained != [&"footnote_citations".to_string()] {
+        return false;
+    }
+    // Everything else about the chunk has to be identical.
+    ["idx", "page", "chapter", "role", "tokens", "text"]
+        .iter()
+        .all(|field| ours.get(field) == theirs.get(field))
+}
+
 fn compare(case: &str, set: &str, ours: &[Value], theirs: &[Value]) {
     for (at, (ours, theirs)) in ours.iter().zip(theirs).enumerate() {
-        if ours != theirs {
+        if ours != theirs && !only_gains_the_footnote_flag(ours, theirs) {
             let fields = ["idx", "page", "chapter", "role", "tokens", "flags", "text"];
             let differing: Vec<String> = fields
                 .iter()

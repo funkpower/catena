@@ -369,3 +369,32 @@ deliberate difference from the Python, not because anything caught it.
 
 `citefind` strips the same marker when it cuts a page of notes into notes.
 
+---
+
+## chunkmd — a reading list with nothing marking it is citation material
+
+`looks_like_citations` flags a chunk carrying a run of reference entries that
+nothing announces — no heading over them, no numbers beside them:
+
+        Block, N. 1981. Psychologism and behaviorism. Philosophical Review 90:5-43.
+        Dennett, D. C. 1987. The Intentional Stance. MIT Press.
+        Geach, P. 1957. Mental Acts. Routledge and Kegan Paul.
+
+That is how a reader or a companion sets the further-reading list at the end
+of each chapter, indented under the last paragraph of the essay. The Python
+this was ported from looked only for note markers, so those chunks stayed
+`role='body'` with no flag, the citation stage never selected them, and books
+made entirely of such chapters came out with one or two citations.
+
+The shape is also an index line — `Newton, Isaac, 5, 93, 141` opens
+identically. What tells them apart is that a reference names a work: five
+words of three letters or more on the entry's own line, and not two page
+numbers written as links.
+
+Over 15,925 unflagged body chunks sampled from the corpus this fires on 2.6%,
+and seven of eight sampled were real reference lists.
+
+The parity harness allows this one difference by name: a chunk the Rust
+flags and the Python does not, identical in every other field. A flag the
+Python sets and the Rust does not is still a failure.
+

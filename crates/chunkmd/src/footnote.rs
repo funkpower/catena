@@ -120,6 +120,102 @@ pub fn cites_something(entry: &str) -> bool {
     CITE_SIGNAL.is_match(entry).unwrap_or(false)
 }
 
+/// The opening of a bibliography entry: a surname, a comma, and an initial
+/// or a given name. Deliberately narrow, because it is being counted across
+/// a page of body prose and a loose version would match dialogue.
+static ENTRY_OPENING: LazyLock<FancyRegex> = LazyLock::new(|| {
+    FancyRegex::new(
+        r"(?m)^[ \t]{0,12}\p{Lu}[\p{L}'\u{2019}\-]{1,25},[ \t]+(?:\p{Lu}\.|\p{Lu}[\p{L}]{1,20}[,.]?[ \t])",
+    )
+    .expect("a valid pattern")
+});
+
+/// What an unnumbered entry carries that says it is one.
+///
+/// `CITE_SIGNAL` is about notes and looks for `p.`, `ed.`, `Press,` and a
+/// bracketed year. An author-date entry — `Block, N. 1981. Psychologism and
+/// behaviorism. Philosophical Review 90:5-43.` — has none of those and is
+/// still plainly a reference. A year, or a page range, or a publisher.
+static ENTRY_SIGNAL: LazyLock<FancyRegex> = LazyLock::new(|| {
+    FancyRegex::new(
+        r"(?ix) \b(?:1[4-9]|20)\d{2}\b
+              | \b\d{1,4}\s*[:\u{2013}\-]\s*\d{1,4}\b
+              | \b(?:press|verlag|publishers?|university|editions?)\b",
+    )
+    .expect("a valid pattern")
+});
+
+/// How many entry openings make a run worth calling a reference list.
+///
+/// Three. A chapter of a reader ends with four or five "further reading"
+/// lines and no heading over them; a page of prose has none.
+const MIN_RUN: usize = 3;
+
+/// A page number written as a link, which is how a converted index lists
+/// where a name appears: `[85](Chapter003.html#page_85)`.
+static PAGE_LINK: LazyLock<FancyRegex> = LazyLock::new(|| {
+    FancyRegex::new(r"\[\s*\d{1,4}(?:\s*[\u{2013}\-]\s*\d{1,4})?\s*\]\([^)]*\)")
+        .expect("a valid pattern")
+});
+
+/// Whether an entry says what the work is, rather than only where it is.
+///
+/// `Newton, Isaac, 5, 93, 141, 144` opens exactly like a bibliography entry
+/// and is a line of an index: a name, and then nothing but page numbers. A
+/// reference names a title and a publisher, which is several real words —
+/// and does not list the same page number twice as a link.
+fn names_a_work(entry: &str) -> bool {
+    // Two or more page links and it is an index line, whatever else it says.
+    if PAGE_LINK.find_iter(entry).filter_map(Result::ok).count() >= 2 {
+        return false;
+    }
+    entry
+        .split(|c: char| !c.is_alphabetic())
+        .filter(|word| word.chars().count() >= 3)
+        .count()
+        >= MIN_WORDS
+}
+
+/// How many words of three letters or more an entry needs before it is
+/// naming a work rather than listing pages.
+const MIN_WORDS: usize = 5;
+
+/// Whether a chunk carries a run of reference entries with nothing marking
+/// them — no numbers, no heading, just the shape.
+///
+/// A reader or a companion ends each chapter with a short list like this,
+/// indented under the last paragraph of the essay. Nothing says it is a
+/// bibliography, so neither a chapter title nor a note number can find it.
+pub fn looks_like_reference_run(text: &str) -> bool {
+    let openings: Vec<usize> = ENTRY_OPENING
+        .find_iter(text)
+        .filter_map(Result::ok)
+        .map(|found| found.start())
+        .collect();
+    if openings.len() < MIN_RUN {
+        return false;
+    }
+    // Each one has to cite something, or a page of letters signed
+    // `Yours, Charles` would qualify.
+    let mut cited = 0;
+    for start in &openings {
+        // The entry is the rest of its own line. Taking it up to the next
+        // opening instead pools several lines of an index together, and four
+        // page-number lines between them carry enough words to pass for a
+        // title.
+        let rest = &text[*start..];
+        let end = rest.find('\n').unwrap_or(rest.len());
+        let entry: String = rest[..end].chars().take(ENTRY_WINDOW).collect();
+        if names_a_work(&entry) && ENTRY_SIGNAL.is_match(&entry).unwrap_or(false) {
+            cited += 1;
+            if cited >= MIN_RUN {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Whether a chunk carries footnote or endnote citation material.
 ///
 /// The structural signal first, when the source had one. Otherwise each note
@@ -127,6 +223,12 @@ pub fn cites_something(entry: &str) -> bool {
 /// characters, and enough of them have to look like citations.
 pub fn looks_like_citations(text: &str) -> bool {
     if text.contains(SENTINEL) {
+        return true;
+    }
+    // A run of entries with nothing marking them counts too: the flag means
+    // "this chunk carries citation material", and a reader's end-of-chapter
+    // list carries as much of it as a page of numbered notes.
+    if looks_like_reference_run(text) {
         return true;
     }
 
@@ -156,6 +258,51 @@ pub fn strip_sentinel(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_reading_list_with_nothing_marking_it_is_citation_material() {
+        // The end of a chapter in a reader: no heading, no numbers, just the
+        // shape, indented under the last paragraph of the essay.
+        let page = "\
+In the second half of the twentieth century, dualism was widely rejected.
+
+    Block, N. 1981. Psychologism and behaviorism. Philosophical Review 90:5-43.
+    Dennett, D. C. 1987. The Intentional Stance. MIT Press.
+    Geach, P. 1957. Mental Acts. Routledge and Kegan Paul.
+";
+        assert!(looks_like_reference_run(page));
+        assert!(looks_like_citations(page));
+    }
+
+    #[test]
+    fn a_page_of_an_index_opens_the_same_way_and_is_not() {
+        // `Surname, Given, <page numbers>` is the shape of both. What a
+        // reference has after the name is a title.
+        let index = "\
+Newmarch, William, 18n, 233n
+Newton, Isaac, 5, 93, 141, 144, 145 & n, 166 & n, 270 & n, 285 & n, 371
+Newton, John, 304n, 306n, 307n
+Nightingale, Florence, 315n
+";
+        assert!(!looks_like_reference_run(index));
+
+        // The same, once a converter has written the pages as links.
+        let linked = "\
+Wedick, James J., [85](Chapter003.html#page_85), [88](Chapter003.html#page_88)
+Western New York Task Force, [27](Chapter001.html#page_27), [45](Chapter002.html#page_45)
+Wright, Lawrence, [13](Intro.html#page_13), [22](Chapter001.html#page_22)
+";
+        assert!(!looks_like_reference_run(linked));
+    }
+
+    #[test]
+    fn three_entries_are_a_run_and_two_are_not() {
+        let two = "\
+    Block, N. 1981. Psychologism and behaviorism. Philosophical Review 90:5-43.
+    Dennett, D. C. 1987. The Intentional Stance. MIT Press.
+";
+        assert!(!looks_like_reference_run(two));
+    }
+
     use super::*;
 
     #[test]
