@@ -158,12 +158,19 @@ is the body of the page rather than a note that lost its number, and it is
 left out. The copyright line a digitised book prints at the foot of every
 page is cut off the end of whatever note it landed on.
 
+A page of references whose lines happen to begin on numbers is still a
+bibliography: `Mellor, Hugh (1974) "In Defense of Dispositions," Philosophical
+Review 83:157-` continues `81. Reprinted in Mellor (1991):104-22.`, and that
+`81.` is half a page range rather than a note number. More lines opening on a
+surname than there are markers decides it.
+
 **A bibliography** numbers nothing, so the signal is layout: a blank line
 between entries, a hanging indent under each, or the surname-comma opening
 that nearly every author-first entry begins with. Whichever the block carries
-is the one used. When it carries none of them the fallback is one entry per
-line, which is right for a list that was never wrapped and visibly wrong for
-one that was.
+is the one used — and each block a blank line produces is looked at again,
+because the blank line is often after the running head and not between the
+entries under it. Inside a block, one line opening on a surname and a comma
+is enough: a block is a single entry or a list of them, not a mixture.
 
 ## The forms it reads
 
@@ -176,6 +183,9 @@ one that was.
 | Chicago short note | `Unger, Dutch Shipbuilding, 33-4` |
 | Commas only | `Miller, David, On Nationality, Oxford: Clarendon Press, 1995` |
 | Commas and a place | `Cheyne, T. K., Founders of Old Testament Criticism, London, 1893.` |
+| Reading list, unmarked | `Block, N. 1981. Psychologism and behaviorism. Philosophical Review 90:5-43.` |
+| Editor in the author's place | `Barratt, Alexandra, ed. Women's Writing in Middle English. London: Longman, 1992.` |
+| A reprint's two years | `Schleiermacher, Friedrich. 1813/1963. "Ueber die verschiedenen Methoden…"` |
 | Chapter in a book | `Brown, Peter. "Sorcery…" In *Witchcraft Confessions*, ed. Mary Douglas, 17-45. London: Tavistock, 1970.` |
 
 **Where the italics sit decides what they are.** In `Peirce (1878). Plain
@@ -204,6 +214,14 @@ back. Nor does a run carrying a page reference or a semicolon count as one:
 that is two entries run together. A quotation mark with no partner means the
 cut landed inside a title — unless it is the last character, which is a
 stray an opening mark was lost from.
+
+**Take a keyed short cite for a reference.** `Mate selection: Buss, 1989;
+Symons, 1979.` keys a note's own words to works given in full elsewhere. The
+topic is not an author and `Buss, 1989` is not a work, so it is flagged
+`continuation` like `ibid.`
+
+**Take a translator's note for a reference.** An em dash and a role at the
+end — `— Ed.`, `— Tr.` — is how a translator signs a note of their own.
 
 **Take chapter and verse for a work.** `Matthew 4:17` and `Cf. Deuteronomy
 18:15-19; Isaiah 53` are scripture references, which is most of what the
