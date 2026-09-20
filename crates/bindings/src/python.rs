@@ -220,6 +220,81 @@ fn identify<'py>(py: Python<'py>, name: &str, data: &[u8]) -> PyResult<Bound<'py
     to_py(py, &crate::identify(name, data))
 }
 
+/// A catalogue record audited: what is wrong with it, and the repairs that
+/// need no lookup.
+#[pyfunction]
+fn clean_record<'py>(py: Python<'py>, book: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    to_py(py, &crate::clean_record(&from_py(book)?))
+}
+
+/// What is wrong with a record, named.
+#[pyfunction]
+#[pyo3(signature = (title = None, author = None, isbn = None))]
+fn record_problems(title: Option<&str>, author: Option<&str>, isbn: Option<&str>) -> Vec<String> {
+    crate::record_problems(title, author, isbn)
+}
+
+/// How much attention a set of reasons deserves, worst first.
+#[pyfunction]
+fn record_severity(reasons: Vec<String>) -> u32 {
+    crate::record_severity(&reasons)
+}
+
+/// Whether the title has been copied into the author field.
+#[pyfunction]
+#[pyo3(signature = (title = None, author = None))]
+fn title_in_author(title: Option<&str>, author: Option<&str>) -> bool {
+    crate::title_in_author(title, author)
+}
+
+/// Whether an author field names a person rather than a publisher.
+#[pyfunction]
+fn looks_like_person(author: &str) -> bool {
+    crate::looks_like_person(author)
+}
+
+/// Whether a title is set in capitals throughout.
+#[pyfunction]
+fn is_shouting(title: &str) -> bool {
+    crate::is_shouting(title)
+}
+
+/// A title in title case, leaving the small words small.
+#[pyfunction]
+fn title_case(title: &str) -> String {
+    crate::title_case(title)
+}
+
+/// A title with the underscores a filename left in it taken out.
+#[pyfunction]
+fn clean_underscores(title: &str) -> String {
+    crate::clean_underscores(title)
+}
+
+/// Whether a string is a well-formed ISBN, check digit and all.
+#[pyfunction]
+fn valid_isbn(text: &str) -> bool {
+    crate::valid_isbn(text)
+}
+
+/// An ISBN found in a run of text.
+#[pyfunction]
+fn isbn_from_text(text: &str) -> Option<String> {
+    crate::isbn_from_text(text)
+}
+
+/// An ISBN found in a filename.
+#[pyfunction]
+fn isbn_from_filename(name: &str) -> Option<String> {
+    crate::isbn_from_filename(name)
+}
+
+/// Whether two titles name the same work.
+#[pyfunction]
+fn same_work(ours: &str, theirs: &str) -> bool {
+    crate::same_work(ours, theirs)
+}
+
 /// The subject a heading means under a scheme, or `None`.
 #[pyfunction]
 fn canonical_subject(scheme: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String>> {
@@ -338,6 +413,18 @@ fn _catena(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(looks_like_footnote_citations, module)?)?;
     module.add_function(wrap_pyfunction!(suggest_author, module)?)?;
     module.add_function(wrap_pyfunction!(needs_subject, module)?)?;
+    module.add_function(wrap_pyfunction!(clean_record, module)?)?;
+    module.add_function(wrap_pyfunction!(record_problems, module)?)?;
+    module.add_function(wrap_pyfunction!(record_severity, module)?)?;
+    module.add_function(wrap_pyfunction!(title_in_author, module)?)?;
+    module.add_function(wrap_pyfunction!(looks_like_person, module)?)?;
+    module.add_function(wrap_pyfunction!(is_shouting, module)?)?;
+    module.add_function(wrap_pyfunction!(title_case, module)?)?;
+    module.add_function(wrap_pyfunction!(clean_underscores, module)?)?;
+    module.add_function(wrap_pyfunction!(valid_isbn, module)?)?;
+    module.add_function(wrap_pyfunction!(isbn_from_text, module)?)?;
+    module.add_function(wrap_pyfunction!(isbn_from_filename, module)?)?;
+    module.add_function(wrap_pyfunction!(same_work, module)?)?;
     module.add_function(wrap_pyfunction!(compose_subjects, module)?)?;
     module.add_function(wrap_pyfunction!(canonical_subject, module)?)?;
     module.add_function(wrap_pyfunction!(citation_prompt, module)?)?;

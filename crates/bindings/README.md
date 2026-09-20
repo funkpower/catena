@@ -84,6 +84,12 @@ except ValueError as why:
 | `canonical_subject` | what a closed subject scheme calls a heading |
 | `compose_subjects` | the subjects a book should carry under one |
 | `needs_subject` | whether it carries a heading the scheme knows |
+| `clean_record` | a whole catalogue record audited and repaired |
+| `record_problems`, `record_severity` | what is wrong with one, and how much |
+| `title_in_author`, `looks_like_person` | the two commonest catalogue faults |
+| `is_shouting`, `title_case`, `clean_underscores` | the repairs that need no lookup |
+| `valid_isbn`, `isbn_from_text`, `isbn_from_filename` | ISBNs, checked and found |
+| `same_work` | whether two titles name the same book |
 | `citation_prompt` | the question `citefind --prompt` writes |
 | `merge_citation_reply` | what `citefind --merge` does with the answer |
 

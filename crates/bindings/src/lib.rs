@@ -215,6 +215,71 @@ pub fn parse_identifier(text: &str) -> Option<idnorm::Identifier> {
     idnorm::parse(text)
 }
 
+/// A catalogue record audited: what is wrong with it, and the repairs that
+/// need no lookup.
+pub fn clean_record(book: &bibclean::Book) -> bibclean::Cleaned {
+    bibclean::clean(book)
+}
+
+/// What is wrong with a record, named.
+pub fn record_problems(
+    title: Option<&str>,
+    author: Option<&str>,
+    isbn: Option<&str>,
+) -> Vec<String> {
+    bibclean::reasons::problems(title, author, isbn)
+}
+
+/// How much attention a set of reasons deserves, worst first.
+pub fn record_severity(reasons: &[String]) -> u32 {
+    bibclean::reasons::severity(reasons)
+}
+
+/// Whether the title has been copied into the author field.
+pub fn title_in_author(title: Option<&str>, author: Option<&str>) -> bool {
+    bibclean::reasons::title_in_author(title, author)
+}
+
+/// Whether an author field names a person rather than a publisher or a shelf.
+pub fn looks_like_person(author: &str) -> bool {
+    bibclean::reasons::looks_like_person(author)
+}
+
+/// Whether a title is set in capitals throughout.
+pub fn is_shouting(title: &str) -> bool {
+    bibclean::fix::is_shouting(title)
+}
+
+/// A title in title case, leaving the small words small.
+pub fn title_case(title: &str) -> String {
+    bibclean::fix::title_case(title)
+}
+
+/// A title with the underscores a filename left in it taken out.
+pub fn clean_underscores(title: &str) -> String {
+    bibclean::fix::clean_underscores(title)
+}
+
+/// Whether a string is a well-formed ISBN, check digit and all.
+pub fn valid_isbn(text: &str) -> bool {
+    bibclean::isbn::valid(text)
+}
+
+/// An ISBN found in a run of text.
+pub fn isbn_from_text(text: &str) -> Option<String> {
+    bibclean::isbn::from_text(text)
+}
+
+/// The same, for a filename, where the digits are often all there is.
+pub fn isbn_from_filename(name: &str) -> Option<String> {
+    bibclean::isbn::from_filename(name)
+}
+
+/// Whether two titles name the same work.
+pub fn same_work(ours: &str, theirs: &str) -> bool {
+    bibclean::matching::same_work(ours, theirs)
+}
+
 /// What a closed subject scheme says about a set of headings.
 ///
 /// The scheme is supplied rather than built in — which subjects a collection
@@ -302,6 +367,29 @@ mod tests {
         );
         assert_eq!(scrub_markdown(MARKDOWN), mdscrub::scrub(MARKDOWN));
         assert_eq!(count_tokens("a passage"), textkit::count("a passage"));
+    }
+
+    #[test]
+    fn the_record_surface_agrees_with_the_library_underneath() {
+        assert_eq!(
+            record_problems(Some("THE REPUBLIC"), Some("Plato"), None),
+            bibclean::reasons::problems(Some("THE REPUBLIC"), Some("Plato"), None)
+        );
+        assert_eq!(title_case("THE REPUBLIC"), "The Republic");
+        assert_eq!(clean_underscores("the_republic_pdf"), "the republic");
+        assert!(valid_isbn("9780306406157"));
+        assert_eq!(
+            isbn_from_filename("book-9780306406157.epub").as_deref(),
+            Some("9780306406157")
+        );
+        assert!(same_work(
+            "Homo Deus",
+            "Homo Deus: A Brief History of Tomorrow"
+        ));
+        // Name *shape*, which is deliberately permissive — it is one signal
+        // among several in `record_problems`, not a verdict on its own.
+        assert!(looks_like_person("Copleston, Frederick"));
+        assert!(!looks_like_person(""));
     }
 
     #[test]
