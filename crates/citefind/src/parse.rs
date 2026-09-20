@@ -394,11 +394,20 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
     if let Some(year_at) = dated {
         out.authors = authors(&text[..year_at.0]);
         let tail = text[year_at.1..].trim_start_matches(|c: char| ".,:‘“\" ".contains(c));
-        let tail_at = text.len() - tail.len();
         // Quotation marks count as the title only where they open the tail.
         // Further in they are a quotation inside a title, not the title.
+        // Whether a span opens the tail: it begins after the year, and what
+        // sits between the two is punctuation and space. Asked that way
+        // rather than by counting bytes — a curly quotation mark is three of
+        // them, so a tolerance of two silently missed every author-date
+        // entry that set its title in curly quotes, which is most of them.
         let opens = |at: Option<(usize, usize)>| {
-            at.is_some_and(|at| at.0 + 2 >= tail_at && at.0 <= tail_at + 2)
+            at.is_some_and(|at| {
+                at.0 >= year_at.1
+                    && text[year_at.1..at.0]
+                        .chars()
+                        .all(|c| c.is_whitespace() || ".,:;'\u{2018}\u{201c}\"".contains(c))
+            })
         };
         let after_year = |at: (usize, usize)| at.0 >= year_at.1;
 
@@ -514,7 +523,9 @@ fn author_date(text: &str) -> Option<(usize, usize)> {
         }
     };
     let head = &text[..span.0];
-    if head.chars().count() > 120 || !reads_as_names(head) {
+    // A rule of dashes stands in for the author of the entry above, and an
+    // author-date entry may open on one: `—— (1994), Christianizing Homer`.
+    if head.chars().count() > 120 || !(reads_as_names(head) || repeats_author(head)) {
         return None;
     }
     // Something has to follow the year, or there is no title to find.
@@ -1317,6 +1328,48 @@ mod tests {
         assert_eq!(found.title.as_deref(), Some("How to make our ideas clear"));
         assert_eq!(found.container.as_deref(), Some("Popular Science Monthly"));
         assert_eq!(found.pages.as_deref(), Some("286-302"));
+    }
+
+    #[test]
+    fn an_author_date_title_may_be_set_in_curly_quotes() {
+        // A curly quotation mark is three bytes, and a tolerance counted in
+        // bytes missed every entry set this way — which is most of them.
+        let chapter = read(
+            "Shaw, Joseph W., and Marjatta Luton. 2000. \u{201c}The Foreshore at \
+             Akrotiri.\u{201d} In *Wall Paintings of Thera*, 453-66.",
+        );
+        assert_eq!(chapter.authors, ["Shaw, Joseph W.", "Marjatta Luton"]);
+        assert_eq!(chapter.title.as_deref(), Some("The Foreshore at Akrotiri"));
+        assert_eq!(
+            chapter.container.as_deref(),
+            Some("Wall Paintings of Thera")
+        );
+
+        let article = read(
+            "James, Liz. 2003. \u{201c}Color and Meaning in Byzantium,\u{201d} \
+             *Journal of Early Christian Studies* 11.2: 223-233.",
+        );
+        assert_eq!(
+            article.title.as_deref(),
+            Some("Color and Meaning in Byzantium")
+        );
+        assert_eq!(
+            article.container.as_deref(),
+            Some("Journal of Early Christian Studies")
+        );
+    }
+
+    #[test]
+    fn an_author_date_entry_may_open_on_a_rule_of_dashes() {
+        let found = read(
+            "\u{2014}\u{2014} (1994), Christianizing Homer: The Odyssey, Plato, \
+             and the Acts of Andrew (New York: Oxford University Press).",
+        );
+        assert_eq!(found.year, Some(1994));
+        assert_eq!(
+            found.title.as_deref(),
+            Some("Christianizing Homer: The Odyssey, Plato, and the Acts of Andrew")
+        );
     }
 
     #[test]
