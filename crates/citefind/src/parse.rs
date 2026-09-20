@@ -112,7 +112,20 @@ static ROLE: LazyLock<Regex> = LazyLock::new(|| {
 /// run that carries a page reference or a semicolon — both of which mean two
 /// entries were run together, or that this was never an entry at all.
 static NOT_A_TITLE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)^[\d\p{Pd}]|\bpp?\.\s*\d|;|\bvol\.\s*\d|\bibid\b").expect("a valid pattern")
+    Regex::new(
+        r#"(?ix)
+      ^[\d\p{Pd}]                      # opens on a page or a volume number
+    | \bpp?\.\s*\d                     # carries a page reference
+    | ;                                # two entries run together
+    | \bvol\.\s*\d
+    | \bibid\b
+    | [”“"]                            # a quotation mark the capture did not
+                                       # take, so the cut landed inside a title
+    | \\                               # an escape conversion left behind
+    | ,\s+(?:eds?|trans)\.\s+\p{Lu}     # ran past the title into a credit
+    "#,
+    )
+    .expect("a valid pattern")
 });
 
 /// A page reference or a bracketed imprint: what a citation has and a remark
@@ -1114,6 +1127,42 @@ mod tests {
         );
         assert_eq!(found.title, None, "{found:#?}");
         assert!(found.missing().contains(&"title"));
+    }
+
+    #[test]
+    fn a_title_the_cut_landed_inside_of_is_not_reported() {
+        // The chunk began part-way through this entry, so the opening of the
+        // title — and its opening quotation mark — are on the page before.
+        let found = read(
+            "Mediterraneans.\" In Rethinking the Mediterranean, ed. William V. \
+             Harris, 64-93. Oxford: Oxford University Press, 2005.",
+        );
+        assert_eq!(found.title, None, "{found:#?}");
+        assert_eq!(found.container.as_deref(), Some("Oxford University Press"));
+    }
+
+    #[test]
+    fn a_title_that_ran_on_into_the_publisher_is_not_reported() {
+        let found = read(
+            "Goodwin, F. K. and Jamison, K. R. (1990). Manicdepressive illness \
+             Oxford University Press, New York.\\",
+        );
+        assert_eq!(found.authors, ["Goodwin, F. K.", "Jamison, K. R."]);
+        assert_eq!(found.year, Some(1990));
+        assert_eq!(found.title, None, "{found:#?}");
+    }
+
+    #[test]
+    fn an_edition_in_a_title_is_not_an_editors_credit() {
+        // `, 2nd ed. (` is part of the title; `, ed. William Harris` is not.
+        let found = read(
+            "Carter Lindberg, The European Reformations, 2nd ed. (West Sussex, UK: Blackwell, 2010), 161.",
+        );
+        assert_eq!(
+            found.title.as_deref(),
+            Some("The European Reformations, 2nd ed")
+        );
+        assert_eq!(found.container.as_deref(), Some("Blackwell"));
     }
 
     #[test]

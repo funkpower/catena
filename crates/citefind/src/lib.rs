@@ -53,6 +53,10 @@ impl Kind {
 }
 
 /// One reference, as found and as far as it could be read.
+///
+/// Every field is written on every record, `null` where there is nothing.
+/// A key that comes and goes is a key every consumer has to guard, and the
+/// whole point of `unsettled` is that an absence be legible.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Reference {
     /// Record version.
@@ -66,21 +70,16 @@ pub struct Reference {
     /// is an interpretation of this one and somebody will want to check it.
     pub text: String,
     /// The note number this entry carried, where it carried one.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub marker: Option<String>,
     /// Who wrote it, in the order the entry gave them.
     pub authors: Vec<String>,
     /// The year of publication.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub year: Option<u32>,
     /// The title of the work cited — the article, not the journal it is in.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     /// What it appeared in: a journal, or the publisher of a book.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub container: Option<String>,
     /// The pages, as written.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub pages: Option<String>,
     /// Any identifiers the entry carried, normalised.
     pub ids: Vec<Id>,

@@ -39,8 +39,8 @@ cargo install --git https://git.pumpin.online/funkpower/catena citefind
 
 ```
 $ citefind bibliography.md
-{"v":1,"idx":0,"text":"Smith, John. *The Making of the Second Estate*. Oxford: Clarendon Press, 1998.","authors":["Smith, John"],"year":1998,"title":"The Making of the Second Estate","container":"Clarendon Press","ids":[],"kind":"book","continuation":false,"unsettled":[]}
-{"v":1,"idx":1,"text":"Doe, Jane, and Peter Brown. \"Obligation and Its Limits.\" *Journal of Medieval Studies* 12, no. 3 (2001): 45-67.","authors":["Doe, Jane","Peter Brown"],"year":2001,"title":"Obligation and Its Limits","container":"Journal of Medieval Studies","pages":"45-67","ids":[],"kind":"article","continuation":false,"unsettled":[]}
+{"v":1,"idx":0,"text":"Smith, John. *The Making of the Second Estate*. Oxford: Clarendon Press, 1998.","marker":null,"authors":["Smith, John"],"year":1998,"title":"The Making of the Second Estate","container":"Clarendon Press","pages":null,"ids":[],"kind":"book","continuation":false,"unsettled":[]}
+{"v":1,"idx":1,"text":"Doe, Jane, and Peter Brown. \"Obligation and Its Limits.\" *Journal of Medieval Studies* 12, no. 3 (2001): 45-67.","marker":null,"authors":["Doe, Jane","Peter Brown"],"year":2001,"title":"Obligation and Its Limits","container":"Journal of Medieval Studies","pages":"45-67","ids":[],"kind":"article","continuation":false,"unsettled":[]}
 ```
 
 What a book cites, by year:
@@ -128,6 +128,10 @@ the mangled few, and they are cheaper to ask about together.
 | `kind` | `book`, `article`, `chapter`, `web` or `other` |
 | `continuation` | Whether it only points back at an earlier entry |
 | `unsettled` | The fields it could not read off the entry |
+
+Every field is written on every record, `null` where there is nothing. A key
+that comes and goes is a key every consumer has to guard, and the point of
+`unsettled` is that an absence be legible.
 
 `text` is kept whatever else was read, because every other field is an
 interpretation of it and somebody will want to check.
