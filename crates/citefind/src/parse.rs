@@ -624,10 +624,14 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
     // than no answer, because it is stored and looks settled.
     if guessed && out.authors.is_empty() && out.ids.is_empty() {
         let refused = out.title.as_deref().is_some_and(|title| {
-            // A siglum is not the name of a work whatever else the entry
-            // gave up; a remark is only recognisable as one when nothing
-            // else was read, because a container vouches for the rest.
-            SIGLUM.is_match(title) || (out.container.is_none() && PREDICATE.is_match(title))
+            // Neither a siglum nor a remark is the name of a work, whatever
+            // else came off the entry. A container does not vouch for the
+            // title here: the commonest note of all remarks first and cites
+            // second — `As Lewis White Beck has rightly put it. See his
+            // Early German Philosophy (Cambridge, Mass., 1969), p. 439.` —
+            // and reading that as a work with a container stored the remark
+            // and lost the book.
+            SIGLUM.is_match(title) || PREDICATE.is_match(title)
         });
         if refused {
             out.title = None;
@@ -2233,6 +2237,21 @@ mod tests {
             let named = one(remark, Some("12")).and_then(|read| read.title);
             assert_eq!(named, None, "stored a remark as a title: {remark}");
         }
+    }
+
+    #[test]
+    fn a_note_that_remarks_first_and_cites_second_keeps_neither_as_a_title() {
+        // The remark opened the note and the citation followed it, so the
+        // second sentence became a container and vouched for the first.
+        // Nothing in this names a work the record can carry.
+        let read = one(
+            "As Lewis White Beck has rightly put it. See his Early German \
+             Philosophy (Cambridge, Mass., 1969), p. 439.",
+            None,
+        )
+        .expect("a record");
+        assert_eq!(read.title, None);
+        assert_eq!(read.pages.as_deref(), Some("439"));
     }
 
     #[test]

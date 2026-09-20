@@ -235,10 +235,15 @@ Society since 1900` survives, which is why the imprint is asked for narrowly
 based himself principally on the Bible` and `Dewey remarks that we experience
 most things as temporal` are what a page of endnotes is mostly made of. A
 title read off markup is taken at its word; a title guessed at by cutting the
-entry at its sentence stops is not, and where the entry gave up nothing else
-— no author, no identifier, no container — that guess has to be a noun
-phrase. A finite verb is what separates the remark from `Quaestiones
-Parisienses`.
+entry at its sentence stops is not, and where the entry named no author and
+no identifier, that guess has to be a noun phrase. A finite verb is what
+separates the remark from `Quaestiones Parisienses`.
+
+The commonest note of all remarks first and cites second — `As Lewis White
+Beck has rightly put it. See his Early German Philosophy (Cambridge, Mass.,
+1969), p. 439.` — so what follows the remark is read as the container and
+would otherwise vouch for it. It does not: reading that entry as a work with
+a container stored the remark and lost the book.
 
 **Take a siglum for a work.** `H, 272`, `FR,120-122`, `GNO`. The key that
 expands the abbreviation is a page of its own that the entry does not carry,
