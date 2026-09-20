@@ -15,7 +15,12 @@ use fancy_regex::Regex;
 /// wrap a citation, because those are never part of one in practice and
 /// leaving them on makes two spellings of the same identifier.
 static DOI: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(10\.\d{4,9}/[^\s"'<>,;()\[\]{}]+)"#).expect("a valid pattern")
+    // Brackets are part of a DOI far more often than they are punctuation
+    // around one: Elsevier alone publishes hundreds of thousands in the form
+    // `10.1016/S0140-6736(16)30370-1`. They are taken, and an unbalanced one
+    // at the end — the closing half of a bracket the sentence opened — is
+    // given back afterwards.
+    Regex::new(r#"(?i)\b(10\.\d{4,9}/[^\s"'<>,;]+)"#).expect("a valid pattern")
 });
 
 /// The prefixes a DOI arrives wearing.
@@ -58,6 +63,8 @@ pub fn parse(text: &str) -> Option<String> {
     // rather than to the identifier. A closing bracket does too, unless the
     // suffix opened one.
     let id = id.trim_end_matches(['.', ',', ';', ':']);
+    let id = trim_unclosed(id);
+    let id = id.trim_end_matches(['.', ',', ';', ':']);
     if id.len() < 6 || !id.contains('/') {
         return None;
     }
@@ -68,8 +75,62 @@ pub fn parse(text: &str) -> Option<String> {
     Some(id.to_lowercase())
 }
 
+/// Give back a closing bracket the DOI never opened.
+///
+/// `(10.1234/foo)` in a sentence ends on a bracket that belongs to the
+/// sentence; `10.1016/S0140-6736(16)30370-1` ends on digits and keeps the
+/// pair in the middle of it. Counting is what tells them apart.
+fn trim_unclosed(id: &str) -> &str {
+    let mut end = id.len();
+    loop {
+        let head = &id[..end];
+        let Some(last) = head.chars().last() else {
+            return head;
+        };
+        let opener = match last {
+            ')' => '(',
+            ']' => '[',
+            '}' => '{',
+            _ => return head,
+        };
+        let body = &head[..head.len() - last.len_utf8()];
+        if body.matches(opener).count() > body.matches(last).count() {
+            return head;
+        }
+        end -= last.len_utf8();
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_doi_may_have_brackets_in_it() {
+        // Elsevier publishes hundreds of thousands in this form, and the
+        // pattern used to stop at the first bracket and hand back
+        // `10.1016/s0140-6736` — a different, wrong, resolvable DOI.
+        assert_eq!(
+            parse("10.1016/S0140-6736(16)30370-1").as_deref(),
+            Some("10.1016/s0140-6736(16)30370-1")
+        );
+        assert_eq!(
+            parse("https://doi.org/10.1016/S0140-6736(23)00441-5").as_deref(),
+            Some("10.1016/s0140-6736(23)00441-5")
+        );
+        assert_eq!(parse("10.1234/a[b]c").as_deref(), Some("10.1234/a[b]c"));
+    }
+
+    #[test]
+    fn a_bracket_the_sentence_opened_is_given_back() {
+        for (text, want) in [
+            ("see (10.1234/foo) here", "10.1234/foo"),
+            ("10.1234/foo).", "10.1234/foo"),
+            ("[10.1234/foo]", "10.1234/foo"),
+            ("10.1234/foo(bar)", "10.1234/foo(bar)"),
+        ] {
+            assert_eq!(parse(text).as_deref(), Some(want), "{text}");
+        }
+    }
+
     use super::*;
 
     #[test]
