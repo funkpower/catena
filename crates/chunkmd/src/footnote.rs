@@ -60,6 +60,10 @@ static NOTE_MARKER: LazyLock<FancyRegex> = LazyLock::new(|| {
       | \[ {SPACE}* (?:<span[^>]*>)? {SPACE}* \d{{1,3}}
         {SPACE}* (?:</span>)? {SPACE}* \] \( \#[^)]* \)  # [42](#...)
       | <sup> {SPACE}* \d{{1,3}} {SPACE}* </sup>   # bare sup note
+      | \\?\[ {SPACE}* (?: \[ {SPACE}* )?      # `\[←788 \]` and
+        [\u{{2190}}\u{{2191}}\u{{21D1}}\u{{23CE}}]  # `\[[←193](file#frag) \]`
+        {SPACE}* \d{{1,4}} {SPACE}*
+        (?: \] \( [^)\s]* \) )? {SPACE}* \\?\]
     )"
     ))
     .expect("a valid pattern")

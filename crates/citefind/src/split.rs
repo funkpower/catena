@@ -99,6 +99,19 @@ static GLUED_NUMBER: LazyLock<Regex> =
 static COPYRIGHT_FOOTER: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"©").expect("a valid pattern"));
 
+/// The back-reference marker a whole class of EPUB conversions leaves:
+/// `\[←788 \]`, or `\[[←193](index_split_011.xhtml#citation-193) \]` where
+/// the arrow is also a link back to where the note was called.
+static ARROW_MARKER: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?x) ^ \\?\[ \s* (?:\[\s*)?
+        [\x{2190}\x{2191}\x{21D1}\x{23CE}] \s*
+        (\d{1,4}) \s*
+        (?: \] \( [^)\s]* \) )? \s* \\?\] \s*",
+    )
+    .expect("a valid pattern")
+});
+
 /// A bullet or a blockquote marker, which conversion puts in front of a note
 /// often enough to matter. A leading `*` is left alone: it opens an italic
 /// title as often as it opens a list.
@@ -266,7 +279,7 @@ fn strip_marker(raw: &str) -> Entry {
     let text = BULLET.replace(&text, "").to_string();
     let (bare, from) = visible(&text, 160);
 
-    for pattern in [&*ANCHOR_LINK, &*ID_MARKER, &*LEADING_NUMBER] {
+    for pattern in [&*ARROW_MARKER, &*ANCHOR_LINK, &*ID_MARKER, &*LEADING_NUMBER] {
         let Some(found) = pattern.captures(&bare) else {
             continue;
         };

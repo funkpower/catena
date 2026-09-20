@@ -343,3 +343,27 @@ were always joined onto an absolute root.
 **Measured:** 32 cases, including a file at the root, a name beginning with a
 dash, a name that is only a dot, a non-ASCII name and an extension that is
 only a dot. Ordinary paths — the overwhelming majority — are byte-identical.
+
+---
+
+## chunkmd — the back-reference marker a whole class of EPUBs leaves
+
+`looks_like_citations` recognises one note marker the Python it was ported
+from did not:
+
+    \[←788 \]
+    \[[←193](index_split_011.xhtml#citation-193) \]
+
+An arrow pointing back to where the note was called, sometimes as a link and
+sometimes not, wrapped in escaped brackets. It is what a common EPUB
+conversion leaves behind, and ten books of the corpus use it — including both
+volumes of *The Decline of the West*, whose endnotes run to 830 entries of
+`Krumbacher, op. cit., pp. 969-90` and were being read as body prose. Every
+one of those books had zero citations extracted.
+
+The parity suite does not cover the footnote signal and no fixture carries
+the marker, so the tests agree either way. This is recorded because it is a
+deliberate difference from the Python, not because anything caught it.
+
+`citefind` strips the same marker when it cuts a page of notes into notes.
+
