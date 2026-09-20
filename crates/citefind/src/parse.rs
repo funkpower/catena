@@ -189,6 +189,7 @@ static SHORT_CITE: LazyLock<Regex> = LazyLock::new(|| {
         r"(?ix) ^ (?:(?:see|cf\.?|and)\s+)?
         \p{Lu}[\p{L}'’\-]{1,24}(?:\s+(?:and|&)\s+\p{Lu}[\p{L}'’\-]{1,24})?
         \s+ (?:1[4-9]|20)\d{2} [a-z]?
+        (?: \s*(?:,|\s+and)\s* (?:1[4-9]|20)\d{2}[a-z]? )*
         (?: \s* ,\s* (?:pp?\.\s*)? \d{1,4}(?:[-–]\d{1,4})? )?
         \.? $",
     )
@@ -217,6 +218,15 @@ static SERIES_CITE: LazyLock<Regex> = LazyLock::new(|| {
         r"(?x) ^ (?:PG|PL|CSEL|CCSL|CCSG|SC|NPNF|ANF|GCS|PO|CSCO|ACO|ACW|FC|LCL|SVS)
         \s* \d{0,3} (?:[/.]\d{1,3})* \s* :? \s*
         [\d\s,:.–-]* \.? $",
+    )
+    .expect("a valid pattern")
+});
+
+/// What a note that thanks people opens with. These sit among the endnotes,
+/// name a dozen people, and cite nothing.
+static ACKNOWLEDGEMENT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?i)^(?:(?:my\s+|with\s+)?thanks\b|i\s+(?:am\s+(?:grateful|indebted)|thank|should\s+like\s+to\s+thank|owe)|this\s+(?:paper|chapter|essay|paper)\s+(?:was|is|grew)|an\s+earlier\s+version|parts?\s+of\s+this)",
     )
     .expect("a valid pattern")
 });
@@ -341,7 +351,11 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
     if !CITATION_SIGNAL.is_match(text) {
         return None;
     }
-    if is_scripture(text) || BIOGRAPHY.is_match(text) || PRINT_FURNITURE.is_match(text) {
+    if is_scripture(text)
+        || BIOGRAPHY.is_match(text)
+        || PRINT_FURNITURE.is_match(text)
+        || ACKNOWLEDGEMENT.is_match(text)
+    {
         return None;
     }
     // A short cite points at a full entry elsewhere, the way `ibid.` points
@@ -845,6 +859,13 @@ fn tidy_title(raw: &str) -> String {
     // A trailing backslash is a line break conversion left behind, not part
     // of anything.
     let text = text.trim_end_matches('\\');
+    // A conversion that lost an opening quotation mark leaves its partner at
+    // the end. That is a stray, not evidence the cut went wrong — which is
+    // what one in the middle of a run means.
+    let text = match text.matches('"').count() == 1 && text.ends_with('"') {
+        true => text.trim_end_matches('"'),
+        false => text,
+    };
     // The quotation marks a style puts round a title are the style's, not the
     // title's, and only the outermost pair is trimmed.
     let text =
@@ -1560,6 +1581,40 @@ mod tests {
     }
 
     #[test]
+    fn a_stray_quotation_mark_at_the_end_is_not_a_cut_title() {
+        // Conversion lost the opening mark and left its partner behind.
+        let found = read(
+            "McClelland, J.L, D.E. Rumelhart, & G.E. Hinton 1986. The appeal \
+             of parallel distributed processing\". In Parallel Distributed \
+             Processing, MIT Press.",
+        );
+        assert_eq!(
+            found.title.as_deref(),
+            Some("The appeal of parallel distributed processing")
+        );
+        // One in the middle still means the opening is on the page before.
+        let cut = read(
+            "Mediterraneans.\" In Rethinking the Mediterranean, ed. William V. \
+             Harris, 64-93. Oxford: Oxford University Press, 2005.",
+        );
+        assert_eq!(cut.title, None, "{cut:#?}");
+    }
+
+    #[test]
+    fn a_note_that_thanks_people_cites_nothing() {
+        for note in [
+            "Thanks to Ned Block, Frank Jackson, David Kaplan and David Lewis \
+             for discussion of these matters over many years.",
+            "I am grateful to the seminar at Leiden for pressing me on this, \
+             and to two anonymous readers for the Press.",
+            "An earlier version of this chapter was given at the 1998 meeting \
+             of the Society, and I thank those present.",
+        ] {
+            assert!(one(note, None).is_none(), "{note}");
+        }
+    }
+
+    #[test]
     fn a_short_cite_names_a_work_it_does_not_name() {
         // `Spade 1980` points at the full entry elsewhere in the same
         // bibliography, the way `ibid.` points at the note above.
@@ -1574,6 +1629,11 @@ mod tests {
         let several = read("Trentman 1970; Spade 1980.");
         assert!(several.continuation);
         assert_eq!(several.authors, ["Trentman", "Spade"]);
+
+        // One name, two years: `Spade 1975 and 1980.`
+        let years = read("Spade 1975 and 1980.");
+        assert!(years.continuation);
+        assert_eq!(years.authors, ["Spade"]);
     }
 
     #[test]
