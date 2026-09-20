@@ -112,6 +112,11 @@ static ARROW_MARKER: LazyLock<Regex> = LazyLock::new(|| {
     .expect("a valid pattern")
 });
 
+/// An HTML comment. Conversion leaves `<!-- -->` between list items and
+/// `<!-- Page 41 -->` where a page turned; neither is part of a reference.
+static COMMENT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"<!--.*?-->").expect("a valid pattern"));
+
 /// A bullet or a blockquote marker, which conversion puts in front of a note
 /// often enough to matter. A leading `*` is left alone: it opens an italic
 /// title as often as it opens a list.
@@ -276,6 +281,7 @@ fn unnumbered(text: &str) -> Vec<Entry> {
 /// further along survives.
 fn strip_marker(raw: &str) -> Entry {
     let text = cut_footer(&tidy(raw));
+    let text = tidy(&COMMENT.replace_all(&text, " "));
     let text = BULLET.replace(&text, "").to_string();
     let (bare, from) = visible(&text, 160);
 
@@ -515,6 +521,24 @@ Another Anonymous Work. Cambridge, 2001.";
              © Cambridge University Press, 2008",
         );
         assert_eq!(entry.text, "Holquist, Making War, pp. 211-12.");
+    }
+
+    #[test]
+    fn the_back_reference_marker_an_epub_conversion_leaves() {
+        let plain = strip_marker("\\[←788 \\]\u{a0}  Krumbacher, Byz. Lit.-Gesch., p. 969.");
+        assert_eq!(plain.marker.as_deref(), Some("788"));
+        assert_eq!(plain.text, "Krumbacher, Byz. Lit.-Gesch., p. 969.");
+
+        let linked =
+            strip_marker("\\[[←193](index_split_011.xhtml#citation-193) \\]\u{a0}  Œd. Rex., 642.");
+        assert_eq!(linked.marker.as_deref(), Some("193"));
+        assert_eq!(linked.text, "Œd. Rex., 642.");
+    }
+
+    #[test]
+    fn a_comment_conversion_left_behind_is_not_part_of_a_reference() {
+        let entry = strip_marker("1. Smith, *A Title* (Oxford, 1998). <!-- -->");
+        assert_eq!(entry.text, "Smith, *A Title* (Oxford, 1998).");
     }
 
     #[test]

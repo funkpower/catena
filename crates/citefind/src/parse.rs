@@ -231,6 +231,14 @@ static ACKNOWLEDGEMENT: LazyLock<Regex> = LazyLock::new(|| {
     .expect("a valid pattern")
 });
 
+/// How a translator or an editor signs a note of their own: an em dash and
+/// their role, at the very end. `Latin: "nature of the thing." — Ed.` is a
+/// gloss on the text in front of it and cites nothing.
+static GLOSS_SIGNATURE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)[—–-]{1,2}\s*(?:ed|tr|trans|transl|a\.\s*n|au)\.?\s*$")
+        .expect("a valid pattern")
+});
+
 /// A page reference or a bracketed imprint: what a citation has and a remark
 /// about the argument does not.
 static CITATION_ANCHOR: LazyLock<Regex> = LazyLock::new(|| {
@@ -358,6 +366,7 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
         || BIOGRAPHY.is_match(text)
         || PRINT_FURNITURE.is_match(text)
         || ACKNOWLEDGEMENT.is_match(text)
+        || GLOSS_SIGNATURE.is_match(text)
     {
         return None;
     }
@@ -480,6 +489,21 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
     // an absent one, and `unsettled` should say so.
     if out.title.as_deref().is_some_and(str::is_empty) {
         out.title = None;
+    }
+
+    // `See R. Hirzel, Die Person (1914), p. 7.` reads as an author-date entry
+    // — the head is all capitalised words and the year is in brackets — and
+    // then yields no title, because the title is sitting inside what was
+    // taken for the names. A note that names a work is the better reading of
+    // the same line, and having a title is how you can tell.
+    if out.title.is_none() {
+        if let Some((names, title, container)) = note_form(text) {
+            if title.is_some() {
+                out.authors = names;
+                out.title = title;
+                out.container = container.or(out.container.take());
+            }
+        }
     }
     out.kind = kind(text, &out);
 
@@ -1481,6 +1505,22 @@ mod tests {
             Some("New York University Press")
         );
         assert_eq!(found.year, Some(2000));
+    }
+
+    #[test]
+    fn a_translators_note_signs_itself_and_cites_nothing() {
+        for gloss in [
+            "Latin: \"nature of the thing.\" — Ed.",
+            "Reference to the wars between Athens and Sparta, 431-404 BC. — Ed.",
+            "Meaning here names, dates and numbers, in the usual sense. — Tr.",
+        ] {
+            assert!(one(gloss, None).is_none(), "{gloss}");
+        }
+        // A note that cites a work is still a citation, sign-off or not.
+        let real = read("See R. Hirzel, Die Person (1914), p. 7.");
+        assert_eq!(real.authors, ["R. Hirzel"]);
+        assert_eq!(real.title.as_deref(), Some("Die Person"));
+        assert_eq!(real.year, Some(1914));
     }
 
     #[test]
