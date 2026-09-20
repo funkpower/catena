@@ -223,6 +223,23 @@ topic is not an author and `Buss, 1989` is not a work, so it is flagged
 **Take a translator's note for a reference.** An em dash and a role at the
 end — `— Ed.`, `— Tr.` — is how a translator signs a note of their own.
 
+**Take a note's own remark for a work.** `The Commentator seems to have
+based himself principally on the Bible` and `Dewey remarks that we experience
+most things as temporal` are what a page of endnotes is mostly made of. A
+title read off markup is taken at its word; a title guessed at by cutting the
+entry at its sentence stops is not, and where the entry gave up nothing else
+— no author, no identifier, no container — that guess has to be a noun
+phrase. A finite verb is what separates the remark from `Quaestiones
+Parisienses`.
+
+**Take a siglum for a work.** `H, 272`, `FR,120-122`, `GNO`. The key that
+expands the abbreviation is a page of its own that the entry does not carry,
+and the heading the line sits under is not its title either.
+
+**Take the reader's furniture for a reference.** `572 next page > < previous
+page`, and the `file:///` path it points at, are what a PDF reader left in
+the text.
+
 **Take chapter and verse for a work.** `Matthew 4:17` and `Cf. Deuteronomy
 18:15-19; Isaiah 53` are scripture references, which is most of what the
 notes of a theological book are. So is `PG 4: 264` — Migne, and CSEL, NPNF,
