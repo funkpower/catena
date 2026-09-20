@@ -227,6 +227,18 @@ static NOTE_FORM: LazyLock<Regex> = LazyLock::new(|| {
         .expect("a valid pattern")
 });
 
+/// A locator: where in the work, rather than what the work is. A page, a
+/// range, a volume in roman numerals, a folio. These trail a short note and
+/// are not part of its title.
+static LOCATOR: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?ix) ^ (?:pp?\.|ff?\.|vol\.|bk\.|ch\.|no\.|n\.|sec\.)?\s*
+        (?: \d{1,5}(?:[-–—]\d{1,5})? | [ivxlcdm]+ (?:[-–—][ivxlcdm]+)? )
+        \s* (?:n\.?\s*\d{1,3})? \.? $",
+    )
+    .expect("a valid pattern")
+});
+
 /// What a note says before it gets to the citation.
 static LEAD_IN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)^(?:see|cf\.|compare|quoted|cited|as\s+quoted|reprinted)(?:\s*,?\s*(?:also|for\s+(?:example|instance)|e\.g\.|in))*\s*,?\s+")
@@ -242,8 +254,15 @@ const PARTICLES: [&str; 20] = [
 
 /// Anything that says this is a reference at all.
 static CITATION_SIGNAL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\b(?:1[4-9]|20)\d{2}\b|\bpp?\.\s*\d|https?://|\b10\.\d{4}|\bed\.|\btrans\.|\bvol\.|\bno\.|:\s*\d|\bpress\b|\buniversity\b|\bjournal\b")
-        .expect("a valid pattern")
+    Regex::new(
+        r"(?ix)
+      \b(?:1[4-9]|20)\d{2}\b | \bpp?\.\s*\d | https?:// | \b10\.\d{4}
+    | \bed\. | \btrans\. | \bvol\. | \bno\. | :\s*\d
+    | \bpress\b | \buniversity\b | \bjournal\b
+    | ,\s*\d{1,5}(?:[-–—]\d{1,5})?\s*\.?$   # a short note ends on its page
+    ",
+    )
+    .expect("a valid pattern")
 });
 
 /// A rule of dashes standing in for the author of the entry above, which is
@@ -364,7 +383,10 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
         out.title = Some(title);
         out.authors = authors(&text[..at.0]);
         out.container = container(text, &text[at.1..]);
-    } else if let Some(found) = note_form(text).or_else(|| comma_form(text)) {
+    } else if let Some(found) = note_form(text)
+        .or_else(|| comma_form(text))
+        .or_else(|| short_note(text))
+    {
         out.authors = found.0;
         out.title = found.1;
         out.container = found.2;
@@ -501,6 +523,54 @@ fn comma_form(text: &str) -> Option<(Vec<String>, Option<String>, Option<String>
         return None;
     }
     Some((names, Some(title), tidy_container(parts[at])))
+}
+
+/// Read a short note: a surname, a short title, and where in it.
+///
+/// `Unger, Dutch Shipbuilding, 33-4` and `Sjoerds, Algemene Beschryvinge, i,
+/// f I, 501-2.` — the form a history book uses for every citation after the
+/// first, once the full entry has been given. There is no year in it and no
+/// publisher; what is there is a name, a title, and a page.
+///
+/// The trailing locators are not part of the title. Neither is a year: an
+/// entry ending on one is an imprint, and belongs to `comma_form`.
+fn short_note(text: &str) -> Option<(Vec<String>, Option<String>, Option<String>)> {
+    let text = LEAD_IN.replace(text.trim(), "");
+    if sentences(&text).len() > 1 {
+        return None;
+    }
+    let parts: Vec<&str> = text
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    // It has to end on a locator, or it is some other kind of run entirely.
+    let last = parts.last()?.trim_end_matches('.');
+    if !LOCATOR.is_match(last) || looks_like_a_year(last) {
+        return None;
+    }
+    let names = authors(parts[0]);
+    if names.is_empty() {
+        return None;
+    }
+    // The title runs from after the name to the first locator.
+    let end = parts
+        .iter()
+        .skip(1)
+        .position(|part| LOCATOR.is_match(part.trim_end_matches('.')))
+        .map(|at| at + 1)
+        .unwrap_or(parts.len());
+    if end <= 1 {
+        return None;
+    }
+    let title = tidy_title(&strip_markup(&parts[1..end].join(", ")));
+    match title.chars().count() >= 4 {
+        true => Some((names, Some(title), None)),
+        false => None,
+    }
 }
 
 /// Whether a run of text is names and nothing else.
@@ -664,7 +734,10 @@ fn tidy_title(raw: &str) -> String {
     // A trailing backslash is a line break conversion left behind, not part
     // of anything.
     let text = text.trim_end_matches('\\');
-    let text = text.trim_matches(|c: char| ",.;:".contains(c) || c.is_whitespace());
+    // The quotation marks a style puts round a title are the style's, not the
+    // title's, and only the outermost pair is trimmed.
+    let text =
+        text.trim_matches(|c: char| ",.;:'\u{2018}\u{2019}".contains(c) || c.is_whitespace());
     // A run that opens on a page number, or carries one, is two entries run
     // together or a reference to a work rather than the name of one. Better
     // to have no title and say so than to report that as one.
@@ -1211,6 +1284,36 @@ mod tests {
             Some("New York University Press")
         );
         assert_eq!(found.year, Some(2000));
+    }
+
+    #[test]
+    fn a_short_note_names_a_work_without_a_year_or_a_publisher() {
+        // The form a history book uses for every citation after the first:
+        // a surname, a short title, and where in it. No year, no imprint.
+        let found = read("Unger, Dutch Shipbuilding, 33-4.");
+        assert_eq!(found.authors, ["Unger"]);
+        assert_eq!(found.title.as_deref(), Some("Dutch Shipbuilding"));
+        assert_eq!(found.pages.as_deref(), Some("33-4"));
+        assert_eq!(found.year, None);
+
+        // The locators trailing it are not part of the title.
+        let volume = read("Sjoerds, Algemene Beschryvinge, i, f I, 501-2.");
+        assert_eq!(volume.title.as_deref(), Some("Algemene Beschryvinge"));
+
+        // The quotation marks round a short article title are the style's.
+        let quoted = read("Schoeck, 'Agricola and Erasmus', 181, 184.");
+        assert_eq!(quoted.title.as_deref(), Some("Agricola and Erasmus"));
+    }
+
+    #[test]
+    fn an_entry_ending_on_a_year_is_an_imprint_and_not_a_page() {
+        // `short_note` must not take `Oxford, Clarendon Press, 1998` for a
+        // name, a title and a page.
+        let found = read("Miller, David, On Nationality, Oxford: Clarendon Press, 1995");
+        assert_eq!(found.authors, ["Miller, David"]);
+        assert_eq!(found.title.as_deref(), Some("On Nationality"));
+        assert_eq!(found.container.as_deref(), Some("Clarendon Press"));
+        assert_eq!(found.year, Some(1995));
     }
 
     #[test]

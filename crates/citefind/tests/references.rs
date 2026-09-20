@@ -213,6 +213,34 @@ fn the_body_of_a_page_is_not_the_first_of_the_notes_at_its_foot() {
 }
 
 #[test]
+fn a_short_note_citing_two_works_gives_two_records() {
+    let found = read(
+        "12 Unger, Dutch Shipbuilding, 33-4; Unger, 'Dutch herring', 256-9.\n\
+         13 Van Gelder, The Two Reformations, 213, 312; Herwaarden, 'Geloof en geloofsuitingen', 403-4.",
+    );
+    assert_eq!(found.len(), 4, "{found:#?}");
+    assert_eq!(
+        found
+            .iter()
+            .map(|one| one.title.as_deref())
+            .collect::<Vec<_>>(),
+        [
+            Some("Dutch Shipbuilding"),
+            Some("Dutch herring"),
+            Some("The Two Reformations"),
+            Some("Geloof en geloofsuitingen"),
+        ]
+    );
+    assert_eq!(
+        found
+            .iter()
+            .map(|one| one.marker.as_deref())
+            .collect::<Vec<_>>(),
+        [Some("12"), Some("12"), Some("13"), Some("13")]
+    );
+}
+
+#[test]
 fn nothing_citation_shaped_gives_nothing() {
     assert!(read("Bibliography\n\nSee below.\n\n233\n").is_empty());
 }

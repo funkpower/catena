@@ -124,7 +124,7 @@ const MIN_WORK: usize = 25;
 /// come apart at the one place it must not.
 static ANOTHER_WORK: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r#";\s+(?:(?i:see(?:\s+also)?|cf\.|and)\s+)?[\p{Lu}][\p{L}.'’\-]{1,24}(?:\s+[\p{Lu}][\p{L}.'’\-]{1,24}){0,3},\s+[\p{Lu}\*_"“‘]"#,
+        r#";\s+(?:(?i:see(?:\s+also)?|cf\.|and)\s+)?[\p{Lu}][\p{L}.'’\-]{1,24}(?:\s+[\p{Lu}][\p{L}.'’\-]{1,24}){0,3},\s+[\p{Lu}\*_"“‘']"#,
     )
     .expect("a valid pattern")
 });
