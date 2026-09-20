@@ -352,7 +352,9 @@ only a dot. Ordinary paths — the overwhelming majority — are byte-identical.
 from did not:
 
     \[←788 \]
-    \[[←193](index_split_011.xhtml#citation-193) \]
+    \[ [←193] (index_split_011.xhtml#citation-193) \]
+
+(the second written with spaces here so it is not read as a link)
 
 An arrow pointing back to where the note was called, sometimes as a link and
 sometimes not, wrapped in escaped brackets. It is what a common EPUB
