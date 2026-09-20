@@ -60,7 +60,12 @@ fn strip_prefix(text: &str) -> &str {
         "arxiv:",
         "arxiv ",
     ] {
-        if text.len() >= prefix.len() && text[..prefix.len()].eq_ignore_ascii_case(prefix) {
+        // See the note in `doi::parse`: a slice at the prefix's byte length
+        // can land inside a character the text happens to carry.
+        if text
+            .get(..prefix.len())
+            .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+        {
             return text[prefix.len()..].trim();
         }
     }

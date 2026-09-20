@@ -37,7 +37,15 @@ pub fn parse(text: &str) -> Option<String> {
     let text = text.trim();
     let mut without = text;
     for prefix in PREFIXES {
-        if without.len() >= prefix.len() && without[..prefix.len()].eq_ignore_ascii_case(prefix) {
+        // `get` rather than a slice: the prefixes are ASCII and the text is
+        // not, so cutting at the prefix's byte length can land inside a
+        // character. A DOI copied out of a PDF arrives full of zero-width
+        // spaces, and `10.1093/\u{200b}oso/` is exactly long enough to put
+        // one where `https://doi.org/` ends.
+        if without
+            .get(..prefix.len())
+            .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+        {
             without = &without[prefix.len()..];
             break;
         }

@@ -50,7 +50,7 @@ pub struct Identifier {
     /// Record version.
     #[serde(default = "version")]
     pub v: u32,
-    /// The text it was read from.
+    /// The text it was read from, with any invisible characters removed.
     pub input: String,
     /// Which kind it turned out to be.
     pub kind: Kind,
@@ -84,9 +84,26 @@ pub fn parse(text: &str) -> Option<Identifier> {
     parse_as(text, None)
 }
 
+/// A character that takes no width and carries no meaning.
+fn is_invisible(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00ad}'                 // soft hyphen
+            | '\u{200b}'..='\u{200f}' // zero-width space, joiners, marks
+            | '\u{2060}'..='\u{2064}' // word joiner and friends
+            | '\u{feff}'               // byte-order mark
+    )
+}
+
 /// Read a string as one particular kind, or as whatever it looks like.
 pub fn parse_as(text: &str, kind: Option<Kind>) -> Option<Identifier> {
-    let input = text.trim();
+    // Text extracted from a PDF or an EPUB is full of characters that take
+    // no width and mean nothing: zero-width spaces and joiners where the
+    // typesetter allowed a line to break, a soft hyphen, a byte-order mark
+    // left at the front of a fragment. None of them is part of an
+    // identifier, and a DOI carrying one does not resolve.
+    let cleaned: String = text.chars().filter(|c| !is_invisible(*c)).collect();
+    let input = cleaned.trim();
     if input.is_empty() {
         return None;
     }
@@ -163,6 +180,42 @@ fn isbn(input: &str) -> Option<Identifier> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn an_identifier_copied_out_of_a_pdf_is_full_of_nothing() {
+        // A typesetter's zero-width spaces, where the line was allowed to
+        // break. The DOI does not resolve with them in it.
+        let found =
+            parse("DOI: 10.1093/\u{200b}oso/\u{200b}9780190065065.003.0001").expect("a doi");
+        assert_eq!(found.id, "10.1093/oso/9780190065065.003.0001");
+        assert_eq!(found.kind, Kind::Doi);
+    }
+
+    #[test]
+    fn a_prefix_is_not_cut_off_inside_a_character() {
+        // `10.1093/\u{200b}oso/\u{200b}` is exactly as many bytes as
+        // `https://doi.org/`, and a slice at that length used to land in the
+        // middle of the third zero-width space and bring the process down.
+        for text in [
+            "10.1093/\u{200b}oso/\u{200b}9780190065065",
+            "\u{feff}10.1000/182",
+            "arxiv:\u{200b}1706.03762",
+            "\u{200b}\u{200b}\u{200b}\u{200b}\u{200b}\u{200b}",
+            "\u{00ad}",
+        ] {
+            // The answer may be None; what it may not do is panic.
+            let _ = parse(text);
+        }
+    }
+
+    #[test]
+    fn a_soft_hyphen_in_an_isbn_is_not_a_digit() {
+        let found = parse("978\u{00ad}0\u{00ad}306\u{00ad}40615\u{00ad}7").expect("an isbn");
+        assert_eq!(found.kind, Kind::Isbn);
+        assert_eq!(found.checksum, Some(true));
+    }
+
     use super::*;
 
     #[test]
