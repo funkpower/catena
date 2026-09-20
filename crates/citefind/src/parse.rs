@@ -171,10 +171,16 @@ static BIOGRAPHY: LazyLock<Regex> = LazyLock::new(|| {
 /// reference to anything.
 static PRINT_FURNITURE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"(?ix) ^ https?://\S+
-        (?: \s* \( \s* \d+ \s+ of \s+ \d+ \s* \) )?   # (54 of 100)
-        (?: \s* \[ [^\]]{0,40} \] )?                    # [4/7/2002 1:48:08 PM]
-        \s* $",
+        r"(?ix)
+        ^ https?://\S+
+          (?: \s* \( \s* \d+ \s+ of \s+ \d+ \s* \) )?   # (54 of 100)
+          (?: \s* \[ [^\]]{0,40} \] )?                    # [4/7/2002 1:48:08 PM]
+          \s* $
+        # The navigation strip a PDF reader leaves in the text, and the
+        # local path it points at.
+        | (?: < \s* previous \s+ page | next \s+ page \s* > )
+        | file:///
+        ",
     )
     .expect("a valid pattern")
 });
@@ -253,6 +259,28 @@ static GLOSS_SIGNATURE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)[—–-]{1,2}\s*(?:ed|tr|trans|transl|a\.\s*n|au)\.?\s*$")
         .expect("a valid pattern")
 });
+
+/// A finite verb, which a remark has and the name of a work does not.
+/// `Quaestiones Parisienses` and `The Lord of the Rings` are noun phrases;
+/// `The Commentator seems to have based himself on the Bible` is a note
+/// about the argument, and a page of endnotes is mostly those.
+static PREDICATE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?ix) \b (?:
+            is|are|was|were|be|been|has|have|had|does|did|do
+          | can|could|may|might|must|shall|should|will|would
+          | seems?|says?|remarks?|argues?|holds?|means?|refers?|thinks?
+          | shows?|gives?|takes?|makes?|enters?|shed|follows?|explains?
+        ) \b",
+    )
+    .expect("a valid pattern")
+});
+
+/// An abbreviation standing for a work, and where in it: `H, 272`,
+/// `FR,120-122`, `GNO`, `Kgs 17:21`. The key that expands it is a page of
+/// its own that the entry does not carry, so on its own it names nothing.
+static SIGLUM: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[A-Z][A-Za-z]{0,4}[\s,.]*(?:\d|$)").expect("a valid pattern"));
 
 /// An editor's or translator's credit where an author's name would be:
 /// `Barratt, Alexandra, ed. Women's Writing in Middle English.` The role is
@@ -442,6 +470,12 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
     out.year = year(text);
     out.pages = pages(text);
 
+    // Whether the title was read off something the entry marked as one, or
+    // guessed at by cutting the entry at its sentence stops. The guess is
+    // held to a higher bar below, because nothing in the entry vouched for
+    // it.
+    let mut guessed = false;
+
     let (quoted, quoted_at) = span(&QUOTED, text);
     let (emphasised, emphasised_at) = span(&EMPHASISED, text);
     let dated = author_date(text);
@@ -529,6 +563,7 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
         out.container = found.2;
     } else {
         let (found_authors, found_title, found_container) = by_sentence(text);
+        guessed = found_title.is_some();
         out.authors = found_authors;
         out.title = found_title;
         out.container = found_container;
@@ -552,6 +587,22 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
                 out.title = title;
                 out.container = container.or(out.container.take());
             }
+        }
+    }
+    // A guessed title is only as good as the entry being a reference at all.
+    // Where nothing else was read off it — no author, no identifier, no
+    // container — the guess is the whole of what the record would carry, and
+    // a remark about the argument or a siglum dressed as a title is worse
+    // than no answer, because it is stored and looks settled.
+    if guessed && out.authors.is_empty() && out.ids.is_empty() {
+        let refused = out.title.as_deref().is_some_and(|title| {
+            // A siglum is not the name of a work whatever else the entry
+            // gave up; a remark is only recognisable as one when nothing
+            // else was read, because a container vouches for the rest.
+            SIGLUM.is_match(title) || (out.container.is_none() && PREDICATE.is_match(title))
+        });
+        if refused {
+            out.title = None;
         }
     }
     out.kind = kind(text, &out);
@@ -2122,5 +2173,71 @@ mod tests {
             sentences("Tolkien, J. R. R. The Hobbit, rev. ed. London, 1951."),
             ["Tolkien, J. R. R. The Hobbit, rev. ed. London, 1951."]
         );
+    }
+
+    #[test]
+    fn a_note_that_remarks_on_the_argument_names_no_work() {
+        // The commonest thing on a page of endnotes, and until the guessed
+        // title was held to a bar, every one of them was stored as a work.
+        for remark in [
+            "Admittedly, the lot may enter into the appointment of priests \
+             (759b-c). But priesthood is not in itself a qualification.",
+            "The Commentator seems to have based himself on the Bible. \
+             Compare the passage at Isidore, Etym. XIX.xxi.5.",
+            "Dewey remarks that we experience most things as temporal. \
+             He is aware of the practical aspects of the thought of Plato.",
+        ] {
+            let named = one(remark, Some("12")).and_then(|read| read.title);
+            assert_eq!(named, None, "stored a remark as a title: {remark}");
+        }
+    }
+
+    #[test]
+    fn a_title_the_entry_marked_up_is_taken_at_its_word() {
+        // The other side of the same bar, and why it is drawn at the guess
+        // rather than at the title: an entry that marked its own title is
+        // not guessing, so nothing here is asked of it. Patristic and
+        // medieval works are cited by title alone, and holding those to the
+        // bar would cost more than it saved.
+        for (text, want) in [
+            (
+                "*Quaestiones Parisienses* (LW I:37-83 \\[Questions 1-5\\])",
+                "Quaestiones Parisienses",
+            ),
+            (
+                "H, 302. \\ ***The Lord of the Rings*** \\ INTRODUCTION (p. 117)",
+                "The Lord of the Rings",
+            ),
+        ] {
+            let read = one(text, None).expect("a record");
+            assert_eq!(read.title.as_deref(), Some(want));
+        }
+    }
+
+    #[test]
+    fn a_siglum_and_a_page_name_nothing() {
+        // `H, 272` is an abbreviation whose key is a page of its own that the
+        // entry does not carry. An atlas of Middle-earth is a thousand of
+        // them, and the heading each one sits under is not its title.
+        for siglum in [
+            "H, 272. THE BATTLE OF FIVE ARMIES (p. 112)",
+            "FR,120-122. ON THE BARROW-DOWNS (p. 122)",
+        ] {
+            let named = one(siglum, None).and_then(|read| read.title);
+            assert_eq!(named, None, "stored a siglum as a title: {siglum}");
+        }
+    }
+
+    #[test]
+    fn the_readers_own_navigation_strip_is_not_a_reference() {
+        for furniture in [
+            "572 next page > < previous page page",
+            "574 next page > file:///C:/Users/User/AppData/Local/Temp/Rar$EX00/files/page",
+        ] {
+            assert!(
+                one(furniture, None).is_none(),
+                "read furniture: {furniture}"
+            );
+        }
     }
 }
