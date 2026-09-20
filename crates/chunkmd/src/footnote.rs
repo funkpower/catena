@@ -124,9 +124,13 @@ pub fn cites_something(entry: &str) -> bool {
 /// or a given name. Deliberately narrow, because it is being counted across
 /// a page of body prose and a loose version would match dialogue.
 static ENTRY_OPENING: LazyLock<FancyRegex> = LazyLock::new(|| {
-    FancyRegex::new(
-        r"(?m)^[ \t]{0,12}\p{Lu}[\p{L}'\u{2019}\-]{1,25},[ \t]+(?:\p{Lu}\.|\p{Lu}[\p{L}]{1,20}[,.]?[ \t])",
-    )
+    // A converted bibliography is often a bulleted list, and the bullet sits
+    // where the surname would: `•   Skorupski, J. 1995. Ethical Explorations.`
+    FancyRegex::new(concat!(
+        r"(?m)^[ \t]{0,12}",
+        r"(?:[\u{2022}\u{00B7}\u{25AA}\u{25CF}*+\u{2013}\u{2014}-][ \t]+)?",
+        r"\p{Lu}[\p{L}'\u{2019}\-]{1,25},[ \t]+(?:\p{Lu}\.|\p{Lu}[\p{L}]{1,20}[,.]?[ \t])",
+    ))
     .expect("a valid pattern")
 });
 
@@ -258,6 +262,21 @@ pub fn strip_sentinel(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_bibliography_converted_into_a_bulleted_list_is_still_one() {
+        // The bullet sits where the surname would, so every entry opening
+        // was missed and the whole page went unflagged — which meant the
+        // reader never saw a word of it.
+        let page = "\u{2022}   Skorupski, J. 1995. 'Agent-Neutrality, Consequentialism, \
+                    Utilitarianism', Utilitas, 7: 49-54.\n\
+                    \u{2022}   Slote, M. 1984. 'Satisficing Consequentialism', Proceedings \
+                    of the Aristotelian Society, 58: 139-63.\n\
+                    \u{2022}   Smart, J. J. C. 1973. 'An Outline of a System of Utilitarian \
+                    Ethics'. Cambridge: Cambridge University Press.\n";
+        assert!(looks_like_reference_run(page));
+        assert!(looks_like_citations(page));
+    }
+
     #[test]
     fn a_reading_list_with_nothing_marking_it_is_citation_material() {
         // The end of a chapter in a reader: no heading, no numbers, just the

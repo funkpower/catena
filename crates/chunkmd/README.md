@@ -104,6 +104,12 @@ A chunk whose text is a page of numbered notes is flagged `footnote_citations`,
 because footnotes are citations in disguise — they read as body text, rank as
 body text, and answer a query with a publisher and a page number.
 
+A run of entries with nothing numbering them counts too, because a reference
+list often arrives with its markup gone: three or more lines that open on an
+inverted name and each carry a year, a page range or a publisher. The opening
+may be a bullet — a converted bibliography is frequently a bulleted list, and
+the bullet sits exactly where the surname would.
+
 ## The roles
 
 | Role | What it is |
