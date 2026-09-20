@@ -162,15 +162,28 @@ fn pack_cues<'py>(
 ///
 /// `duration` is the recording's length in seconds; omit it and the last cue
 /// decides.
+/// `embeddings` is one vector per window, in the order `cue_windows` gives
+/// them; without it the windows are compared by the words they repeat.
 #[pyfunction]
-#[pyo3(signature = (cues, *, duration = None))]
+#[pyo3(signature = (cues, *, duration = None, embeddings = None))]
 fn segment_cues<'py>(
     py: Python<'py>,
     cues: &Bound<'py, PyAny>,
     duration: Option<f64>,
+    embeddings: Option<Vec<Vec<f64>>>,
 ) -> PyResult<Bound<'py, PyList>> {
     let cues: Vec<cuekit::Cue> = from_py_list(cues)?;
-    list_to_py(py, &crate::segment_cues(&cues, duration.unwrap_or(0.0)))
+    list_to_py(
+        py,
+        &crate::segment_cues_with(&cues, duration.unwrap_or(0.0), embeddings.as_deref()),
+    )
+}
+
+/// The text of each window a transcript is measured in, to embed.
+#[pyfunction]
+fn cue_windows(cues: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    let cues: Vec<cuekit::Cue> = from_py_list(cues)?;
+    Ok(crate::cue_windows(&cues))
 }
 
 /// Split a collection into the works inside it.
@@ -244,6 +257,7 @@ fn _catena(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(parse_subtitles, module)?)?;
     module.add_function(wrap_pyfunction!(pack_cues, module)?)?;
     module.add_function(wrap_pyfunction!(segment_cues, module)?)?;
+    module.add_function(wrap_pyfunction!(cue_windows, module)?)?;
     module.add_function(wrap_pyfunction!(split_collection, module)?)?;
     module.add_function(wrap_pyfunction!(fuse_hits, module)?)?;
     module.add_function(wrap_pyfunction!(identify, module)?)?;

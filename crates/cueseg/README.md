@@ -64,6 +64,8 @@ cueseg --duration 7245 transcript.ndjson | jq -r '"\(.start | floor)\t\(.title)"
 
 | Option | Effect |
 |---|---|
+| `--windows` | Print the text to embed, one window per line, and stop |
+| `--embeddings <FILE>` | One vector per window, as `emb` writes them |
 | `--duration <SECONDS>` | How long the recording is |
 | `--man` | Write this page as a manual page, in roff |
 
@@ -71,6 +73,33 @@ Without it, the duration is taken from the end of the last cue. That is
 earlier than the end of the file whenever a recording ends in music or
 silence, and a chapter that claims to run to the end of the transcript rather
 than the end of the file is a mark that lands in the wrong place.
+
+## Better boundaries, if you have embeddings
+
+By default the windows are compared by the words they repeat. That is fast,
+needs nothing, and cannot tell that a stretch about *ships* and a stretch
+about *vessels* are about one thing. An embedding can.
+
+`--windows` prints the text to embed, one window per line; `--embeddings`
+takes one vector per line back, in the same order:
+
+```sh
+cueseg --windows episode.srt | emb --model nomic-embed-text > windows.ndjson
+cueseg --embeddings windows.ndjson episode.srt
+```
+
+The count has to match, and a mismatch is refused rather than guessed at:
+
+```
+$ cueseg --embeddings two-vectors.ndjson episode.srt
+cueseg: 2 vectors for 44 windows — run --windows to see what to embed
+$ echo $?
+65
+```
+
+Everything else is the same: the same windows, the same threshold, the same
+minimum chapter length. Only the question "are these two stretches about the
+same thing" is answered better.
 
 ## Exit codes
 

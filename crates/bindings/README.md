@@ -42,6 +42,13 @@ cues = catena.parse_subtitles(open("episode.srt").read())
 passages = catena.pack_cues(cues, seconds=75)
 
 catena.identify("atlas.pdf", open("atlas.pdf", "rb").read(1024))["kind"]
+
+# Chapters, compared by the words a window repeats …
+chapters = catena.segment_cues(cues, duration=7200)
+
+# … or by vectors you made, which know that ships and vessels are one subject.
+vectors = embed(catena.cue_windows(cues))
+chapters = catena.segment_cues(cues, duration=7200, embeddings=vectors)
 ```
 
 `split_collection` raises `ValueError` when the document is one work rather
@@ -65,6 +72,7 @@ except ValueError as why:
 | `parse_subtitles` | [`cuenorm`](../cuenorm/README.md) |
 | `pack_cues` | [`cuepack`](../cuepack/README.md) |
 | `segment_cues` | [`cueseg`](../cueseg/README.md) |
+| `cue_windows` | the windows `segment_cues` measures, to embed |
 | `split_collection` | [`mdsplit`](../mdsplit/README.md) |
 | `fuse_hits` | [`rrf`](../rrf/README.md) |
 | `identify` | [`booksniff`](../booksniff/README.md) |

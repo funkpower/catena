@@ -212,10 +212,31 @@ pub fn pack_cues(
 ///
 /// `duration` is the recording's length in seconds; omit it and the last cue
 /// decides.
+/// `embeddings` is one vector per window, in the order `cueWindows` gives
+/// them; without it the windows are compared by the words they repeat.
 #[wasm_bindgen(js_name = segmentCues, skip_typescript)]
-pub fn segment_cues(cues: JsValue, duration: Option<f64>) -> Result<JsValue, JsValue> {
+pub fn segment_cues(
+    cues: JsValue,
+    duration: Option<f64>,
+    embeddings: JsValue,
+) -> Result<JsValue, JsValue> {
     let cues: Vec<cuekit::Cue> = from_js(cues, "cues")?;
-    to_js(&crate::segment_cues(&cues, duration.unwrap_or(0.0)))
+    let vectors: Option<Vec<Vec<f64>>> = match embeddings.is_undefined() || embeddings.is_null() {
+        true => None,
+        false => Some(from_js(embeddings, "embeddings")?),
+    };
+    to_js(&crate::segment_cues_with(
+        &cues,
+        duration.unwrap_or(0.0),
+        vectors.as_deref(),
+    ))
+}
+
+/// The text of each window a transcript is measured in, to embed.
+#[wasm_bindgen(js_name = cueWindows, skip_typescript)]
+pub fn cue_windows(cues: JsValue) -> Result<JsValue, JsValue> {
+    let cues: Vec<cuekit::Cue> = from_js(cues, "cues")?;
+    to_js(&crate::cue_windows(&cues))
 }
 
 /// Split a collection into the works inside it.
@@ -288,7 +309,8 @@ const SIGNATURES: &'static str = r#"
 export function chunkMarkdown(markdown: string, target?: number, overlap?: number, min_tokens?: number, hard_max?: number): Chunk[];
 export function parseSubtitles(content: string, keep_repeats?: boolean): Cue[];
 export function packCues(cues: Cue[], seconds?: number, max_tokens?: number): Chunk[];
-export function segmentCues(cues: Cue[], duration?: number): Segment[];
+export function segmentCues(cues: Cue[], duration?: number, embeddings?: number[][]): Segment[];
+export function cueWindows(cues: Cue[]): string[];
 export function splitCollection(markdown: string): Section[];
 export function fuseHits(hits: Hit[], k?: number, weights?: Record<string, number>, limit?: number): Hit[];
 export function identify(name: string, data: Uint8Array): Doc;

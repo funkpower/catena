@@ -34,6 +34,21 @@ struct Args {
     /// recording ends in music or silence.
     #[arg(long, value_name = "SECONDS")]
     duration: Option<f64>,
+
+    /// One vector per window, as a JSON array per line, in window order.
+    ///
+    /// Without this the windows are compared by the words they repeat, which
+    /// cannot tell that "ships" and "vessels" are the same subject. With it
+    /// they are compared however the vectors were made. `--windows` prints
+    /// the text to embed.
+    #[arg(long, value_name = "FILE")]
+    embeddings: Option<PathBuf>,
+
+    /// Print the window text, one per line, and stop.
+    ///
+    /// What to embed, in the order `--embeddings` expects it back.
+    #[arg(long)]
+    windows: bool,
 }
 
 fn main() -> ExitCode {
@@ -67,7 +82,58 @@ fn main() -> ExitCode {
         None => cues.iter().map(|cue| cue.end).fold(0.0, f64::max),
     };
 
-    catena_cli::stream("cueseg", &cueseg::segment(&cues, duration))
+    if args.windows {
+        let text: String = cueseg::windows_of(&cues)
+            .iter()
+            .map(|window| format!("{}\n", window.text.replace('\n', " ")))
+            .collect();
+        return catena_cli::text("cueseg", &text);
+    }
+
+    let embeddings = match args.embeddings.as_deref() {
+        None => None,
+        Some(path) => match read_embeddings(path) {
+            Ok(vectors) => Some(vectors),
+            Err((code, why)) => {
+                eprintln!("cueseg: {why}");
+                return ExitCode::from(code);
+            }
+        },
+    };
+
+    let windows = cueseg::windows_of(&cues).len();
+    if let Some(vectors) = embeddings.as_deref() {
+        if vectors.len() != windows {
+            eprintln!(
+                "cueseg: {} vectors for {windows} windows — run --windows to see what to embed",
+                vectors.len()
+            );
+            return ExitCode::from(exit::DATA);
+        }
+    }
+
+    let chapters = cueseg::segment_with(&cues, duration, embeddings.as_deref());
+    catena_cli::stream("cueseg", &chapters)
+}
+
+/// One vector per line, as `emb` writes them.
+fn read_embeddings(path: &std::path::Path) -> Result<Vec<Vec<f64>>, (u8, String)> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| (exit::IO, format!("{}: {e}", path.display())))?;
+    let mut out = Vec::new();
+    for (number, line) in text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let vector: Vec<f64> = serde_json::from_str(line).map_err(|e| {
+            (
+                exit::DATA,
+                format!("{}: line {}: {e}", path.display(), number + 1),
+            )
+        })?;
+        out.push(vector);
+    }
+    Ok(out)
 }
 
 /// Read cues from either encoding.

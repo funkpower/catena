@@ -16,6 +16,7 @@ fancy-regex.workspace = true
 regex.workspace = true
 schemars.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 textkit.workspace = true
 
 [dev-dependencies]

@@ -30,7 +30,9 @@ use crate::{ChunkBudgets, CueBudgets};
 
 /// Bumped when the meaning or signature of anything here changes. Additions
 /// leave it alone.
-const ABI_VERSION: c_uint = 1;
+///
+/// 2: `catena_segment_cues` gained an embeddings argument.
+const ABI_VERSION: c_uint = 2;
 
 thread_local! {
     static LAST_ERROR: RefCell<Option<CString>> = const { RefCell::new(None) };
@@ -271,6 +273,7 @@ pub unsafe extern "C" fn catena_pack_cues(
 pub unsafe extern "C" fn catena_segment_cues(
     cues: *const c_char,
     duration: c_double,
+    embeddings: *const c_char,
 ) -> *mut c_char {
     clear_error();
     let Some(cues) = (unsafe { borrow(cues, "cues") }) else {
@@ -279,7 +282,42 @@ pub unsafe extern "C" fn catena_segment_cues(
     let Some(cues) = take_json::<Vec<cuekit::Cue>>(cues, "cues") else {
         return ptr::null_mut();
     };
-    give_json(&crate::segment_cues(&cues, duration))
+
+    let vectors: Option<Vec<Vec<f64>>> = match embeddings.is_null() {
+        true => None,
+        false => {
+            let Some(text) = (unsafe { borrow(embeddings, "embeddings") }) else {
+                return ptr::null_mut();
+            };
+            match take_json::<Vec<Vec<f64>>>(text, "embeddings") {
+                Some(vectors) => Some(vectors),
+                None => return ptr::null_mut(),
+            }
+        }
+    };
+    give_json(&crate::segment_cues_with(
+        &cues,
+        duration,
+        vectors.as_deref(),
+    ))
+}
+
+/// The text of each window a transcript is measured in, to embed. Returns a
+/// JSON array of strings.
+///
+/// # Safety
+///
+/// `cues` must be NUL-terminated UTF-8.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn catena_cue_windows(cues: *const c_char) -> *mut c_char {
+    clear_error();
+    let Some(cues) = (unsafe { borrow(cues, "cues") }) else {
+        return ptr::null_mut();
+    };
+    let Some(cues) = take_json::<Vec<cuekit::Cue>>(cues, "cues") else {
+        return ptr::null_mut();
+    };
+    give_json(&crate::cue_windows(&cues))
 }
 
 /// Split a collection into the works inside it. Returns a JSON array of
@@ -550,6 +588,6 @@ mod tests {
 
     #[test]
     fn the_abi_version_is_the_one_the_header_declares() {
-        assert_eq!(catena_abi_version(), 1);
+        assert_eq!(catena_abi_version(), 2);
     }
 }

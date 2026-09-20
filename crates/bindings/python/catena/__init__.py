@@ -12,6 +12,7 @@ lines of JSON.
 
 from ._catena import (
     __version__,
+    cue_windows,
     chunk_markdown,
     count_tokens,
     fuse_hits,
@@ -27,6 +28,7 @@ from ._catena import (
 
 __all__ = [
     "__version__",
+    "cue_windows",
     "chunk_markdown",
     "count_tokens",
     "fuse_hits",

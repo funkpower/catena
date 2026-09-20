@@ -3,7 +3,7 @@
 // check, and nothing else would notice.
 import {
   chunkMarkdown, scrub, countTokens, parseSubtitles, packCues,
-  splitCollection, fuseHits, identify, seriesOf, parseIdentifier, segmentCues,
+  splitCollection, fuseHits, identify, seriesOf, parseIdentifier, segmentCues, cueWindows,
   type Chunk, type Cue, type Section, type Hit, type Doc, type SeriesProposal, type Identifier, type Segment,
 } from "./dist/web/catena.js";
 
@@ -20,6 +20,8 @@ const start: number = cues[0].start;
 const packed: Chunk[] = packCues(cues, 75, 512);
 
 const chapters: Segment[] = segmentCues(cues, 3600);
+const toEmbed: string[] = cueWindows(cues);
+segmentCues(cues, 3600, toEmbed.map(() => [1, 0]));
 const chapterTitle: string = chapters[0].title;
 segmentCues(cues);
 

@@ -25,7 +25,7 @@ extern "C" {
 
 /* Bumped when the meaning or signature of anything here changes. Additions
  * leave it alone. Check it against CATENA_ABI_VERSION at load time. */
-#define CATENA_ABI_VERSION 1u
+#define CATENA_ABI_VERSION 2u
 
 unsigned int catena_abi_version(void);
 
@@ -57,6 +57,19 @@ char *catena_parse_subtitles(const char *content, int keep_repeats);
 /* Pack cues into passages. `cues` is a JSON array of cues. Zero for either
  * budget means the default. Returns a JSON array of chunks. */
 char *catena_pack_cues(const char *cues, double seconds, size_t max_tokens);
+
+/* Cut a timed transcript into topic chapters. `cues` is a JSON array of
+ * cues. `embeddings` is a JSON array of one vector per window, or NULL to
+ * compare windows by the words they repeat. A duration of zero or less is
+ * taken from the last cue. Returns a JSON array of segments. */
+char *catena_segment_cues(const char *cues,
+                          double duration,
+                          const char *embeddings);
+
+/* The text of each window a transcript is measured in, in the order
+ * catena_segment_cues expects vectors back. Returns a JSON array of
+ * strings. */
+char *catena_cue_windows(const char *cues);
 
 /* Split a collection into the works inside it. Returns a JSON array of
  * sections, or NULL when the document is one work rather than a collection —

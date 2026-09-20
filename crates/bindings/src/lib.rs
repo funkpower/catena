@@ -133,11 +133,32 @@ pub fn pack_cues(cues: &[Cue], budgets: CueBudgets) -> Vec<Chunk> {
 /// `duration` is how long the recording is, in seconds; it decides how many
 /// chapters to aim for. Zero or less means take it from the last cue.
 pub fn segment_cues(cues: &[Cue], duration: f64) -> Vec<cueseg::Segment> {
+    segment_cues_with(cues, duration, None)
+}
+
+/// The same, given vectors somebody else computed for the windows.
+///
+/// Without them the windows are compared by the words they repeat, which
+/// cannot tell that "ships" and "vessels" are one subject. [`cue_windows`]
+/// gives the text to embed, in the order the vectors must come back in.
+pub fn segment_cues_with(
+    cues: &[Cue],
+    duration: f64,
+    embeddings: Option<&[Vec<f64>]>,
+) -> Vec<cueseg::Segment> {
     let duration = match duration > 0.0 {
         true => duration,
         false => cues.last().map_or(0.0, |cue| cue.end),
     };
-    cueseg::segment(cues, duration)
+    cueseg::segment_with(cues, duration, embeddings)
+}
+
+/// The text of each window a transcript is measured in, to embed.
+pub fn cue_windows(cues: &[Cue]) -> Vec<String> {
+    cueseg::windows_of(cues)
+        .into_iter()
+        .map(|window| window.text)
+        .collect()
 }
 
 /// Split a collection into the works inside it.
@@ -236,24 +257,37 @@ mod tests {
 
     #[test]
     fn a_transcript_comes_back_as_chapters() {
-        // Long enough to be worth chaptering at all: the segmenter refuses
-        // to cut a recording into pieces shorter than its minimum.
+        // Two halves about two different things, so the words themselves say
+        // where the boundary is.
         let cues: Vec<Cue> = (0..1200)
             .map(|i| Cue {
                 v: corpus_core::V,
                 start: i as f64 * 5.0,
                 end: i as f64 * 5.0 + 5.0,
-                text: match i % 2 {
-                    0 => "the mill stood at the northern end of the valley".into(),
-                    _ => "parliament dissolved itself again amid objections".into(),
+                text: match i < 600 {
+                    true => "the mill stood at the northern end of the valley".into(),
+                    false => "parliament dissolved itself again amid objections".into(),
                 },
             })
             .collect();
+
         let chapters = segment_cues(&cues, 6000.0);
         assert!(!chapters.is_empty());
         assert_eq!(chapters, cueseg::segment(&cues, 6000.0));
         // The duration can be left to the cues themselves.
-        assert_eq!(segment_cues(&cues, 0.0), cueseg::segment(&cues, 6000.0));
+        assert_eq!(segment_cues(&cues, 0.0).len(), chapters.len());
+
+        // The windows to embed are the ones the segmenter measures, and
+        // vectors given for them are used rather than the words.
+        let windows = cue_windows(&cues);
+        assert_eq!(windows.len(), cueseg::windows_of(&cues).len());
+        let flat: Vec<Vec<f64>> = windows.iter().map(|_| vec![1.0, 0.0]).collect();
+        let with_flat = segment_cues_with(&cues, 6000.0, Some(&flat));
+        assert_ne!(
+            with_flat.len(),
+            chapters.len(),
+            "vectors saying every window is alike gave the same chapters as the words"
+        );
     }
 
     #[test]

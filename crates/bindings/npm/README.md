@@ -46,6 +46,7 @@ try {
 | `parseSubtitles` | SubRip, WebVTT or ASS into cues |
 | `packCues` | Cues into passages, keeping the times they were said at |
 | `segmentCues` | A timed transcript into topic chapters |
+| `cueWindows` | The windows `segmentCues` measures, to embed |
 | `splitCollection` | One markdown file into the works inside it |
 | `fuseHits` | Several ranked lists into one |
 | `identify` | What a file is, from its first bytes |
