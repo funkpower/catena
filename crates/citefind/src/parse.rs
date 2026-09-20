@@ -239,10 +239,23 @@ static GLOSS_SIGNATURE: LazyLock<Regex> = LazyLock::new(|| {
         .expect("a valid pattern")
 });
 
+/// An editor's or translator's credit where an author's name would be:
+/// `Barratt, Alexandra, ed. Women's Writing in Middle English.` The role is
+/// not a sentence stop, so the name and the title run together into one
+/// segment and neither is read.
+static EDITOR_FORM: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)^([^.]{2,60}),\s+(?:eds?|trans|comps?|rev)\.\s+(\S.*)$")
+        .expect("a valid pattern")
+});
+
 /// A page reference or a bracketed imprint: what a citation has and a remark
 /// about the argument does not.
 static CITATION_ANCHOR: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\bpp?\.\s*\d|\bvol\.\s*\d|\bno\.\s*\d").expect("a valid pattern")
+    // A page range after a comma counts even with no `pp.` in front of it:
+    // `edited by H.J. Störig, 38-70. Darmstadt:` is a chapter in a book, and
+    // six sentences long because German titles are.
+    Regex::new(r"(?i)\bpp?\.\s*\d|\bvol\.\s*\d|\bno\.\s*\d|,\s*\d{1,5}\s*[-–—]\s*\d{1,5}\b")
+        .expect("a valid pattern")
 });
 
 /// How many words a reference runs to before it is prose.
@@ -484,7 +497,8 @@ pub fn one(text: &str, marker: Option<&str>) -> Option<Reference> {
         out.title = Some(title);
         out.authors = authors(&text[..at.0]);
         out.container = container(text, &text[at.1..]);
-    } else if let Some(found) = note_form(text)
+    } else if let Some(found) = editor_form(text)
+        .or_else(|| note_form(text))
         .or_else(|| comma_form(text))
         .or_else(|| short_note(text))
     {
@@ -543,7 +557,10 @@ fn span(pattern: &Regex, text: &str) -> (Option<String>, Option<(usize, usize)>)
 /// 1951, A Study of Behaviour`. Common in the sciences and in older German
 /// and Russian bibliographies.
 static NAME_YEAR: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(.{2,80}?)[,.]?\s+((?:1[4-9]|20)\d{2})[a-z]?\s*[,.:]\s+")
+    // `Schleiermacher, Friedrich. 1813/1963.` gives the year it was written
+    // and the year of the edition used. The first is the one that dates the
+    // work; the second still has to be got past.
+    Regex::new(r"^(.{2,80}?)[,.]?\s+((?:1[4-9]|20)\d{2})[a-z]?(?:\s*/\s*(?:1[4-9]|20)\d{2}[a-z]?)?\s*[,.:]\s+")
         .expect("a valid pattern")
 });
 
@@ -677,6 +694,25 @@ fn comma_form(text: &str) -> Option<(Vec<String>, Option<String>, Option<String>
         false => None,
     };
     Some((names, Some(title), publisher))
+}
+
+/// Read an entry whose author is credited as its editor.
+///
+/// `Barratt, Alexandra, ed. Women's Writing in Middle English. London:
+/// Longman, 1992.` — `ed.` is an abbreviation rather than a sentence stop,
+/// so the name and the title are one segment until the role is taken out.
+fn editor_form(text: &str) -> Option<(Vec<String>, Option<String>, Option<String>)> {
+    let found = EDITOR_FORM.captures(text.trim())?;
+    let names = authors(&found[1]);
+    if names.is_empty() {
+        return None;
+    }
+    let rest = found[2].trim();
+    let title = tidy_title(&strip_markup(sentences(rest).first()?));
+    if title.chars().count() < 4 {
+        return None;
+    }
+    Some((names, Some(title), container(text, rest)))
 }
 
 /// Read a short note: a surname, a short title, and where in it.
@@ -1439,6 +1475,38 @@ mod tests {
         );
         assert_eq!(found.container.as_deref(), Some("Theologische Blatter"));
         assert_eq!(found.year, Some(1941));
+    }
+
+    #[test]
+    fn a_reprint_gives_two_years_and_an_editor_takes_the_author_slot() {
+        // `1813/1963` is the year it was written and the year of the
+        // edition used; the page range says it is a chapter in a book, which
+        // is why six sentences of German do not make it prose.
+        let reprint = read(
+            "Schleiermacher, Friedrich. 1813/1963. \"Ueber die verschiedenen \
+             Methoden des Uebersezens\". In Das Problem des Uebersetzens, \
+             edited by H.J. Stoerig, 38-70. Darmstadt: Wissenschaftliche \
+             Buchgesellschaft.",
+        );
+        assert_eq!(reprint.authors, ["Schleiermacher, Friedrich"]);
+        assert_eq!(
+            reprint.title.as_deref(),
+            Some("Ueber die verschiedenen Methoden des Uebersezens")
+        );
+        assert_eq!(reprint.year, Some(1813));
+
+        // `ed.` is an abbreviation rather than a stop, so the name and the
+        // title stayed one segment and neither was read.
+        let editor = read(
+            "Barratt, Alexandra, ed. Women's Writing in Middle English. \
+             London: Longman, 1992.",
+        );
+        assert_eq!(editor.authors, ["Barratt, Alexandra"]);
+        assert_eq!(
+            editor.title.as_deref(),
+            Some("Women's Writing in Middle English")
+        );
+        assert_eq!(editor.container.as_deref(), Some("Longman"));
     }
 
     #[test]
