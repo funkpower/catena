@@ -990,6 +990,11 @@ fn is_name(text: &str) -> bool {
     if text.chars().any(|c| c.is_ascii_digit()) {
         return false;
     }
+    // A bracket or a colon belongs to an imprint or a title, never to a
+    // name: `Philosophy (Bloomington: Indiana University Press)` is not one.
+    if text.contains(['(', ')', ':', '[', ']']) {
+        return false;
+    }
     // An editor's or translator's credit is a role, not a name.
     if text.to_lowercase().contains("ed.") || text.to_lowercase().contains("trans.") {
         return false;

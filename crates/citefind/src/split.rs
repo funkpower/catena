@@ -92,6 +92,13 @@ static LOCAL_SIGNAL: LazyLock<Regex> =
 static GLUED_NUMBER: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"^(\d{1,3})(?:\p{Lu}|\*|“|")"#).expect("a valid pattern"));
 
+/// The copyright line a digitised book prints at the foot of every page:
+/// `Cambridge Histories Online © Cambridge University Press, 2008`. It is
+/// not a reference, and it is glued to the end of whatever note the page
+/// ended on.
+static COPYRIGHT_FOOTER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"©").expect("a valid pattern"));
+
 /// A bullet or a blockquote marker, which conversion puts in front of a note
 /// often enough to matter. A leading `*` is left alone: it opens an italic
 /// title as often as it opens a list.
@@ -255,7 +262,7 @@ fn unnumbered(text: &str) -> Vec<Entry> {
 /// cut is then made in the original, so that an italic span marking a title
 /// further along survives.
 fn strip_marker(raw: &str) -> Entry {
-    let text = tidy(raw);
+    let text = cut_footer(&tidy(raw));
     let text = BULLET.replace(&text, "").to_string();
     let (bare, from) = visible(&text, 160);
 
@@ -292,6 +299,20 @@ fn strip_marker(raw: &str) -> Entry {
     }
 
     Entry { text, marker: None }
+}
+
+/// Cut the copyright line off the end of an entry.
+///
+/// It runs from wherever the sentence holding the `©` began, because the
+/// words in front of it — the name of the digitising service — belong to it
+/// and not to the note the page ended on.
+fn cut_footer(text: &str) -> String {
+    let Some(found) = COPYRIGHT_FOOTER.find(text) else {
+        return text.to_string();
+    };
+    let head = &text[..found.start()];
+    let cut = head.rfind(". ").map_or(0, |at| at + 1);
+    text[..cut].trim().to_string()
 }
 
 /// The opening of an entry with its tags dropped, and where each character
@@ -472,6 +493,15 @@ Another Anonymous Work. Cambridge, 2001.";
         let entry = strip_marker("[4] . Smith, John. *A Real Book*. Oxford, 1998.");
         assert_eq!(entry.marker.as_deref(), Some("4"));
         assert_eq!(entry.text, "Smith, John. *A Real Book*. Oxford, 1998.");
+    }
+
+    #[test]
+    fn the_copyright_line_a_digitised_book_prints_is_cut_off() {
+        let entry = strip_marker(
+            "Holquist, Making War, pp. 211-12. 106 Cambridge Histories Online \
+             © Cambridge University Press, 2008",
+        );
+        assert_eq!(entry.text, "Holquist, Making War, pp. 211-12.");
     }
 
     #[test]
