@@ -260,6 +260,34 @@ static GLOSS_SIGNATURE: LazyLock<Regex> = LazyLock::new(|| {
         .expect("a valid pattern")
 });
 
+/// `Hoyt, Edwin P. The Supersalesmen.` is one segment, because the stop
+/// after an initial is not a sentence stop. An inverted name whose forenames
+/// end in an initial, with more words after it, ends at that initial — what
+/// follows is the title. Leaving the two joined cost both: the name came
+/// back with a title stuck to it, and the imprint after it became the work.
+static NAME_THEN_TITLE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^([^,]{2,40},(?:\s+[A-Z][A-Za-z.'\-]*)*?\s+[A-Z]\.)\s+([A-Z]\S*(?:\s+\S+)+)$")
+        .expect("a valid pattern")
+});
+
+/// A segment that is nothing but where the book was published, which is not
+/// what it is called. A place of up to three words, a colon, and then either
+/// a bare year — `New York: 1928` — or a publisher and a year: `Leiden:
+/// Brill, 2003`. Asked that narrowly because a title may have a colon in it
+/// too, and `Russian Popular Culture: Entertainment and Society since 1900`
+/// has to survive it.
+static IMPRINT_ALONE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?x)
+        ^ [A-Z][A-Za-z.\-']* (?: \  [A-Za-z.\-']+ ){0,2} \s* : \s*
+        (?:
+            (?: 1[5-9]\d\d | 20[0-2]\d ) \.? $
+          | .{0,60} , \s* (?: 1[5-9]\d\d | 20[0-2]\d ) [a-z]? \.? $
+        )",
+    )
+    .expect("a valid pattern")
+});
+
 /// A finite verb, which a remark has and the name of a work does not.
 /// `Quaestiones Parisienses` and `The Lord of the Rings` are noun phrases;
 /// `The Commentator seems to have based himself on the Bible` is a note
@@ -1344,7 +1372,20 @@ fn by_sentence(text: &str) -> (Vec<String>, Option<String>, Option<String>) {
         Some(found) => &text[..found.start()],
         None => text,
     };
-    let segments: Vec<&str> = sentences(text);
+    let mut segments: Vec<String> = sentences(text)
+        .iter()
+        .map(|segment| segment.trim().to_string())
+        .collect();
+    // Put back the cut the stop after an initial did not make.
+    if PAREN_YEAR.find(text).is_none() {
+        if let Some(caught) = segments
+            .first()
+            .and_then(|first| NAME_THEN_TITLE.captures(first))
+        {
+            let parts = [caught[1].to_string(), caught[2].to_string()];
+            segments.splice(0..1, parts);
+        }
+    }
     let found_authors = match PAREN_YEAR.find(text) {
         Some(_) => authors(head),
         None => segments
@@ -1371,7 +1412,9 @@ fn by_sentence(text: &str) -> (Vec<String>, Option<String>, Option<String>) {
         .by_ref()
         .find(|segment| {
             let segment = segment.trim();
-            segment.chars().count() >= 4 && !PAREN_YEAR.is_match(segment)
+            segment.chars().count() >= 4
+                && !PAREN_YEAR.is_match(segment)
+                && !IMPRINT_ALONE.is_match(segment)
         })
         .map(|segment| tidy_title(segment));
     let container = rest
@@ -2226,6 +2269,60 @@ mod tests {
             let named = one(siglum, None).and_then(|read| read.title);
             assert_eq!(named, None, "stored a siglum as a title: {siglum}");
         }
+    }
+
+    #[test]
+    fn a_name_that_ends_in_an_initial_does_not_run_on_into_the_title() {
+        // The stop after `P.` is an initial, not a sentence stop, so the
+        // entry never got cut there: the name came back with the title on
+        // it and the imprint after it became the work.
+        for (text, name, title) in [
+            (
+                "Hoyt, Edwin P. The Supersalesmen. New York: World Publishing, 1962.",
+                "Hoyt, Edwin P.",
+                "The Supersalesmen",
+            ),
+            (
+                "Heckscher, E. The Continental System. Oxford: Clarendon Press, 1922.",
+                "Heckscher, E.",
+                "The Continental System",
+            ),
+        ] {
+            let read = one(text, None).expect("a record");
+            assert_eq!(read.authors, vec![name.to_string()], "{text}");
+            assert_eq!(read.title.as_deref(), Some(title), "{text}");
+        }
+    }
+
+    #[test]
+    fn an_initial_before_a_forename_is_still_one_name() {
+        // `M. Philips Price` inverts to `Price, M. Philips`, and cutting at
+        // the initial there would take the forename for a title. One word
+        // after the initial is a name; two are a title.
+        for (text, name) in [
+            (
+                "Price, M. Philips. Dispatches from the Revolution. Durham: Duke, 1997.",
+                "Price, M. Philips",
+            ),
+            (
+                "Drexler, K. Eric. Nanosystems, Molecular Machinery. New York: Wiley, 1992.",
+                "Drexler, K. Eric",
+            ),
+        ] {
+            let read = one(text, None).expect("a record");
+            assert_eq!(read.authors, vec![name.to_string()], "{text}");
+        }
+    }
+
+    #[test]
+    fn where_a_book_was_published_is_not_what_it_is_called() {
+        // An imprint standing alone as a segment is skipped, and the reader
+        // goes on looking. A title with a colon in it is not an imprint.
+        let read = one("Stites, Richard. Russian Popular Culture: Entertainment and Society since 1900. Cambridge, 1992.", None).expect("a record");
+        assert_eq!(
+            read.title.as_deref(),
+            Some("Russian Popular Culture: Entertainment and Society since 1900")
+        );
     }
 
     #[test]

@@ -185,6 +185,7 @@ is enough: a block is a single entry or a list of them, not a mixture.
 | Commas and a place | `Cheyne, T. K., Founders of Old Testament Criticism, London, 1893.` |
 | Reading list, unmarked | `Block, N. 1981. Psychologism and behaviorism. Philosophical Review 90:5-43.` |
 | Editor in the author's place | `Barratt, Alexandra, ed. Women's Writing in Middle English. London: Longman, 1992.` |
+| A name that ends in an initial | `Hoyt, Edwin P. The Supersalesmen. New York: World Publishing, 1962.` |
 | A reprint's two years | `Schleiermacher, Friedrich. 1813/1963. "Ueber die verschiedenen Methoden…"` |
 | Chapter in a book | `Brown, Peter. "Sorcery…" In *Witchcraft Confessions*, ed. Mary Douglas, 17-45. London: Tavistock, 1970.` |
 
@@ -222,6 +223,13 @@ topic is not an author and `Buss, 1989` is not a work, so it is flagged
 
 **Take a translator's note for a reference.** An em dash and a role at the
 end — `— Ed.`, `— Tr.` — is how a translator signs a note of their own.
+
+**Take where a book was published for what it is called.** `Leiden: Brill,
+2003` and `New York: 1928` are an imprint standing on its own, and a segment
+that is only an imprint is skipped rather than read as the title. A title
+with a colon in it is not one: `Russian Popular Culture: Entertainment and
+Society since 1900` survives, which is why the imprint is asked for narrowly
+— a place of up to three words, and then a year or a publisher and a year.
 
 **Take a note's own remark for a work.** `The Commentator seems to have
 based himself principally on the Bible` and `Dewey remarks that we experience
