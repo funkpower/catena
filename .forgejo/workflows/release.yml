@@ -147,5 +147,15 @@ jobs:
             echo "::notice::catena-corpus@$version is already published"
             exit 0
           fi
+          # Staging offers a new version of a package that exists. It cannot
+          # bring one into being: the registry answers `POST /-/stage/package`
+          # with a 404 for a name it has never seen. So the first release of a
+          # new name is published by hand, with 2FA, and every release after
+          # it goes through here. Not a failure — PyPI is already out.
+          if ! npm view catena-corpus version >/dev/null 2>&1; then
+            echo "::warning::catena-corpus does not exist on npm yet, and staging cannot create it."
+            echo "::warning::Publish the first version by hand: npm publish crates/bindings/npm/dist --access public"
+            exit 0
+          fi
           cd crates/bindings/npm/dist && npm stage publish --access public
           echo "::notice::staged catena-corpus@$version; approve it with 2FA to publish"
