@@ -67,7 +67,19 @@ pub fn title_case(title: &str) -> String {
                 .to_lowercase()
                 .trim_end_matches(['.', ',', ':', ';', '!', '?', ')', ']', '"', '\''])
                 .to_string();
-            if SMALL_WORDS.binary_search(&core.as_str()).is_ok() && at > 0 && at < last {
+            // A small word stays small in the middle of a title, but not
+            // where a title actually starts. A colon starts a subtitle, and
+            // "Aesthetic in Kant: a Critique" is the giveaway that the rule
+            // was only ever counting from the beginning of the whole string.
+            let opens_a_subtitle = at > 0
+                && words[at - 1]
+                    .trim_end_matches(['"', '\'', ')', ']'])
+                    .ends_with([':', ';', '?', '!', '.']);
+            if SMALL_WORDS.binary_search(&core.as_str()).is_ok()
+                && at > 0
+                && at < last
+                && !opens_a_subtitle
+            {
                 return word.to_lowercase();
             }
             let lowered = word.to_lowercase();
@@ -216,5 +228,37 @@ mod tests {
             clean_underscores("The Human Condition"),
             "The Human Condition"
         );
+    }
+}
+
+#[cfg(test)]
+mod subtitle_case_tests {
+    use super::title_case;
+
+    #[test]
+    fn a_subtitle_starts_with_a_capital() {
+        // The rule counted small words from the start of the string, so every
+        // subtitle beginning "A", "The" or "Of" was set lower case.
+        assert_eq!(
+            title_case("AESTHETIC IN KANT: A CRITIQUE"),
+            "Aesthetic in Kant: A Critique"
+        );
+        assert_eq!(
+            title_case("BORN FIGHTING: THE SCOTS-IRISH"),
+            "Born Fighting: The Scots-Irish"
+        );
+        assert_eq!(
+            title_case("A HISTORY: AN INTRODUCTION TO IT"),
+            "A History: An Introduction to It"
+        );
+    }
+
+    #[test]
+    fn a_small_word_in_the_middle_is_still_small() {
+        assert_eq!(
+            title_case("THE RISE AND FALL OF THE THIRD REICH"),
+            "The Rise and Fall of the Third Reich"
+        );
+        assert_eq!(title_case("WAR OF THE WORLDS"), "War of the Worlds");
     }
 }

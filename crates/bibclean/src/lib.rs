@@ -260,9 +260,14 @@ mod tests {
     #[test]
     fn an_underscored_title_is_cleaned_before_it_is_cased() {
         let cleaned = clean(&book("THE FALL_ AND THE RISE_txt", "Arendt, Hannah"));
+        // "And" is capitalised because the colon starts a subtitle, and the
+        // first word of one is capitalised however small it is. This asserted
+        // "and" until the rule was found to be counting small words from the
+        // start of the whole string, which set every subtitle opening "A",
+        // "The" or "An" in lower case.
         assert_eq!(
             cleaned.book.title.as_deref(),
-            Some("The Fall: and the Rise")
+            Some("The Fall: And the Rise")
         );
         assert_eq!(cleaned.changes.len(), 2);
     }
