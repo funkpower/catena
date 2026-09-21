@@ -34,6 +34,11 @@ static LIFESPAN: LazyLock<Regex> = LazyLock::new(|| {
 /// `350 BC`, `1971` — a date alone on a line, which is not a title.
 static BARE_DATE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^\d{1,4}\s*(bc|ad|bce|ce)?\.?$").expect("a valid pattern"));
+/// `Copyright © 2013 by`, `\u{a9} 2013 Richard Swinburne`, `Copyright 1971 by`.
+static COPYRIGHT_NOTICE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(\u{a9}|\(c\)|copyright)\s*(\u{a9}|\(c\))?\s*(1[0-9]|20)\d{2}")
+        .expect("a valid pattern")
+});
 /// `Edited by`, with whoever it was set on the line beneath.
 static ROLE_ONLY: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)^(edited|translated|written|selected|compiled)\s+by:?$")
@@ -107,7 +112,111 @@ fn is_structural(line: &str) -> bool {
         .collect::<String>()
         .trim()
         .to_lowercase();
-    STRUCTURAL.binary_search(&norm.as_str()).is_ok()
+    let norm = strip_folio(&norm);
+    STRUCTURAL.binary_search(&norm).is_ok()
+}
+
+/// A heading with its page number taken off either end.
+///
+/// Front matter is folioed in roman, and the folio sits on the same line as
+/// the heading often enough to matter: `vi   CONTENTS` and `viii CONTENTS`
+/// are contents pages, and were being read as titles because they are not the
+/// bare word.
+fn strip_folio(norm: &str) -> &str {
+    let is_folio = |w: &str| {
+        !w.is_empty()
+            && (w.chars().all(|c| c.is_ascii_digit())
+                || w.chars()
+                    .all(|c| matches!(c, 'i' | 'v' | 'x' | 'l' | 'c' | 'd' | 'm')))
+    };
+    let mut out = norm.trim();
+    loop {
+        let trimmed = match out.split_once(' ') {
+            Some((head, rest)) if is_folio(head) => rest.trim_start(),
+            _ => match out.rsplit_once(' ') {
+                Some((rest, tail)) if is_folio(tail) => rest.trim_end(),
+                _ => return out,
+            },
+        };
+        if trimmed == out {
+            return out;
+        }
+        out = trimmed;
+    }
+}
+
+/// Lines that are printed matter rather than anything a book is called.
+///
+/// Every one of these was read as a title off a real book in a real library:
+/// a copyright notice, a translator's credit, a part heading in brackets, a
+/// span of HTML a converter left behind, and a volume entry from a collected
+/// edition's own list of volumes.
+fn is_furniture(line: &str) -> bool {
+    let t = line.trim();
+    if t.starts_with('[') || t.starts_with('\\') {
+        return true;
+    }
+    // A converter that left its markup in. Nothing printed on a title page is
+    // a tag, a stylesheet declaration, a markdown link or a filename, and a
+    // title that appears to be one is a fragment of the conversion rather than
+    // of the book. Rejecting only the first such line is no use: the next line
+    // of a mangled page is mangled too, so the whole shape has to go.
+    if t.contains("<span")
+        || t.contains("<div")
+        || t.contains("<p ")
+        || t.contains("</")
+        || t.contains("](")          // a markdown link the converter split
+        || t.contains("&quot;")
+        || t.contains("&amp;")
+        || t.contains("mso-")        // Word's stylesheet, via HTML export
+        || t.contains("font-family")
+        || t.contains("font-size")
+        || t.contains("style=")
+        || t.contains("_epub_")
+        || t.contains(".html")
+        || t.contains(".xhtml")
+    {
+        return true;
+    }
+    // Sentences a copyright page sets, which are not notices and so not caught
+    // by the notice pattern.
+    let lower = t.to_lowercase();
+    for phrase in [
+        "moral rights of the author",
+        "no part of this publication",
+        "british library cataloguing",
+        "library of congress cataloging",
+        "printed in the united",
+        "typeset by",
+        "a cip catalogue record",
+    ] {
+        if lower.contains(phrase) {
+            return true;
+        }
+    }
+    let low = t.to_lowercase();
+    // The notice, not the word. "Copyright and Its Discontents" is a book;
+    // "Copyright © 2013 by" is the page it would be printed on. What tells
+    // them apart is the symbol or the year, never the word alone.
+    if COPYRIGHT_NOTICE.is_match(t)
+        || low.contains("all rights reserved")
+        || low.starts_with("first published")
+        || low.starts_with("reprinted")
+    {
+        return true;
+    }
+    // "Translated from the French by Willard R. Trask" — a credit, not a name
+    // and not a title. ROLE_ONLY catches the bare "Translated by"; this is the
+    // whole sentence, which a title page sets on one line.
+    if low.starts_with("translated from") || low.starts_with("translated by") {
+        return true;
+    }
+    // "Vol. 11. HENRY JAMES, JR." — an entry in a collected edition's list of
+    // its own volumes, printed in the front matter of every volume.
+    if low.starts_with("vol.") || low.starts_with("volume ") && low.contains('.') {
+        return true;
+    }
+    false
 }
 
 fn people(who: &str) -> Vec<String> {
@@ -214,7 +323,7 @@ pub fn read(lines: &[String]) -> Option<TitlePage> {
                 continue;
             }
         }
-        if is_structural(line) || BARE_DATE.is_match(line) {
+        if is_structural(line) || is_furniture(line) || BARE_DATE.is_match(line) {
             if block.is_empty() {
                 continue;
             }
@@ -288,4 +397,98 @@ pub fn read(lines: &[String]) -> Option<TitlePage> {
     out.subtitle = subtitle.filter(|s| s.len() >= 2);
     out.title.as_ref()?;
     Some(out)
+}
+
+#[cfg(test)]
+mod furniture_tests {
+    use super::*;
+
+    /// Every string here was read as a title off a book in a real library.
+    #[test]
+    fn printed_matter_is_not_a_title() {
+        for line in [
+            "vi   CONTENTS",
+            "viii   CONTENTS",
+            "xiv  ACKNOWLEDGEMENTS",
+            "12 INDEX",
+            "Translated from the French by Willard R. Trask",
+            "Copyright © 2013 by Barry Davies, BEM",
+            "[PART ONE:",
+            "Piper Verlag GmbH, Munich<span style=\"font-size\">",
+            "Vol. 11. HENRY JAMES, JR.",
+            "All rights reserved",
+            "First published 1971",
+        ] {
+            assert!(
+                is_structural(line) || is_furniture(line),
+                "read as a title: {line:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_real_title_survives_all_of_that() {
+        for line in [
+            "The First World War",
+            "A Very Short Introduction",
+            "Christianity and Classical Culture",
+            "The Problems of Philosophy",
+            "Volume and Void",
+            "Contents of Consciousness",
+            "August 1914",
+            "Copyright and Its Discontents",
+        ] {
+            assert!(
+                !(is_structural(line) || is_furniture(line)),
+                "rejected a real title: {line:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_folio_comes_off_either_end() {
+        assert_eq!(strip_folio("vi contents"), "contents");
+        assert_eq!(strip_folio("contents vi"), "contents");
+        assert_eq!(strip_folio("contents"), "contents");
+        // A title that happens to be roman numerals throughout is not a folio
+        // with nothing left; it keeps whatever it had.
+        assert_eq!(strip_folio("i"), "i");
+    }
+}
+
+#[cfg(test)]
+mod conversion_tests {
+    use super::*;
+
+    /// A mangled page is mangled on every line, so rejecting the first
+    /// leftover only moves the misread down one. Each of these is the line
+    /// colophon fell through to after the line above it was rejected.
+    #[test]
+    fn what_a_converter_left_behind_is_never_a_title() {
+        for line in [
+            "[PART ONE:",
+            "RULERS AND REDNECKS](Webb_9780767922951_epub_p01_r1.html)",
+            "[AFRICAN SLAVERY IN AMERICA - \\[1775\\]](index_split_004.html)",
+            "Piper Verlag GmbH, Munich<span style=\"font-family:&quot;Times\"",
+            "mso-bidi-font-family:&quot;Times New Roman&quot;;mso-ansi-language",
+            "The moral rights of the author have been asserted",
+            "No part of this publication may be reproduced",
+            "British Library Cataloguing in Publication Data",
+            "Typeset by SPI Publisher Services",
+        ] {
+            assert!(is_furniture(line), "read as a title: {line:?}");
+        }
+    }
+
+    #[test]
+    fn a_title_that_merely_sounds_like_the_copyright_page_survives() {
+        for line in [
+            "Copyright and Its Discontents",
+            "The Moral Rights of Man",
+            "Printed Matter",
+            "A Publication of the Institute",
+        ] {
+            assert!(!is_furniture(line), "rejected a real title: {line:?}");
+        }
+    }
 }
