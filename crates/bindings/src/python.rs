@@ -451,15 +451,22 @@ fn _catena(module: &Bound<'_, PyModule>) -> PyResult<()> {
 #[pyo3(signature = (text, pages = colophon::PAGES, shelf = None))]
 fn read_colophon<'py>(
     py: Python<'py>,
-    text: &str,
+    text: String,
     pages: usize,
-    shelf: Option<&str>,
+    shelf: Option<String>,
 ) -> PyResult<Bound<'py, PyAny>> {
     if pages == 0 {
         return Err(PyValueError::new_err("pages = 0 would read nothing"));
     }
-    let shelf = shelf.map(colophon::shelf::Shelf::parse);
-    to_py(py, &colophon::read_onto(text, pages, shelf.as_ref()))
+    // Reading a book's front matter is several milliseconds of pure
+    // computation on a few hundred kilobytes, and holding the interpreter for
+    // it makes `asyncio.to_thread` a lie: a caller reading a library several
+    // books at a time got no overlap at all until this let go.
+    let printed = py.detach(move || {
+        let shelf = shelf.as_deref().map(colophon::shelf::Shelf::parse);
+        colophon::read_onto(&text, pages, shelf.as_ref())
+    });
+    to_py(py, &printed)
 }
 
 /// File subject headings onto a shelf without reading a book.
