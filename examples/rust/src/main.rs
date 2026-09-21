@@ -8,6 +8,13 @@
 //!
 //!     cargo run -- book.md
 //!     cargo run          # reads the sample below
+//!
+//! For a real book, convert one first — Gibbon's first volume is public
+//! domain and has a few hundred pages of footnotes:
+//!
+//!     curl -sL -o gibbon.epub https://www.gutenberg.org/cache/epub/731/pg731.epub
+//!     pandoc -f epub -t commonmark --wrap=none gibbon.epub -o gibbon.md
+//!     cargo run -- gibbon.md
 
 use std::path::Path;
 
@@ -74,8 +81,8 @@ fn main() {
         },
     };
     let chunks = chunkmd::chunk(&clean, &budgets);
-    println!("\n{} passage(s):", chunks.len());
-    for chunk in &chunks {
+    println!("\n{} passage(s), the first few:", chunks.len());
+    for chunk in chunks.iter().take(6) {
         let chapter = chunk.chapter.as_deref().unwrap_or("—");
         let opening: String = chunk.text.chars().take(64).collect();
         println!(
@@ -87,18 +94,50 @@ fn main() {
         );
     }
 
-    // The references at the back. A passage whose role is `bibliography` is
-    // where they live; a note at the foot of a page is the other place, and
-    // `chunkmd` flags those so this does not have to guess.
-    let references: Vec<citefind::Reference> = chunks
+    // The references. A passage whose role is `bibliography` is one place
+    // they live; a page of notes at the foot of a chapter is the other, and
+    // it has no heading over it to find it by — which is why `chunkmd`
+    // flags those, so this does not have to guess.
+    let carrying: Vec<&corpus_core::Chunk> = chunks
         .iter()
-        .filter(|chunk| chunk.role == corpus_core::Role::Bibliography)
+        .filter(|chunk| {
+            chunk.role == corpus_core::Role::Bibliography
+                || chunk
+                    .flags
+                    .iter()
+                    .any(|flag| flag == corpus_core::chunk::flags::FOOTNOTE_CITATIONS)
+        })
+        .collect();
+
+    let references: Vec<citefind::Reference> = carrying
+        .iter()
         .flat_map(|chunk| citefind::read(&chunk.text))
         .filter(|found| !found.continuation)
         .collect();
 
-    println!("\n{} reference(s):", references.len());
-    for found in &references {
+    println!(
+        "\n{} passage(s) carry citation material, giving {} reference(s):",
+        carrying.len(),
+        references.len()
+    );
+    // The ones that named something, which is not all of them: a book whose
+    // notes cite in the classical short form — `Tacit. Annal. xiii. 5.` —
+    // gives mostly passages rather than works, and the record says as much
+    // rather than inventing a title to fill the field.
+    let with_work = references
+        .iter()
+        .filter(|found| found.title.is_some())
+        .count();
+    let named: Vec<&citefind::Reference> = references
+        .iter()
+        .filter(|found| !found.authors.is_empty())
+        .collect();
+    println!(
+        "{with_work} name a work and {} name an author; those:",
+        named.len()
+    );
+
+    for found in named.iter().take(6) {
         let who = match found.authors.is_empty() {
             true => "—".to_string(),
             false => found.authors.join("; "),
@@ -115,5 +154,17 @@ fn main() {
         if !found.unsettled.is_empty() {
             println!("    could not read: {}", found.unsettled.join(", "));
         }
+    }
+
+    // Worth saying plainly, because the numbers above look poor on a book
+    // like Gibbon and the reason is not the parser having failed quietly.
+    // His notes cite in the classical short form — `Tacit. Annal. xiii. 5.`
+    // — which names a passage rather than a work, so there is no title and
+    // no year to read and the record says which fields it could not fill
+    // rather than inventing them. `citation_prompt` and `merge_citation_reply`
+    // are there for a caller that wants a model to finish the job.
+    if references.len() > 20 && named.len() * 10 < references.len() {
+        println!("\n    most of these are classical short cites — a passage");
+        println!("    rather than a work — there is nothing more to read in them.");
     }
 }

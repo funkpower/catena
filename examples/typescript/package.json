@@ -1,0 +1,15 @@
+{
+  "name": "catena-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "chapters": "node --experimental-strip-types src/episode-to-chapters.ts",
+    "search": "node --experimental-strip-types src/search-and-rerank.ts"
+  },
+  "dependencies": {
+    "catena": "file:../../crates/bindings/npm/dist"
+  },
+  "devDependencies": {
+    "@types/node": "^22"
+  }
+}

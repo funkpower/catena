@@ -48,6 +48,10 @@ Each tool installs by name, so you can take one without taking the rest.
 Each links to its own page: what it does, when you would use it, worked
 examples, options and exit codes.
 
+**→ [Examples](examples/README.md) — programs that run.** A book to
+passages and references, a recording to chapter marks and a copy that plays
+on a phone, and a hybrid search fused, in shell, Rust, Python and TypeScript.
+
 **→ [Recipes](docs/recipes.md) — using these tools together.** A scanned book
 to a searchable passage, a transcript to a citation with a timestamp, vectors
 into pgvector, and hybrid search fused on top.
