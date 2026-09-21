@@ -75,12 +75,12 @@ convert, then loop, and what is left is the part that is actually about your
 schema.
 
 ```sh
-pip install catena
+pip install catena-corpus
 python examples/python/book_to_citations.py
 ```
 
 ```sh
-pip install catena psycopg
+pip install catena-corpus psycopg
 DATABASE_URL=postgresql://user@host/db \
     python examples/python/search_and_rerank.py "why did the empire decline"
 ```

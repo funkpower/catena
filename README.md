@@ -77,8 +77,8 @@ callable in process from three languages:
 
 | | Install | Import |
 |---|---|---|
-| **Python** | `pip install catena` | `import catena` |
-| **JavaScript** | `npm install catena` | `import { chunkMarkdown } from "catena"` |
+| **Python** | `pip install catena-corpus` | `import catena` |
+| **JavaScript** | `npm install catena-corpus` | `import { chunkMarkdown } from "catena-corpus"` |
 | **C** | build the `capi` feature | `#include <catena.h>` |
 
 ```python

@@ -12,7 +12,7 @@
 // vector database and whatever else. What they came from does not matter
 // here; only where each of them placed does.
 
-import { fuseHits, type Hit } from "catena";
+import { fuseHits, type Hit } from "catena-corpus";
 
 // `payload` is whatever you want carried alongside — rrf hands it back
 // untouched, so a hit can arrive here with the row it came from attached.

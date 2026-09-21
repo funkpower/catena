@@ -7,7 +7,7 @@
     "search": "node --experimental-strip-types src/search-and-rerank.ts"
   },
   "dependencies": {
-    "catena": "file:../../crates/bindings/npm/dist"
+    "catena-corpus": "file:../../crates/bindings/npm/dist"
   },
   "devDependencies": {
     "@types/node": "^22"

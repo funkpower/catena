@@ -25,7 +25,7 @@ call the same Rust and hand back the same records.
 ## Python
 
 ```sh
-pip install catena
+pip install catena-corpus
 ```
 
 ```python
@@ -100,11 +100,11 @@ server, and none of that is cheaper in process.
 ## JavaScript
 
 ```sh
-npm install catena
+npm install catena-corpus
 ```
 
 ```js
-import { chunkMarkdown, scrub, countTokens, fuseHits } from "catena";
+import { chunkMarkdown, scrub, countTokens, fuseHits } from "catena-corpus";
 
 const chunks = chunkMarkdown(markdown, 512, 64);
 chunks[0].page;      // 41
@@ -125,7 +125,7 @@ Two builds, because the loaders differ — node reads the `.wasm` off disk at
 import, the web build takes a URL a bundler rewrites:
 
 ```js
-import { chunkMarkdown } from "catena";        // resolves per environment
+import { chunkMarkdown } from "catena-corpus";        // resolves per environment
 import { chunkMarkdown } from "catena/node";   // or pick one
 import { chunkMarkdown } from "catena/web";
 ```

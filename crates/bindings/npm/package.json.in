@@ -1,5 +1,5 @@
 {
-  "name": "catena",
+  "name": "catena-corpus",
   "version": "@VERSION@",
   "description": "Turn a pile of files into a searchable corpus: chunking, scrubbing, subtitles and rank fusion, as WebAssembly",
   "license": "MPL-2.0",

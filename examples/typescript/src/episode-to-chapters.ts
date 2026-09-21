@@ -11,7 +11,7 @@
 // broadcast — a work of the US government, so public domain.
 
 import { readFileSync } from "node:fs";
-import { parseSubtitles, segmentCues, packCues, countTokens } from "catena";
+import { parseSubtitles, segmentCues, packCues, countTokens } from "catena-corpus";
 
 const SAMPLE = `WEBVTT
 

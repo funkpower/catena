@@ -4,11 +4,11 @@ Turn a pile of files into a searchable corpus: chunking, scrubbing, subtitles
 and rank fusion, as WebAssembly.
 
 ```sh
-npm install catena
+npm install catena-corpus
 ```
 
 ```js
-import { chunkMarkdown, scrub, countTokens, fuseHits } from "catena";
+import { chunkMarkdown, scrub, countTokens, fuseHits } from "catena-corpus";
 
 const chunks = chunkMarkdown(markdown, 512, 64);
 chunks[0].page;      // 41
@@ -60,7 +60,7 @@ at compile time. Those stay command-line tools.
 ## Node and the web
 
 ```js
-import { chunkMarkdown } from "catena";        // resolves per environment
+import { chunkMarkdown } from "catena-corpus";        // resolves per environment
 import { chunkMarkdown } from "catena/node";   // or pick one
 import { chunkMarkdown } from "catena/web";
 ```
