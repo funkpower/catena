@@ -25,8 +25,10 @@ pub struct Page<'a> {
     pub number: Option<u32>,
     /// The page's text, trimmed.
     pub text: &'a str,
-    /// Byte offset in the source markdown where the page's body starts, used
-    /// to find the chapter when there are no page markers to go on.
+    /// Byte offset in the source markdown where `text` begins, used to find
+    /// the chapter a passage sits under. Exact rather than approximate: it is
+    /// added to a passage's own offset within the page, and a heading missed
+    /// by a few bytes is the wrong chapter for everything after it.
     pub offset: usize,
 }
 
@@ -51,6 +53,12 @@ pub struct Chapter {
 /// Nothing surfaced the loss: the book stayed ingested, with a single chunk.
 /// So the prologue is emitted with no page number, since we genuinely do not
 /// know its page, and the offset-based chapter lookup still tags it.
+/// Where `part` begins inside `whole`, which it must be a slice of.
+fn offset_of(whole: &str, part: &str) -> usize {
+    (part.as_ptr() as usize).saturating_sub(whole.as_ptr() as usize)
+}
+
+/// Cut `markdown` at its page markers.
 pub fn split_by_page(markdown: &str) -> Vec<Page<'_>> {
     let markers: Vec<_> = PAGE.find_iter(markdown).collect();
     if markers.is_empty() {
@@ -67,7 +75,7 @@ pub fn split_by_page(markdown: &str) -> Vec<Page<'_>> {
         pages.push(Page {
             number: None,
             text: head,
-            offset: 0,
+            offset: offset_of(markdown, head),
         });
     }
     for (at, marker) in markers.iter().enumerate() {
@@ -80,7 +88,7 @@ pub fn split_by_page(markdown: &str) -> Vec<Page<'_>> {
             pages.push(Page {
                 number: Some(textkit::decimal(&markdown[marker.start()..marker.end()])),
                 text,
-                offset: start,
+                offset: offset_of(markdown, text),
             });
         }
     }

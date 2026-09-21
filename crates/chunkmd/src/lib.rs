@@ -33,7 +33,7 @@ pub fn chunk(markdown: &str, budgets: &Budgets) -> Vec<Chunk> {
     let mut chunks: Vec<Chunk> = Vec::new();
     for page in pages {
         for packed in pack::page(page.text, budgets) {
-            for (piece, tokens) in pack::enforce_hard_max(&packed, budgets.hard_max) {
+            for (piece, tokens) in pack::enforce_hard_max(&packed.text, budgets.hard_max) {
                 if tokens < budgets.min_tokens {
                     continue;
                 }
@@ -42,11 +42,15 @@ pub fn chunk(markdown: &str, budgets: &Budgets) -> Vec<Chunk> {
                 // that have headings but no page anchors. Page zero counts as
                 // no page at all, which is what the Python's truth test makes
                 // of it.
+                // The passage's own position, not the page's: an
+                // unpaginated document is a single page beginning at zero,
+                // so asking at the page put every chunk in the book under
+                // whichever heading came first in the file.
                 let chapter = page
                     .number
                     .filter(|number| *number != 0)
                     .and_then(|number| pages::chapter_of_page(&chapters, number))
-                    .or_else(|| by_offset.at(page.offset));
+                    .or_else(|| by_offset.at(page.offset + packed.offset));
 
                 let idx = chunks.len() as u32;
                 let notes = footnote::looks_like_citations(&piece);
@@ -108,6 +112,30 @@ mod tests {
         let markdown = "<!-- Page 1 -->\n\n# The Second Estate\n\nalpha beta gamma";
         let chunks = chunk(markdown, &small());
         assert_eq!(chunks[0].chapter.as_deref(), Some("The Second Estate"));
+    }
+
+    #[test]
+    fn every_chunk_answers_with_the_heading_it_sits_under() {
+        // An unpaginated document is one page beginning at zero, so asking
+        // the page where a chunk was rather than asking the chunk put the
+        // whole book under whichever heading came first in the file.
+        let markdown = "# Chapter One\n\nBody text long enough to be worth \
+                        keeping as a passage of its own.\n\n# Bibliography\n\n\
+                        Bloch, Marc. *Feudal Society*. London: Routledge, 1961.\n\n\
+                        Duby, Georges. *The Three Orders*. Chicago: Chicago, 1980.\n";
+        let budgets = Budgets {
+            target: 40,
+            overlap: 0,
+            min_tokens: 5,
+            ..Budgets::default()
+        };
+        let chunks = chunk(markdown, &budgets);
+        let under: Vec<&str> = chunks
+            .iter()
+            .map(|chunk| chunk.chapter.as_deref().unwrap_or("—"))
+            .collect();
+        assert!(under.contains(&"Chapter One"), "{under:?}");
+        assert!(under.contains(&"Bibliography"), "{under:?}");
     }
 
     #[test]

@@ -23,6 +23,20 @@ pub struct Budgets {
     pub hard_max: usize,
 }
 
+/// A passage as packed, and where in the page it began.
+///
+/// The offset is what lets a chunk be placed back in the document it came
+/// from — which is how it finds the heading it sits under. Without it every
+/// chunk of an unpaginated document answers with the first heading in the
+/// file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Packed {
+    /// The passage.
+    pub text: String,
+    /// Byte offset within the page's text where the passage begins.
+    pub offset: usize,
+}
+
 impl Default for Budgets {
     fn default() -> Self {
         Self {
@@ -35,14 +49,17 @@ impl Default for Budgets {
 }
 
 /// Pack one page's text into chunk-sized pieces.
-pub fn page(text: &str, budgets: &Budgets) -> Vec<String> {
+pub fn page(text: &str, budgets: &Budgets) -> Vec<Packed> {
     let paragraphs = textkit::paragraphs(text);
     if paragraphs.is_empty() {
         return Vec::new();
     }
+    // Where a piece began, so that what is packed can still be placed. The
+    // pieces are slices of `text`, so the arithmetic is exact.
+    let at = |piece: &str| (piece.as_ptr() as usize).saturating_sub(text.as_ptr() as usize);
 
-    let mut chunks = Vec::new();
-    let mut buf: Vec<String> = Vec::new();
+    let mut chunks: Vec<Packed> = Vec::new();
+    let mut buf: Vec<(String, usize)> = Vec::new();
     let mut buf_tokens = 0usize;
 
     for paragraph in paragraphs {
@@ -56,29 +73,41 @@ pub fn page(text: &str, budgets: &Budgets) -> Vec<String> {
             for sentence in textkit::sentences(paragraph) {
                 let sentence_tokens = textkit::count(sentence);
                 if buf_tokens + sentence_tokens > budgets.target && !buf.is_empty() {
-                    chunks.push(buf.join(" "));
+                    chunks.push(joined(&buf, " "));
                     buf = carry_tail(&buf, budgets.overlap);
-                    buf_tokens = textkit::count(&buf.join(" "));
+                    buf_tokens = textkit::count(&joined(&buf, " ").text);
                 }
-                buf.push(sentence.to_string());
+                buf.push((sentence.to_string(), at(sentence)));
                 buf_tokens += sentence_tokens;
             }
             continue;
         }
 
         if buf_tokens + paragraph_tokens > budgets.target && !buf.is_empty() {
-            chunks.push(buf.join("\n\n"));
+            chunks.push(joined(&buf, "\n\n"));
             buf = carry_tail(&buf, budgets.overlap);
-            buf_tokens = textkit::count(&buf.join("\n\n"));
+            buf_tokens = textkit::count(&joined(&buf, "\n\n").text);
         }
-        buf.push(paragraph.to_string());
+        buf.push((paragraph.to_string(), at(paragraph)));
         buf_tokens += paragraph_tokens;
     }
 
     if !buf.is_empty() {
-        chunks.push(buf.join("\n\n"));
+        chunks.push(joined(&buf, "\n\n"));
     }
     chunks
+}
+
+/// Join a buffer's pieces, keeping where the first of them began.
+fn joined(buf: &[(String, usize)], separator: &str) -> Packed {
+    Packed {
+        text: buf
+            .iter()
+            .map(|(piece, _)| piece.as_str())
+            .collect::<Vec<_>>()
+            .join(separator),
+        offset: buf.first().map(|(_, at)| *at).unwrap_or_default(),
+    }
 }
 
 /// Keep the last pieces of a buffer, up to `overlap` tokens of context.
@@ -86,11 +115,11 @@ pub fn page(text: &str, budgets: &Budgets) -> Vec<String> {
 /// Always keeps at least one piece, even when that piece alone is over
 /// budget: an overlap of nothing is a chunk boundary with no bridge across
 /// it, which is the thing overlap exists to prevent.
-fn carry_tail(buf: &[String], overlap: usize) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
+fn carry_tail(buf: &[(String, usize)], overlap: usize) -> Vec<(String, usize)> {
+    let mut out: Vec<(String, usize)> = Vec::new();
     let mut total = 0usize;
     for piece in buf.iter().rev() {
-        let tokens = textkit::count(piece);
+        let tokens = textkit::count(&piece.0);
         if total + tokens > overlap && !out.is_empty() {
             break;
         }
@@ -125,6 +154,10 @@ pub fn enforce_hard_max(text: &str, hard_max: usize) -> Vec<(String, usize)> {
 mod tests {
     use super::*;
 
+    fn texts(packed: Vec<Packed>) -> Vec<String> {
+        packed.into_iter().map(|one| one.text).collect()
+    }
+
     fn budgets(target: usize, overlap: usize) -> Budgets {
         Budgets {
             target,
@@ -135,20 +168,20 @@ mod tests {
 
     #[test]
     fn short_text_is_one_chunk() {
-        let chunks = page("one\n\ntwo", &Budgets::default());
+        let chunks = texts(page("one\n\ntwo", &Budgets::default()));
         assert_eq!(chunks, ["one\n\ntwo"]);
     }
 
     #[test]
     fn paragraphs_are_rejoined_with_a_blank_line() {
-        let chunks = page("alpha\n\n\n\nbeta", &Budgets::default());
+        let chunks = texts(page("alpha\n\n\n\nbeta", &Budgets::default()));
         assert_eq!(chunks, ["alpha\n\nbeta"]);
     }
 
     #[test]
     fn a_full_buffer_flushes_and_carries_a_tail() {
         let text = "one two three\n\nfour five six\n\nseven eight nine";
-        let chunks = page(text, &budgets(6, 4));
+        let chunks = texts(page(text, &budgets(6, 4)));
         assert!(chunks.len() > 1, "{chunks:?}");
         // Every chunk after the first repeats the end of the one before it.
         for pair in chunks.windows(2) {
@@ -165,7 +198,7 @@ mod tests {
     #[test]
     fn an_oversized_paragraph_is_cut_at_sentences() {
         let paragraph = "Alpha one. Beta two. Gamma three. Delta four. Epsilon five.";
-        let chunks = page(
+        let chunks = texts(page(
             paragraph,
             &Budgets {
                 target: 6,
@@ -173,7 +206,7 @@ mod tests {
                 min_tokens: 1,
                 hard_max: 8,
             },
-        );
+        ));
         assert!(chunks.len() > 1, "{chunks:?}");
         assert!(chunks[0].contains(' '));
     }
@@ -185,7 +218,7 @@ mod tests {
 
     #[test]
     fn the_tail_keeps_one_piece_even_when_it_is_over_budget() {
-        let buf = vec!["a longer paragraph than the overlap allows".to_string()];
+        let buf = vec![("a longer paragraph than the overlap allows".to_string(), 0)];
         assert_eq!(carry_tail(&buf, 1).len(), 1);
     }
 
