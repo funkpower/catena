@@ -53,6 +53,16 @@ struct Args {
     /// How many pages in from the front to read.
     #[arg(long, value_name = "COUNT", default_value_t = colophon::PAGES)]
     pages: usize,
+
+    /// A closed list of headings to file the book's printed subjects under.
+    ///
+    /// One heading per line, optionally `Heading = term, term` to give the
+    /// words that should match it; a heading with no terms matches its own
+    /// name. A cataloguing block states subjects in Library of Congress form,
+    /// which is no use as a shelf, so this says what the shelf is. What
+    /// matches nothing comes back under `unshelved` rather than being dropped.
+    #[arg(long, value_name = "FILE")]
+    shelf: Option<PathBuf>,
 }
 
 fn main() -> ExitCode {
@@ -73,6 +83,26 @@ fn main() -> ExitCode {
         return ExitCode::from(exit::USAGE);
     }
 
+    // Read the shelf before any book, so a bad path fails at once rather than
+    // after the whole library has been read with no shelf applied.
+    let shelf = match args.shelf.as_deref() {
+        None => None,
+        Some(path) => match std::fs::read_to_string(path) {
+            Ok(text) => {
+                let s = colophon::shelf::Shelf::parse(&text);
+                if s.is_empty() {
+                    eprintln!("colophon: {} lists no headings", path.display());
+                    return ExitCode::from(exit::USAGE);
+                }
+                Some(s)
+            }
+            Err(e) => {
+                eprintln!("colophon: {}: {e}", path.display());
+                return ExitCode::from(exit::USAGE);
+            }
+        },
+    };
+
     let inputs: Vec<Option<PathBuf>> = if args.paths.is_empty() {
         vec![None]
     } else {
@@ -89,7 +119,7 @@ fn main() -> ExitCode {
                 return ExitCode::from(code);
             }
         };
-        let mut record = colophon::read(&text, args.pages);
+        let mut record = colophon::read_onto(&text, args.pages, shelf.as_ref());
         record.path = path.as_deref().map(|p| p.display().to_string());
         records.push(record);
         last_text = text;

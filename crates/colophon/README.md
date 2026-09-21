@@ -21,6 +21,38 @@ Every field names the page it was read off. Nothing is inferred: a scan that
 begins at the preface printed no title page, and the record of that is an
 empty one with every field listed in `unsettled`.
 
+## A shelf of your own
+
+A cataloguing block states subjects the way a national library does:
+
+```text
+Political science – Early works to 1800
+English literature—Middle English, 1100–1500—History and criticism
+```
+
+Nobody browses by those. `--shelf` takes the closed list you actually file by
+and returns the headings from it that the book's own subjects hit:
+
+```sh
+colophon --shelf shelf.txt book.md
+```
+
+```text
+# one heading per line; `= terms` gives the words that match it,
+# and a heading with no terms matches its own name.
+Byzantine History = byzantium, byzantine, constantinople
+Political Science = political science, politics
+Ethics
+```
+
+The longest term wins, so `Ancient Philosophy` beats `Philosophy` and a period
+of thought does not collapse into its parent. Matching is on whole words after
+punctuation is folded away, because a block separates with em dashes, en
+dashes, full stops and hyphens, and OCR turns any of those into any other.
+
+Headings that match nothing come back under `unshelved`, kept as printed. A
+subject quietly dropped reads exactly like a book that printed none.
+
 ## When you would use it
 
 - **Cataloguing scans and secondhand files**, where the embedded metadata is

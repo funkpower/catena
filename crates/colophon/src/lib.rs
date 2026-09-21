@@ -38,6 +38,7 @@ pub mod cip;
 pub mod imprint;
 pub mod page;
 pub mod prompt;
+pub mod shelf;
 pub mod title;
 
 use std::collections::BTreeMap;
@@ -109,8 +110,18 @@ pub struct Printed {
     pub place: Option<String>,
     /// The year of publication, preferring first publication.
     pub year: Option<u16>,
-    /// The subject headings the cataloguing block filed it under.
+    /// The subject headings the cataloguing block filed it under, as printed.
     pub subjects: Vec<String>,
+    /// Those headings filed onto a caller's own shelf, when one was given.
+    ///
+    /// Empty without `--shelf`, and empty too when the book's subjects match
+    /// nothing on it — which is an answer, and the reason `unshelved` exists.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shelved: Vec<String>,
+    /// Printed headings that matched nothing on the shelf, kept verbatim so a
+    /// subject is never silently dropped.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unshelved: Vec<String>,
     /// Which page each field was read off.
     pub read_from: BTreeMap<String, Source>,
     /// The fields a catalogue wants that this book did not print.
@@ -197,6 +208,24 @@ fn squash(s: &str) -> String {
         .collect()
 }
 
+/// Read a book's front matter, and file its subjects onto a shelf.
+///
+/// `budget` is how many pages in to read; [`PAGES`] is the sensible default.
+/// Passing a [`Shelf`](shelf::Shelf) fills `shelved` and `unshelved`; without
+/// one, `subjects` is still read and both stay empty.
+pub fn read_onto(text: &str, budget: usize, shelf: Option<&shelf::Shelf>) -> Printed {
+    let mut out = read(text, budget);
+    if let Some(shelf) = shelf.filter(|s| !s.is_empty()) {
+        let filed = shelf.file(&out.subjects);
+        if !filed.on.is_empty() {
+            out.note("shelved", Source::Cip);
+        }
+        out.shelved = filed.on;
+        out.unshelved = filed.unfiled;
+    }
+    out
+}
+
 /// Read a book's front matter.
 ///
 /// `budget` is how many pages in to read; [`PAGES`] is the sensible default.
@@ -214,6 +243,8 @@ pub fn read(text: &str, budget: usize) -> Printed {
         place: None,
         year: None,
         subjects: Vec::new(),
+        shelved: Vec::new(),
+        unshelved: Vec::new(),
         read_from: BTreeMap::new(),
         unsettled: Vec::new(),
         pages_read: pages.len(),
