@@ -25,6 +25,7 @@ Each tool installs by name, so you can take one without taking the rest.
 |---|---|
 | [`booksniff`](crates/booksniff/README.md) | What a file actually is, whatever its name claims |
 | [`bookmeta`](crates/bookmeta/README.md) | The metadata a file already carries |
+| [`colophon`](crates/colophon/README.md) | The record a book prints in its own front matter |
 | [`tocfind`](crates/tocfind/README.md) | A book's own table of contents |
 | [`langid`](crates/langid/README.md) | What language a document is in |
 | [`pdfgutter`](crates/pdfgutter/README.md) | Books scanned two pages to a sheet, split back into pages |

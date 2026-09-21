@@ -34,6 +34,7 @@ langid = { path = "crates/langid", version = "0.1.0" }
 tocfind = { path = "crates/tocfind", version = "0.1.0" }
 booksniff = { path = "crates/booksniff", version = "0.1.0" }
 citefind = { path = "crates/citefind", version = "0.1.0" }
+colophon = { path = "crates/colophon", version = "0.1.0" }
 emb = { path = "crates/emb", version = "0.1.0" }
 
 clap = { version = "4", features = ["derive"] }
