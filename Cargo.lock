@@ -253,9 +253,11 @@ name = "catena"
 version = "0.1.0"
 dependencies = [
  "bibclean",
+ "bibfetch",
  "booksniff",
  "chunkmd",
  "citefind",
+ "colophon",
  "corpus-core",
  "cuekit",
  "cuepack",

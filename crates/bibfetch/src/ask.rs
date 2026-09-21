@@ -22,7 +22,11 @@ pub struct Ask {
 
 impl Default for Ask {
     fn default() -> Self {
-        Self { polite: None, timeout: crate::TIMEOUT, attempts: crate::ATTEMPTS }
+        Self {
+            polite: None,
+            timeout: crate::TIMEOUT,
+            attempts: crate::ATTEMPTS,
+        }
     }
 }
 
@@ -73,7 +77,9 @@ pub fn lookup(
     }
     match best {
         Some(record) => Ok(Some(record)),
-        None => Err(last_error.unwrap_or_else(|| Error::Unreachable("no register answered".into()))),
+        None => {
+            Err(last_error.unwrap_or_else(|| Error::Unreachable("no register answered".into())))
+        }
     }
 }
 

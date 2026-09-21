@@ -203,7 +203,10 @@ mod tests {
     fn real_cataloguing_headings_file() {
         let s = shelf();
         for (raw, want) in [
-            ("Political science – Early works to 1800", "Political Science"),
+            (
+                "Political science – Early works to 1800",
+                "Political Science",
+            ),
             ("Political science — Philosophy", "Political Science"),
             ("Byzantine Empire—History—527-1081", "Byzantine History"),
             ("Christianity and culture", "Theology"),
@@ -248,10 +251,7 @@ mod tests {
 
     #[test]
     fn a_heading_is_not_repeated() {
-        let filed = shelf().file(&[
-            "Philosophy—Ancient".into(),
-            "Philosophy—Modern".into(),
-        ]);
+        let filed = shelf().file(&["Philosophy—Ancient".into(), "Philosophy—Modern".into()]);
         assert_eq!(filed.on, ["Philosophy"]);
     }
 

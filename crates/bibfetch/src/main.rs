@@ -114,12 +114,6 @@ fn main() -> ExitCode {
     })
 }
 
-
-
-
-
-
-
 /// The identifier and its kind out of one record.
 fn read_identifier(line: &str) -> Result<(String, String), String> {
     let value: serde_json::Value =
