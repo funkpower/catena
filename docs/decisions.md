@@ -93,6 +93,11 @@ library.
 The chapter a passage carries is the nearest heading above the point the
 passage *starts*, found by byte offset into the source.
 
+The heading level that divides a document is the shallowest one used more
+than once, not simply the shallowest one present: a converted EPUB carries the
+book's title as a lone `#` above sixty-two `##` chapters, and a level used
+once is a title rather than a chapter map.
+
 The offset has to be the passage's own. A document with no page markers is a
 single page beginning at zero, so asking where the *page* started puts every
 chunk in the book under whichever heading came first in the file — which also

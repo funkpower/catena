@@ -4,6 +4,7 @@
 //! and chapter boundaries as headings. Both are needed on every chunk: a
 //! passage a reader cannot locate in the book is a passage they cannot check.
 
+use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -117,12 +118,22 @@ pub fn chapters(markdown: &str) -> Vec<Chapter> {
         return Vec::new();
     }
 
-    let shallowest = headings
+    // The shallowest level that divides the document, which is not always the
+    // shallowest level in it. A converted EPUB carries the book's title as a
+    // lone `#` above sixty-two `##` chapters, and taking the lone one makes
+    // the whole book a single chapter — so a level used once is a title and a
+    // level used twice is a chapter map.
+    let mut counts: BTreeMap<usize, usize> = BTreeMap::new();
+    for (level, _, _) in &headings {
+        *counts.entry(*level).or_default() += 1;
+    }
+    let dividing = counts
         .iter()
-        .map(|(level, _, _)| *level)
-        .min()
+        .find(|(_, used)| **used > 1)
+        .map(|(level, _)| *level)
+        .or_else(|| counts.keys().next().copied())
         .expect("a heading");
-    headings.retain(|(level, _, _)| *level == shallowest);
+    headings.retain(|(level, _, _)| *level == dividing);
 
     let page_at = PageIndex::new(markdown);
     let mut chapters = Vec::with_capacity(headings.len());
@@ -243,6 +254,22 @@ mod tests {
     fn markers_may_be_spelled_loosely() {
         let pages = split_by_page("<!--Page   7-->\n\nbody");
         assert_eq!(pages[0].number, Some(7));
+    }
+
+    #[test]
+    fn a_lone_shallow_heading_is_a_title_rather_than_a_chapter_map() {
+        // What a converted EPUB looks like: the book's title as the only
+        // `#`, and every actual chapter a `##` under it. Taking the lone
+        // one makes the whole book a single chapter.
+        let markdown = "# The Whole Book\n\n## Chapter One\n\ntext\n\n## Chapter Two\n\ntext";
+        let found = chapters(markdown);
+        assert_eq!(
+            found
+                .iter()
+                .map(|one| one.title.as_str())
+                .collect::<Vec<_>>(),
+            ["Chapter One", "Chapter Two"]
+        );
     }
 
     #[test]

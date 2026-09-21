@@ -1,0 +1,16 @@
+# Standalone so that `cargo run` here does not need the workspace above it.
+[workspace]
+
+[package]
+name = "catena-example"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+[dependencies]
+booksniff = { path = "../../crates/booksniff" }
+chunkmd = { path = "../../crates/chunkmd" }
+citefind = { path = "../../crates/citefind" }
+corpus-core = { path = "../../crates/corpus-core" }
+mdscrub = { path = "../../crates/mdscrub" }

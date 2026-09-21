@@ -18,8 +18,10 @@ fn pattern(source: &str) -> Regex {
 /// `[text](url)` — a heading wrapped in a link to its own anchor.
 static LINK: LazyLock<Regex> = LazyLock::new(|| pattern(r"\[([^\]]*)\]\([^)]*\)"));
 
-/// `[text]{.cls}` — pandoc's bracketed inline span.
-static BRACKETED: LazyLock<Regex> = LazyLock::new(|| pattern(r"\[([^\]]+)\]\{[^}]*\}"));
+/// `[text]{.cls}` — pandoc's bracketed inline span. The text may be empty:
+/// `[]{#chapter-3}` is how an anchor with nothing in it arrives, and a
+/// heading that keeps one is a chapter title with an element id in it.
+static BRACKETED: LazyLock<Regex> = LazyLock::new(|| pattern(r"\[([^\]]*)\]\{[^}]*\}"));
 
 /// A trailing `{.attr}` block.
 static ATTRIBUTE_TAIL: LazyLock<Regex> =
