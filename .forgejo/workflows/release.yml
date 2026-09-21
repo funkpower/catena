@@ -1,0 +1,140 @@
+name: release
+
+# Tag-driven. Cargo.toml carries the version; the tag only points at it, and
+# the first step refuses to go on if the two disagree — a release tagged
+# v0.3.0 that publishes 0.2.0 cannot be undone, because PyPI will not let a
+# version be reused even after it is yanked.
+on:
+  push:
+    tags: ['v*']
+
+# One job on purpose. Splitting build from publish would mean passing wheels
+# between jobs through actions/upload-artifact, which is a JavaScript action:
+# the runner executes it with `node` inside this container, and a Rust image
+# has none until this workflow installs one. Everything a release needs fits
+# in one job, so nothing has to be handed over.
+jobs:
+  publish:
+    runs-on: docker
+    container:
+      image: rust:1.98-bookworm
+    steps:
+      # Not actions/checkout, for the reason above. The token goes in a header
+      # rather than in the remote URL, so it is not written into .git/config
+      # where a later step could print it — and the clone keeps working if the
+      # repository is ever made private.
+      - name: Checkout
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init -q .
+          git config --local "http.$GITHUB_SERVER_URL/.extraheader" \
+            "Authorization: Basic $(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')"
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          git fetch -q --depth 1 origin "$GITHUB_SHA"
+          git checkout -q FETCH_HEAD
+
+      - name: Tag must match the workspace version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          crate=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          echo "tag=$tag workspace=$crate"
+          [ "$tag" = "$crate" ] || { echo "::error::tag $tag != Cargo.toml $crate"; exit 1; }
+
+      # What CI runs on every push, run again here. A release is the one build
+      # nobody gets to re-run after the fact: PyPI will not reuse a version and
+      # neither will npm, so the gate belongs before the upload rather than
+      # only on the branch that led to it.
+      - name: The gate
+        run: |
+          apt-get update -qq
+          apt-get install -qq -y --no-install-recommends python3 >/dev/null
+          rustup component add rustfmt clippy
+          rustup target add wasm32-unknown-unknown
+          ./check.sh
+
+      - name: Build wheels and sdist
+        run: |
+          apt-get install -qq -y --no-install-recommends python3-venv >/dev/null
+          python3 -m venv /tmp/venv
+          # readme-renderer[md] is what makes `twine check` actually parse the
+          # long description. Without it the render returns None and the check
+          # reports PASSED regardless, even with --strict.
+          /tmp/venv/bin/pip install -q 'maturin[zig]' twine 'readme-renderer[md]'
+          # The venv has to be first on PATH, not merely called by absolute
+          # path. maturin looks for zig by running `python3 -m ziglang`, and
+          # `maturin[zig]` puts ziglang in the venv only, so a bare python3
+          # resolves to the system one, which does not have it.
+          export PATH="/tmp/venv/bin:$PATH"
+          python3 -m ziglang version
+          # --zig cross-compiles against an older glibc than this image ships,
+          # so the wheel is not silently pinned to bookworm's.
+          cd crates/bindings
+          for target in x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu; do
+            rustup target add "$target"
+            maturin build --release --zig --target "$target" --out ../../dist
+          done
+          maturin sdist --out ../../dist
+          ls -l ../../dist
+
+      - name: Build the npm package
+        run: |
+          # Node from nodesource rather than apt. `npm stage` below wants npm
+          # 11.15 and Node 22.14, and bookworm ships Node 18.
+          curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+          apt-get install -qq -y --no-install-recommends nodejs >/dev/null
+          npm install --global --silent npm@^11.15
+          curl -sSfL https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+          cd crates/bindings/npm
+          # The declarations are hand-written, so nothing but a type checker
+          # would notice them going wrong. build.sh skips the check when tsc
+          # is absent, which in a release is not good enough.
+          npm install --no-save --silent typescript@5
+          ./build.sh
+          node test.mjs
+
+      - name: Publish to PyPI
+        env:
+          # PyPI's trusted publishing is OIDC and supports GitHub, GitLab,
+          # Google Cloud Build and ActiveState — not Forgejo — so this forge
+          # has to hold a long-lived credential. Scope it to this project once
+          # the project exists: the first upload of a new name needs an
+          # account-wide token, because a project-scoped one cannot create the
+          # project it is scoped to.
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          # By absolute path: each step gets its own shell, so the PATH the
+          # build step exported for zig's sake does not reach this one.
+          /tmp/venv/bin/twine check --strict dist/*
+          # --skip-existing so a retry after a partial upload finishes the job
+          # instead of dying on the first file. A version cannot be reused, so
+          # a half-published release would otherwise burn it.
+          /tmp/venv/bin/twine upload --non-interactive --skip-existing dist/*
+
+      # Staged, not published. npm is withdrawing direct publish from any token
+      # that bypasses 2FA, and its trusted publishing is OIDC against GitHub
+      # Actions and GitLab, which this forge is neither. So the runner does the
+      # part a token may do and stages the tarball, and a maintainer approves
+      # it with 2FA: `npm stage list`, then `npm stage approve <id>`, or the
+      # Staged Packages tab on npmjs.com. Nothing reaches the registry until
+      # then.
+      - name: Stage the npm release
+        env:
+          # Granular, write on catena-corpus alone, and it does not need to
+          # bypass 2FA — staging is exactly what a token that cannot bypass it
+          # is still allowed to do.
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "::warning::NPM_TOKEN is not set; nothing staged on npm"
+            exit 0
+          fi
+          echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > ~/.npmrc
+          version="${GITHUB_REF_NAME#v}"
+          if npm view "catena-corpus@$version" version >/dev/null 2>&1; then
+            echo "::notice::catena-corpus@$version is already published"
+            exit 0
+          fi
+          cd crates/bindings/npm/dist && npm stage publish --access public
+          echo "::notice::staged catena-corpus@$version; approve it with 2FA to publish"

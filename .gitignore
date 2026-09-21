@@ -4,3 +4,4 @@ target/
 
 # Built npm package; `crates/bindings/npm/build.sh` makes it.
 crates/bindings/npm/dist/
+dist/
