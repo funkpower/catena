@@ -85,6 +85,17 @@ jobs:
           apt-get install -qq -y --no-install-recommends nodejs >/dev/null
           npm install --global --silent npm@^11.15
           curl -sSfL https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+          # wasm-pack fetches binaryen itself and that fetch dies on this
+          # runner, which is how the first release failed. It uses a wasm-opt
+          # already on PATH when it finds one, so fetch the same archive with
+          # curl — which works here — and let it find that instead. The
+          # version is the one wasm-pack asks for; a mismatch only means it
+          # would download its own again.
+          binaryen=version_117
+          curl -sSfL "https://github.com/WebAssembly/binaryen/releases/download/$binaryen/binaryen-$binaryen-x86_64-linux.tar.gz" \
+            | tar xz -C /tmp
+          export PATH="/tmp/binaryen-$binaryen/bin:$PATH"
+          wasm-opt --version
           cd crates/bindings/npm
           # The declarations are hand-written, so nothing but a type checker
           # would notice them going wrong. build.sh skips the check when tsc
