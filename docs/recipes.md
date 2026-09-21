@@ -6,6 +6,7 @@ this suite, because a real pipeline has a database at the end of it.
 
 - [A shelf of files, sorted before anything else touches it](#a-shelf-of-files-sorted-before-anything-else-touches-it)
 - [A catalogue out of what the files already say](#a-catalogue-out-of-what-the-files-already-say)
+- [Shelving a library by what its books printed](#shelving-a-library-by-what-its-books-printed)
 - [Asking a model, without this suite calling one](#asking-a-model-without-this-suite-calling-one)
 - [A scanned book into searchable passages](#a-scanned-book-into-searchable-passages)
 - [A collected edition into one record per work](#a-collected-edition-into-one-record-per-work)
@@ -97,6 +98,97 @@ with:
 ```sh
 langid converted/*.md | jq -r 'select(.language != "en") | [.path, .name] | @tsv'
 ```
+
+## Shelving a library by what its books printed
+
+A catalogue's subjects come from wherever the file came from, which is to say
+from nowhere in particular. A book's own cataloguing block is the one place its
+subjects are stated rather than guessed — and stated in Library of Congress
+form, which is precise and useless for browsing:
+
+```
+$ colophon converted/hobbes.md | jq -r '.subjects[]'
+Hobbes, Thomas, 1588–1679. Leviathan
+Political science – Early works to 1800
+```
+
+Nobody has a shelf called that. Give `colophon` the list you actually file by
+and it files them for you:
+
+```
+$ cat shelf.txt
+Political Science = political science, politics
+Byzantine History = byzantium, byzantine, constantinople
+Theology = theology, christianity
+Ethics
+
+$ colophon --shelf shelf.txt converted/*.md | jq -c '{title, shelved, unshelved}'
+{"title":"Leviathan","shelved":["Political Science"],"unshelved":["Hobbes, Thomas, 1588–1679. Leviathan"]}
+{"title":"Christianity and Classical Culture","shelved":["Theology"],"unshelved":[]}
+```
+
+`unshelved` is the point of the exercise. A subject quietly dropped reads
+exactly like a book that printed none, and the difference decides whether you
+go looking for a heading your shelf is missing.
+
+**The title page is not evidence on its own.** A scan that begins mid-frontmatter
+gives up a running head, a copyright line, or the author's name where the title
+should be. What makes a printed record trustworthy is a second one agreeing,
+and the ISBN in the same block is how you get one:
+
+```sh
+colophon --shelf shelf.txt converted/*.md > printed.ndjson
+
+jq -r 'select(.isbns != null) | .isbns[0]' printed.ndjson \
+  | idnorm --quiet \
+  | bibfetch --polite you@example.org > register.ndjson
+```
+
+Now two sources that cannot have copied each other have spoken, and you can
+say which books are settled and which need a person:
+
+```sh
+jq -s -r '
+  (.[1] | map({key: .id, value: .}) | from_entries) as $reg
+  | .[0][]
+  | . as $printed
+  | ($reg[$printed.isbns[0] // ""] // {}) as $found
+  | [ $printed.title,
+      $found.title,
+      (if $printed.title and $found.title then "corroborated" else "one source" end)
+    ] | @tsv
+' printed.ndjson register.ndjson
+```
+
+```
+The First World War    The First World War: A Very Short Introduction   corroborated
+Document5              The Problems of Philosophy                       corroborated
+Born Fighting          —                                                one source
+```
+
+The second row is the case worth the whole recipe: a file named `Document5`
+whose author reads `-ducati996`, which the book itself and OpenLibrary agree
+is Russell's *The Problems of Philosophy*. The third is the honest failure —
+one source said something, nothing confirmed it, and it goes to a human.
+
+In process, where a pipeline actually lives:
+
+```python
+import catena
+
+shelf = open("shelf.txt").read()
+printed = catena.read_colophon(markdown, shelf=shelf)
+
+found = None
+if printed["isbns"]:
+    found = catena.fetch_identifier(printed["isbns"][0], polite="you@example.org")
+
+settled = bool(printed.get("title") and found and found.get("title"))
+```
+
+`catena.shelve(shelf, subjects)` files headings a catalogue already holds, by
+the same rules, so a record's existing subjects and its book's printed ones are
+judged alike.
 
 ## Asking a model, without this suite calling one
 

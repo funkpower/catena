@@ -15,6 +15,7 @@ NASA broadcast, which is a work of the US government.
 | [`shell/03-search-and-rerank.sh`](shell/03-search-and-rerank.sh) | Passages into pgvector, then a search that asks twice and reconciles |
 | [`rust/`](rust/src/main.rs) | The same book walked through in one process, with no pipe anywhere |
 | [`python/book_to_citations.py`](python/book_to_citations.py) | A book to rows a database can take |
+| [`python/shelve_a_library.py`](python/shelve_a_library.py) | What a book says about itself, shelved and checked against a register |
 | [`python/search_and_rerank.py`](python/search_and_rerank.py) | The pgvector search, in the language a pipeline is usually written in |
 | [`typescript/src/episode-to-chapters.ts`](typescript/src/episode-to-chapters.ts) | Captions into chapter marks and deep links for a player |
 | [`typescript/src/search-and-rerank.ts`](typescript/src/search-and-rerank.ts) | Fusing two rankings app-side, and what re-ranking means |
@@ -83,6 +84,20 @@ python examples/python/book_to_citations.py
 pip install catena-corpus psycopg
 DATABASE_URL=postgresql://user@host/db \
     python examples/python/search_and_rerank.py "why did the empire decline"
+
+`shelve_a_library.py` is the metadata half: it reads the cataloguing block a
+book prints in its own front matter, files those subjects onto a closed list
+you supply, and asks the register that assigned the ISBN whether it agrees.
+
+```sh
+python examples/python/shelve_a_library.py converted/*.md
+```
+
+Neither source is worth acting on alone — a scan that starts mid-frontmatter
+gives up a running head where the title should be, and an ISBN a catalogue has
+been carrying wrongly returns a confidently wrong book. The example prints
+`corroborated` only when both said the same thing, and the disagreements are
+the interesting output.
 ```
 
 ## TypeScript
