@@ -75,3 +75,30 @@ def valid_isbn(text: str) -> bool: ...
 def isbn_from_text(text: str) -> str | None: ...
 def isbn_from_filename(name: str) -> str | None: ...
 def same_work(ours: str, theirs: str) -> bool: ...
+
+def read_colophon(
+    text: str, pages: int = ..., shelf: str | None = ...
+) -> dict[str, Any]:
+    """What a book prints about itself in its opening pages.
+
+    `shelf` is a closed list of headings to file the printed subjects onto,
+    one per line, optionally `Heading = term, term`.
+    """
+    ...
+
+def shelve(shelf: str, subjects: list[str]) -> tuple[list[str], list[str]]:
+    """File subject headings onto a shelf. Returns (shelved, unshelved)."""
+    ...
+
+def fetch_identifier(
+    id: str,
+    kind: str = ...,
+    polite: str | None = ...,
+    timeout: int = ...,
+    attempts: int = ...,
+) -> dict[str, Any] | None:
+    """Ask the register that assigns an identifier what it knows about one.
+
+    Blocks on the network. `None` when no register answers about that kind.
+    """
+    ...

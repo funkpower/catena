@@ -13,6 +13,7 @@
 //! book. There is no register for an ISSN that answers without a key, so an
 //! ISSN is looked up as the journal of a work rather than on its own.
 
+pub mod ask;
 pub mod source;
 
 use std::time::Duration;

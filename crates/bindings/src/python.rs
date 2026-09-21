@@ -431,5 +431,81 @@ fn _catena(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(merge_citation_reply, module)?)?;
     module.add_function(wrap_pyfunction!(series_of, module)?)?;
     module.add_function(wrap_pyfunction!(parse_identifier, module)?)?;
+    module.add_function(wrap_pyfunction!(read_colophon, module)?)?;
+    module.add_function(wrap_pyfunction!(shelve, module)?)?;
+    module.add_function(wrap_pyfunction!(fetch_identifier, module)?)?;
     Ok(())
+}
+
+// ───────────────────── what a book says about itself ──────────────────────
+
+/// Read what a book prints about itself in its opening pages.
+///
+/// `shelf` is the closed list of headings to file the printed subjects onto,
+/// in the format `colophon --shelf` takes: one heading per line, optionally
+/// `Heading = term, term`. Without it the subjects come back as the book
+/// printed them and nothing is filed.
+#[pyfunction]
+#[pyo3(signature = (text, pages = colophon::PAGES, shelf = None))]
+fn read_colophon<'py>(
+    py: Python<'py>,
+    text: &str,
+    pages: usize,
+    shelf: Option<&str>,
+) -> PyResult<Bound<'py, PyAny>> {
+    if pages == 0 {
+        return Err(PyValueError::new_err("pages = 0 would read nothing"));
+    }
+    let shelf = shelf.map(colophon::shelf::Shelf::parse);
+    to_py(py, &colophon::read_onto(text, pages, shelf.as_ref()))
+}
+
+/// File subject headings onto a shelf without reading a book.
+///
+/// For the headings a catalogue already holds: the same matching the printed
+/// ones get, so a record's existing subjects and its book's agree about what
+/// counts as a heading. Returns `(shelved, unshelved)`.
+#[pyfunction]
+fn shelve(shelf: &str, subjects: Vec<String>) -> (Vec<String>, Vec<String>) {
+    let filed = colophon::shelf::Shelf::parse(shelf).file(&subjects);
+    (filed.on, filed.unfiled)
+}
+
+// ──────────────────────────── the registers ───────────────────────────────
+
+/// Ask the body that assigns an identifier what it knows about one.
+///
+/// Crossref for a DOI, the arXiv for a preprint, OpenLibrary and Google Books
+/// for an ISBN, asked in turn until one gives a complete answer. This is the
+/// only function here that touches the network, and it blocks: call it from a
+/// thread, or with `asyncio.to_thread`.
+///
+/// Returns the record, or `None` when no register here answers about that kind
+/// of identifier. Raises when every register that should answer was
+/// unreachable, because that is a different thing from the book not existing.
+#[pyfunction]
+#[pyo3(signature = (id, kind = "isbn", polite = None, timeout = 20, attempts = 3))]
+fn fetch_identifier<'py>(
+    py: Python<'py>,
+    id: &str,
+    kind: &str,
+    polite: Option<String>,
+    timeout: u64,
+    attempts: u32,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let ask = bibfetch::ask::Ask {
+        polite,
+        timeout: std::time::Duration::from_secs(timeout.max(1)),
+        attempts: attempts.max(1),
+    };
+    let agent = ask.agent();
+    // The GIL is not needed while waiting on a socket, and holding it there
+    // would stop every other thread in the interpreter for the whole request.
+    let found = py
+        .detach(|| bibfetch::ask::lookup(&agent, id, kind, ask.attempts))
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    match found {
+        Some(record) => Ok(Some(to_py(py, &record)?)),
+        None => Ok(None),
+    }
 }

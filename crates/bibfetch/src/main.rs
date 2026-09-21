@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Duration;
 
-use bibfetch::{Error, Source};
 use clap::Parser;
 use corpus_core::exit;
 
@@ -65,11 +64,12 @@ fn main() -> ExitCode {
         }
     };
 
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(args.timeout)))
-        .user_agent(user_agent(args.polite.as_deref()))
-        .build()
-        .into();
+    let agent = bibfetch::ask::Ask {
+        polite: args.polite.clone(),
+        timeout: Duration::from_secs(args.timeout),
+        attempts: args.attempts,
+    }
+    .agent();
 
     let mut records = Vec::new();
     let mut missing = 0usize;
@@ -86,47 +86,18 @@ fn main() -> ExitCode {
             }
         };
 
-        let chain = Source::chain_for_kind(&kind);
-        if chain.is_empty() {
-            eprintln!("bibfetch: {id}: no register here answers about {kind} identifiers");
-            missing += 1;
-            continue;
-        }
-
-        // Ask the registers in turn and stop at the first complete answer.
-        // An incomplete one is kept in case nothing better comes: a title
-        // with no authors is still more than nothing, and a register being
-        // down is only a failure when every register is.
-        let mut best: Option<bibfetch::Record> = None;
-        let mut last_error = None;
-        for source in chain {
-            match ask(&agent, *source, &id, &kind, args.attempts) {
-                Ok(record) => {
-                    let complete =
-                        record.found && record.title.is_some() && !record.authors.is_empty();
-                    let better = best.as_ref().is_none_or(|kept| record.found && !kept.found);
-                    if complete {
-                        best = Some(record);
-                        break;
-                    }
-                    if better {
-                        best = Some(record);
-                    }
-                }
-                Err(why) => last_error = Some(why),
+        match bibfetch::ask::lookup(&agent, &id, &kind, args.attempts) {
+            Ok(None) => {
+                eprintln!("bibfetch: {id}: no register here answers about {kind} identifiers");
+                missing += 1;
             }
-        }
-
-        match best {
-            Some(record) => {
+            Ok(Some(record)) => {
                 if !record.found {
                     missing += 1;
                 }
                 records.push(record);
             }
-            None => {
-                let why = last_error
-                    .map_or_else(|| "no register answered".to_string(), |e| e.to_string());
+            Err(why) => {
                 eprintln!("bibfetch: {id}: {why}");
                 return ExitCode::from(exit::UNAVAILABLE);
             }
@@ -143,64 +114,11 @@ fn main() -> ExitCode {
     })
 }
 
-/// Ask a register, retrying a failure that might not be one.
-///
-/// Waits a second before the second attempt and two before the third: long
-/// enough for a register that is rate-limiting, short enough that one which
-/// is simply down does not hold up a pipeline.
-fn ask(
-    agent: &ureq::Agent,
-    source: Source,
-    id: &str,
-    kind: &str,
-    attempts: u32,
-) -> Result<bibfetch::Record, Error> {
-    let mut last = Error::Unreachable("no attempt was made".into());
 
-    for attempt in 0..attempts.max(1) {
-        match fetch(agent, source, id, kind) {
-            Ok(record) => return Ok(record),
-            // A shape this cannot read will not read any better next time.
-            Err(e @ Error::Shape(_)) => return Err(e),
-            Err(e) => last = e,
-        }
-        std::thread::sleep(Duration::from_secs(1 << attempt));
-    }
-    Err(last)
-}
 
-fn fetch(
-    agent: &ureq::Agent,
-    source: Source,
-    id: &str,
-    kind: &str,
-) -> Result<bibfetch::Record, Error> {
-    let response = agent.get(source.url(id)).call();
-    let mut response = match response {
-        Ok(response) => response,
-        // A register that does not have it says so with a status, and that is
-        // an answer rather than a failure.
-        Err(ureq::Error::StatusCode(404)) => return Ok(bibfetch::missing(id, kind, source)),
-        Err(e) => return Err(Error::Unreachable(e.to_string())),
-    };
-    let body = response
-        .body_mut()
-        .read_to_string()
-        .map_err(|e| Error::Unreachable(e.to_string()))?;
-    source.read(id, kind, &body)
-}
 
-/// Who is asking.
-///
-/// The registers ask for an address and answer faster when they get one; a
-/// tool that does not say who it is gets the slow pool.
-fn user_agent(polite: Option<&str>) -> String {
-    let version = env!("CARGO_PKG_VERSION");
-    match polite {
-        Some(address) => format!("bibfetch/{version} (mailto:{address})"),
-        None => format!("bibfetch/{version}"),
-    }
-}
+
+
 
 /// The identifier and its kind out of one record.
 fn read_identifier(line: &str) -> Result<(String, String), String> {

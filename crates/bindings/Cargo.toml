@@ -30,6 +30,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 booksniff.workspace = true
 bibclean.workspace = true
+colophon.workspace = true
 chunkmd.workspace = true
 citefind.workspace = true
 corpus-core.workspace = true
@@ -47,6 +48,11 @@ textkit.workspace = true
 
 pyo3 = { workspace = true, optional = true }
 
+# Only the Python build gets this. bibfetch is the one tool here that opens a
+# socket, and its HTTP client does not build for wasm32 — so a dependency that
+# is unconditional would take the JavaScript package down with it.
+bibfetch = { workspace = true, optional = true }
+
 # The JavaScript build. Only ever compiled for a wasm32 target; on any other
 # the module is compiled out and these sit unused.
 wasm-bindgen = { workspace = true, optional = true }
@@ -56,7 +62,7 @@ serde-wasm-bindgen = { workspace = true, optional = true }
 # Only maturin turns this on. pyo3's extension-module feature leaves the
 # Python symbols to be resolved by the interpreter at load time, so an
 # ordinary `cargo build` would fail to link if it were on by default.
-python = ["dep:pyo3"]
+python = ["dep:pyo3", "dep:bibfetch"]
 # The C ABI. Off by default so an ordinary build does not also export a
 # hundred symbols nobody asked for.
 capi = []
