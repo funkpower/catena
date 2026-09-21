@@ -86,20 +86,47 @@ fn main() -> ExitCode {
             }
         };
 
-        let Some(source) = Source::for_kind(&kind) else {
+        let chain = Source::chain_for_kind(&kind);
+        if chain.is_empty() {
             eprintln!("bibfetch: {id}: no register here answers about {kind} identifiers");
             missing += 1;
             continue;
-        };
+        }
 
-        match ask(&agent, source, &id, &kind, args.attempts) {
-            Ok(record) => {
+        // Ask the registers in turn and stop at the first complete answer.
+        // An incomplete one is kept in case nothing better comes: a title
+        // with no authors is still more than nothing, and a register being
+        // down is only a failure when every register is.
+        let mut best: Option<bibfetch::Record> = None;
+        let mut last_error = None;
+        for source in chain {
+            match ask(&agent, *source, &id, &kind, args.attempts) {
+                Ok(record) => {
+                    let complete =
+                        record.found && record.title.is_some() && !record.authors.is_empty();
+                    let better = best.as_ref().is_none_or(|kept| record.found && !kept.found);
+                    if complete {
+                        best = Some(record);
+                        break;
+                    }
+                    if better {
+                        best = Some(record);
+                    }
+                }
+                Err(why) => last_error = Some(why),
+            }
+        }
+
+        match best {
+            Some(record) => {
                 if !record.found {
                     missing += 1;
                 }
                 records.push(record);
             }
-            Err(why) => {
+            None => {
+                let why = last_error
+                    .map_or_else(|| "no register answered".to_string(), |e| e.to_string());
                 eprintln!("bibfetch: {id}: {why}");
                 return ExitCode::from(exit::UNAVAILABLE);
             }

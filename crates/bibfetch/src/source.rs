@@ -17,6 +17,13 @@ pub enum Source {
     Arxiv,
     /// OpenLibrary, for books by ISBN.
     OpenLibrary,
+    /// OpenLibrary's index, rather than its edition record. Asked when the
+    /// edition record has the book but not who wrote it, which is often: an
+    /// edition names its authors by key, and the index names them.
+    OpenLibrarySearch,
+    /// Google Books, for books by ISBN. Asked last, because it answers
+    /// anonymous callers only until a daily quota runs out.
+    GoogleBooks,
 }
 
 impl Source {
@@ -26,16 +33,34 @@ impl Source {
             Source::Crossref => "crossref",
             Source::Arxiv => "arxiv",
             Source::OpenLibrary => "openlibrary",
+            Source::OpenLibrarySearch => "openlibrary",
+            Source::GoogleBooks => "googlebooks",
         }
     }
 
     /// Which register answers about a kind of identifier.
     pub fn for_kind(kind: &str) -> Option<Self> {
+        Self::chain_for_kind(kind).first().copied()
+    }
+
+    /// Every register that answers about a kind, in the order to ask them.
+    ///
+    /// One register is enough for a DOI or a preprint: the body that assigns
+    /// the identifier is the only one that has it. A book is different. An
+    /// ISBN is assigned by a publisher and recorded by whoever gets round to
+    /// it, so coverage is patchy in different places for different books,
+    /// and an answer missing the authors is common enough to be worth asking
+    /// a second register about.
+    pub fn chain_for_kind(kind: &str) -> &'static [Self] {
         match kind {
-            "doi" => Some(Source::Crossref),
-            "arxiv" => Some(Source::Arxiv),
-            "isbn" => Some(Source::OpenLibrary),
-            _ => None,
+            "doi" => &[Source::Crossref],
+            "arxiv" => &[Source::Arxiv],
+            "isbn" => &[
+                Source::OpenLibrary,
+                Source::OpenLibrarySearch,
+                Source::GoogleBooks,
+            ],
+            _ => &[],
         }
     }
 
@@ -50,6 +75,15 @@ impl Source {
             Source::OpenLibrary => {
                 format!("https://openlibrary.org/isbn/{}.json", encode(id))
             }
+            Source::OpenLibrarySearch => format!(
+                "https://openlibrary.org/search.json?q=isbn:{}\
+&fields=title,subtitle,author_name,first_publish_year,publisher&limit=1",
+                encode(id)
+            ),
+            Source::GoogleBooks => format!(
+                "https://www.googleapis.com/books/v1/volumes?q=isbn:{}",
+                encode(id)
+            ),
         }
     }
 
@@ -59,6 +93,8 @@ impl Source {
             Source::Crossref => crossref(id, kind, body),
             Source::Arxiv => arxiv(id, kind, body),
             Source::OpenLibrary => open_library(id, kind, body),
+            Source::OpenLibrarySearch => open_library_search(id, kind, body),
+            Source::GoogleBooks => google_books(id, kind, body),
         }
     }
 }
@@ -200,6 +236,94 @@ fn open_library(id: &str, kind: &str, body: &str) -> Result<Record, Error> {
     record.container = book.publishers.into_iter().next();
     // The date is free text — "1999", "March 1999", "1999-03-01".
     record.year = book.publish_date.as_deref().and_then(year_in);
+    Ok(record)
+}
+
+#[derive(Deserialize)]
+struct SearchReply {
+    #[serde(default)]
+    docs: Vec<SearchDoc>,
+}
+
+#[derive(Deserialize)]
+struct SearchDoc {
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    subtitle: Option<String>,
+    #[serde(default)]
+    author_name: Vec<String>,
+    #[serde(default)]
+    first_publish_year: Option<i64>,
+    #[serde(default)]
+    publisher: Vec<String>,
+}
+
+/// A search that matched nothing answers with no documents rather than a
+/// status, so an empty reply is the absence and not a failure.
+fn open_library_search(id: &str, kind: &str, body: &str) -> Result<Record, Error> {
+    let reply: SearchReply = serde_json::from_str(body).map_err(|e| Error::Shape(e.to_string()))?;
+    let Some(doc) = reply.docs.into_iter().next() else {
+        return Ok(crate::missing(id, kind, Source::OpenLibrarySearch));
+    };
+
+    let mut record = blank(id, kind, Source::OpenLibrarySearch);
+    record.title = match (doc.title, doc.subtitle) {
+        (Some(title), Some(subtitle)) => Some(format!("{title}: {subtitle}")),
+        (title, _) => title,
+    };
+    record.authors = doc.author_name;
+    record.year = doc.first_publish_year;
+    record.container = doc.publisher.into_iter().next();
+    Ok(record)
+}
+
+#[derive(Deserialize)]
+struct GoogleReply {
+    #[serde(default)]
+    items: Vec<GoogleItem>,
+}
+
+#[derive(Deserialize)]
+struct GoogleItem {
+    #[serde(rename = "volumeInfo", default)]
+    volume_info: GoogleVolume,
+}
+
+#[derive(Deserialize, Default)]
+struct GoogleVolume {
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    subtitle: Option<String>,
+    #[serde(default)]
+    authors: Vec<String>,
+    #[serde(rename = "publishedDate", default)]
+    published_date: Option<String>,
+    #[serde(default)]
+    publisher: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+}
+
+/// A search that matched nothing answers with no items rather than a status,
+/// so an empty reply is the absence and not a failure.
+fn google_books(id: &str, kind: &str, body: &str) -> Result<Record, Error> {
+    let reply: GoogleReply = serde_json::from_str(body).map_err(|e| Error::Shape(e.to_string()))?;
+    let Some(item) = reply.items.into_iter().next() else {
+        return Ok(crate::missing(id, kind, Source::GoogleBooks));
+    };
+    let volume = item.volume_info;
+
+    let mut record = blank(id, kind, Source::GoogleBooks);
+    record.title = match (volume.title, volume.subtitle) {
+        (Some(title), Some(subtitle)) => Some(format!("{title}: {subtitle}")),
+        (title, _) => title,
+    };
+    record.authors = volume.authors;
+    record.year = volume.published_date.as_deref().and_then(year_in);
+    record.container = volume.publisher;
+    record.summary = volume.description.map(|text| collapse(&text));
     Ok(record)
 }
 

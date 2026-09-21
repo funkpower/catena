@@ -84,7 +84,20 @@ is a failure — nobody replied, and the identifier may be perfectly good.
 |---|---|---|
 | `doi` | Crossref | It assigns most scholarly DOIs |
 | `arxiv` | the arXiv | Its own register of preprints |
-| `isbn` | OpenLibrary | Books, without a key |
+| `isbn` | OpenLibrary's edition record, then its index, then Google Books | Books, without a key |
+
+One register is enough for a DOI or a preprint: the body that assigns the
+identifier is the only one that has it. A book is different. An ISBN is
+assigned by a publisher and recorded by whoever gets round to it, so an
+answer that names the book but not who wrote it is common — OpenLibrary's
+edition record names its authors by key rather than by name, and its index
+names them. So the registers are asked in turn and the first complete answer
+wins. An incomplete one is kept in case nothing better comes, and a register
+being down is a failure only when every register is.
+
+Google Books is asked last because it answers anonymous callers only until a
+daily quota runs out, after which it replies `429` to everyone sharing the
+address.
 
 An **ISSN** has no register that answers without a key, so it is not looked up
 on its own. A journal's ISSN comes back on the works published in it instead.

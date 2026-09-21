@@ -26,7 +26,15 @@ static PUBLISHED_BY: LazyLock<Regex> = LazyLock::new(|| {
         .expect("a valid pattern")
 });
 static PRESS_LINE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?im)^\s*(?P<who>[A-Z][^\n]{2,58}?(?:University Press|Press|Publishers|Publishing|Books|Verlag))\s*[,.]?\s*$")
+    Regex::new(r"(?im)^\s*(?P<who>[A-Z][^\n]{2,48}?(?:University Press|Press|Publishers|Publishing|Books|Verlag))\s*[,.]?\s*$")
+        .expect("a valid pattern")
+});
+/// A sentence that merely mentions a press is not the press.
+///
+/// `Oxford is a registered trade mark of Oxford University Press` ends in a
+/// publisher's name and is a legal notice.
+static NOT_AN_IMPRINT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)( is | are | was |registered|trade mark|trademark|imprint of|division of|©|\(c\)|@|;|\d{4})")
         .expect("a valid pattern")
 });
 static FIRST_PUBLISHED: LazyLock<Regex> = LazyLock::new(|| {
@@ -84,9 +92,10 @@ pub fn read(text: &str) -> Imprint {
     }
 
     out.publisher = PUBLISHED_BY
-        .captures(text)
-        .or_else(|| PRESS_LINE.captures(text))
-        .map(|caps| tidy(&caps["who"]));
+        .captures_iter(text)
+        .chain(PRESS_LINE.captures_iter(text))
+        .map(|caps| tidy(&caps["who"]))
+        .find(|who| !NOT_AN_IMPRINT.is_match(who) && who.split_whitespace().count() <= 8);
     out.year = FIRST_PUBLISHED
         .captures(text)
         .or_else(|| COPYRIGHT_YEAR.captures(text))
@@ -97,8 +106,8 @@ pub fn read(text: &str) -> Imprint {
         .find(|line| crate::title::PLACE.is_match(line) && line.split_whitespace().count() <= 4)
         .and_then(|line| {
             crate::title::PLACE
-                .find(line)
-                .map(|m| tidy(m.as_str().trim_end_matches(|c: char| !c.is_alphabetic())))
+                .captures(line)
+                .map(|caps| tidy(&caps["city"]))
         });
     out
 }

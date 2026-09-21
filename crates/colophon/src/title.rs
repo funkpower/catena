@@ -61,7 +61,7 @@ copyright|all rights reserved|printed in)\b",
 /// A city a publisher puts on a title page, alone on its line.
 pub static PLACE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"(?i)^(oxford|cambridge|london|new york|new haven|chicago|boston|princeton|\
+        r"(?i)^(?P<city>oxford|cambridge|london|new york|new haven|chicago|boston|princeton|\
 berlin|paris|munich|rome|madrid|grand rapids|edinburgh|dublin|toronto|sydney|\
 melbourne|minneapolis|philadelphia|san francisco|los angeles|leiden|amsterdam|\
 copenhagen|stockholm|moscow|beijing|tokyo|delhi|nairobi)\b[\s,·•|and]*",
