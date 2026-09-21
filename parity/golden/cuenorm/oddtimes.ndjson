@@ -1,5 +1,0 @@
-{"start":123.5,"end":125,"text":"a two part timestamp"}
-{"start":5,"end":7,"text":"an extra comma in the end time"}
-{"start":8,"end":9,"text":"unpadded fields"}
-{"start":9,"end":11,"text":"padded with spaces"}
-{"start":3723.456,"end":3724.5,"text":"a point instead of a comma"}

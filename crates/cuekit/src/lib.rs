@@ -5,9 +5,9 @@
 //! stream comes out. Everything downstream of this works on cues and never
 //! has to know which of the three a recording arrived with.
 //!
-//! The SubRip reader is a port, quirks kept, of the parser a podcast archive
-//! was indexed with; the other two are new, and are written to the same
-//! shape. Where the port deliberately differs, `parity/KNOWN.md` says so.
+//! The SubRip reader keeps the quirks of the parser a podcast archive was
+//! indexed with, so that re-reading the archive gives back what is already in
+//! it. The other two are written to the same shape.
 
 pub mod ass;
 pub mod cue;

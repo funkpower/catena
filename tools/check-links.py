@@ -42,7 +42,7 @@ def anchors(text: str) -> set[str]:
 
 def main() -> int:
     root = pathlib.Path(".").resolve()
-    # Fixtures are not documentation: a parity case is deliberately malformed
+    # Fixtures are not documentation: a test case is deliberately malformed
     # markdown, and a link in one is part of what is being tested.
     skip = {"target", "cases", "golden"}
     files = sorted(

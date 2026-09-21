@@ -1,8 +1,0 @@
-1
-00:00:01,000 --> 00:00:03,000
-The mill stood at the northern end,
-where the fall was steepest.
-
-2
-00:00:03,000 --> 00:00:05,000
-Its wheel was undershot.

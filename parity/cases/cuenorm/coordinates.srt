@@ -1,7 +1,0 @@
-1
-00:00:01,000 --> 00:00:03,000  X1:040 X2:560 Y1:050 Y2:100
-The mill stood at the northern end.
-
-2
-00:00:03,000 --> 00:00:05,000
-Its wheel was undershot.

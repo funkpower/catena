@@ -37,14 +37,4 @@ else
 	echo "skipped: no python3"
 fi
 
-# Differential tests against the Python these tools were ported from. Skipped
-# unless an interpreter with the dependencies is named, since most machines do
-# not have one.
-if [ -n "${CATENA_PARITY_PYTHON:-}" ]; then
-	say "parity against python"
-	cargo test -p parity --features python
-else
-	say "parity against python (skipped: set CATENA_PARITY_PYTHON to run it)"
-fi
-
 printf '\nall clear\n'

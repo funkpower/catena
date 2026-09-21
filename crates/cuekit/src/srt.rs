@@ -41,8 +41,7 @@ pub fn parse(content: &str) -> Vec<Cue> {
 /// Each half is reduced to the one token that could be a timestamp, which is
 /// what lets the same reader take a WebVTT cue line — where the end time is
 /// followed by positioning settings — and an old SubRip file with screen
-/// coordinates after it. See `parity/KNOWN.md`: the original reads each half
-/// whole and drops such a cue entirely.
+/// coordinates after it. Reading each half whole drops both.
 fn times(line: &str) -> Option<(f64, f64)> {
     let (before, after) = line.split_once("-->")?;
     let start = timestamp(before.split_whitespace().next_back().unwrap_or(""));
