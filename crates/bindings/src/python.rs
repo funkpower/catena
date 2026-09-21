@@ -434,6 +434,8 @@ fn _catena(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(read_colophon, module)?)?;
     module.add_function(wrap_pyfunction!(shelve, module)?)?;
     module.add_function(wrap_pyfunction!(fetch_identifier, module)?)?;
+    module.add_function(wrap_pyfunction!(colophon_prompt, module)?)?;
+    module.add_function(wrap_pyfunction!(merge_colophon, module)?)?;
     Ok(())
 }
 
@@ -508,4 +510,39 @@ fn fetch_identifier<'py>(
         Some(record) => Ok(Some(to_py(py, &record)?)),
         None => Ok(None),
     }
+}
+
+/// The question to put to a model about the fields a book's pages did not
+/// settle, or `None` when they settled everything.
+///
+/// Nothing is sent anywhere: this composes the text and hands it back, so the
+/// caller decides which model, on whose hardware, at what cost. The reply goes
+/// to `merge_colophon`.
+#[pyfunction]
+#[pyo3(signature = (record, text, pages = colophon::PAGES))]
+fn colophon_prompt(
+    record: &Bound<'_, PyAny>,
+    text: &str,
+    pages: usize,
+) -> PyResult<Option<String>> {
+    let printed: colophon::Printed = from_py(record)?;
+    Ok(colophon::prompt::compose(&printed, text, pages))
+}
+
+/// A model's reply folded into the record the pages gave.
+///
+/// Only the fields the pages left unsettled are filled: a model cannot
+/// overwrite something a book printed about itself, which is the whole reason
+/// the pages are read first. Returns the completed record and how many fields
+/// the reply actually settled.
+#[pyfunction]
+fn merge_colophon<'py>(
+    py: Python<'py>,
+    record: &Bound<'py, PyAny>,
+    reply: &str,
+) -> PyResult<(Bound<'py, PyAny>, usize)> {
+    let mut printed: colophon::Printed = from_py(record)?;
+    let filled = colophon::prompt::merge(&mut printed, reply)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok((to_py(py, &printed)?, filled))
 }

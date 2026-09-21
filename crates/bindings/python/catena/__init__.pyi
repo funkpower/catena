@@ -102,3 +102,22 @@ def fetch_identifier(
     Blocks on the network. `None` when no register answers about that kind.
     """
     ...
+
+def colophon_prompt(
+    record: dict[str, Any], text: str, pages: int = ...
+) -> str | None:
+    """The question to put to a model about what the pages did not settle.
+
+    None when the pages settled everything. Nothing is sent anywhere.
+    """
+    ...
+
+def merge_colophon(
+    record: dict[str, Any], reply: str
+) -> tuple[dict[str, Any], int]:
+    """A model's reply folded in. Returns (record, fields_settled).
+
+    Only fills what the pages left unsettled; a model never overwrites what a
+    book printed about itself.
+    """
+    ...
