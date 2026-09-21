@@ -36,7 +36,9 @@ static BARE_DATE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^\d{1,4}\s*(bc|ad|bce|ce)?\.?$").expect("a valid pattern"));
 /// `Copyright © 2013 by`, `\u{a9} 2013 Richard Swinburne`, `Copyright 1971 by`.
 static COPYRIGHT_NOTICE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)(\u{a9}|\(c\)|copyright)\s*(\u{a9}|\(c\))?\s*(1[0-9]|20)\d{2}")
+    // The year need not follow the symbol directly: "(c) Alfredo Ferrarin
+    // 2004" puts the holder between them, and was read as a title.
+    Regex::new(r"(?i)(\u{a9}|\(c\)|copyright)[^\n]{0,60}?(1[0-9]|20)\d{2}")
         .expect("a valid pattern")
 });
 /// `Edited by`, with whoever it was set on the line beneath.
@@ -413,6 +415,8 @@ mod furniture_tests {
             "12 INDEX",
             "Translated from the French by Willard R. Trask",
             "Copyright © 2013 by Barry Davies, BEM",
+            "© Alfredo Ferrarin 2004",
+            "\u{a9} Cambridge University Press 2011",
             "[PART ONE:",
             "Piper Verlag GmbH, Munich<span style=\"font-size\">",
             "Vol. 11. HENRY JAMES, JR.",
