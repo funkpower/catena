@@ -35,6 +35,29 @@ static LIFESPAN: LazyLock<Regex> = LazyLock::new(|| {
 static BARE_DATE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^\d{1,4}\s*(bc|ad|bce|ce)?\.?$").expect("a valid pattern"));
 /// `Copyright © 2013 by`, `\u{a9} 2013 Richard Swinburne`, `Copyright 1971 by`.
+/// `1. General Remarks`, `2   James W. McAllister` — a numbered heading.
+static NUMBERED_HEADING: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\s*\d+\s*[.)]\s+\S|^\s*\d+\s{2,}\S").expect("a valid pattern"));
+/// `5222 What Is This`, `827 North Fourth Street` — a number that is not a
+/// year, leading a line.
+static LEADING_NUMBER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\s*(\d{1,5})\s+\S").expect("a valid pattern"));
+/// `Page xxxvi`, `Chapter I`, `Fig. 3` — a marker, not a name.
+static MARKER: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?i)^\s*(page|pages|p\.|pp\.|fig\.|figure|plate|chapter|ch\.|section|part)\s+[\divxlcm]",
+    )
+    .expect("a valid pattern")
+});
+/// `Sidebottom, Harry. Ancient warfare` — a bibliography entry, which front
+/// matter prints in its cataloguing block and in its further reading.
+static CATALOGUE_ENTRY: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^[A-Z][A-Za-z'\-]+,\s+[A-Z][A-Za-z'.\-]*\.\s+\S").expect("a valid pattern")
+});
+/// `To Mackenzie,` — a dedication, set alone on its own page.
+static DEDICATION: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)^\s*(to|for|in memory of)\s+\S.*,\s*$").expect("a valid pattern")
+});
 static COPYRIGHT_NOTICE: LazyLock<Regex> = LazyLock::new(|| {
     // The year need not follow the symbol directly: "(c) Alfredo Ferrarin
     // 2004" puts the holder between them, and was read as a title.
@@ -79,10 +102,13 @@ copenhagen|stockholm|moscow|beijing|tokyo|delhi|nairobi)\b[\s,·•|and]*",
 static STRUCTURAL: &[&str] = &[
     "abbreviations",
     "about the author",
+    "abstract",
     "acknowledgements",
     "acknowledgments",
     "afterword",
     "appendix",
+    "author",
+    "authors",
     "bibliography",
     "contents",
     "dedication",
@@ -95,6 +121,7 @@ static STRUCTURAL: &[&str] = &[
     "illustrations",
     "index",
     "introduction",
+    "keywords",
     "list of contributors",
     "list of illustrations",
     "maps",
@@ -102,7 +129,9 @@ static STRUCTURAL: &[&str] = &[
     "postscript",
     "preface",
     "prologue",
+    "subtitle",
     "table of contents",
+    "title",
     "title page",
     "translator's note",
 ];
@@ -182,6 +211,22 @@ fn is_furniture(line: &str) -> bool {
     }
     // Sentences a copyright page sets, which are not notices and so not caught
     // by the notice pattern.
+    if NUMBERED_HEADING.is_match(t) || MARKER.is_match(t) || CATALOGUE_ENTRY.is_match(t) {
+        return true;
+    }
+    // A line opening with a number that is not a year. "5222 What Is This" and
+    // "827 North Fourth Street" are a stray folio and an address; "1984
+    // Revisited" is a book, and the difference is whether the number could be
+    // the year of one.
+    if let Some(c) = LEADING_NUMBER.captures(t) {
+        let n: u32 = c[1].parse().unwrap_or(0);
+        if !(1000..=2099).contains(&n) {
+            return true;
+        }
+    }
+    if DEDICATION.is_match(t) {
+        return true;
+    }
     let lower = t.to_lowercase();
     for phrase in [
         "moral rights of the author",
@@ -493,6 +538,57 @@ mod conversion_tests {
             "A Publication of the Institute",
         ] {
             assert!(!is_furniture(line), "rejected a real title: {line:?}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod review_pile_tests {
+    use super::*;
+
+    /// Everything here was proposed as a title by a real run over this
+    /// library, and sat in the review queue waiting for a person to say no.
+    #[test]
+    fn what_the_review_pile_was_full_of() {
+        for line in [
+            "1. General Remarks",
+            "2   James W. McAllister",
+            "5222 What Is This",
+            "827 North Fourth Street",
+            "Page xxxvi",
+            "Page xxxviii",
+            "Chapter I",
+            "title",
+            "Sidebottom, Harry. Ancient warfare",
+            "To Mackenzie,",
+        ] {
+            assert!(
+                is_structural(line) || is_furniture(line),
+                "still read as a title: {line:?}"
+            );
+        }
+    }
+
+    /// And none of it catches a book. The numbers are the delicate part: a
+    /// year can open a title, and a folio cannot.
+    #[test]
+    fn a_book_is_still_a_book() {
+        for line in [
+            "1984 Revisited",
+            "1914: The Year the World Ended",
+            "Chapter and Verse",
+            "Part of the Furniture",
+            "To Kill a Mockingbird",
+            "For Whom the Bell Tolls",
+            "The Title of This Book",
+            "Pages from a Cold Island",
+            "Sections of a Broken Whole",
+            "In Memory of Bread",
+        ] {
+            assert!(
+                !(is_structural(line) || is_furniture(line)),
+                "rejected a real title: {line:?}"
+            );
         }
     }
 }
