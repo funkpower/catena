@@ -75,9 +75,12 @@ impl Source {
             Source::OpenLibrary => {
                 format!("https://openlibrary.org/isbn/{}.json", encode(id))
             }
+            // `fields` or the index answers with a handful of defaults and
+            // keeps the rest, which is how a language it holds went unread.
             Source::OpenLibrarySearch => format!(
                 "https://openlibrary.org/search.json?q=isbn:{}\
-&fields=title,subtitle,author_name,first_publish_year,publisher&limit=1",
+&fields=title,subtitle,author_name,first_publish_year,publisher,language,subject,\
+number_of_pages_median&limit=1",
                 encode(id)
             ),
             Source::GoogleBooks => format!(
@@ -222,9 +225,24 @@ struct OpenLibraryBook {
     #[serde(default)]
     title: Option<String>,
     #[serde(default)]
+    subtitle: Option<String>,
+    #[serde(default)]
     publish_date: Option<String>,
     #[serde(default)]
     publishers: Vec<String>,
+    #[serde(default)]
+    subjects: Vec<String>,
+    /// `[{"key": "/languages/eng"}]`, which is how OpenLibrary names one.
+    #[serde(default)]
+    languages: Vec<OpenLibraryKey>,
+    #[serde(default)]
+    number_of_pages: Option<u32>,
+}
+
+#[derive(serde::Deserialize)]
+struct OpenLibraryKey {
+    #[serde(default)]
+    key: String,
 }
 
 fn open_library(id: &str, kind: &str, body: &str) -> Result<Record, Error> {
@@ -232,10 +250,23 @@ fn open_library(id: &str, kind: &str, body: &str) -> Result<Record, Error> {
         serde_json::from_str(body).map_err(|e| Error::Shape(e.to_string()))?;
 
     let mut record = blank(id, kind, Source::OpenLibrary);
-    record.title = book.title;
+    // An edition record keeps the subtitle in its own field, and a catalogue
+    // wants the whole title. Google Books is already joined the same way.
+    record.title = match (book.title, book.subtitle) {
+        (Some(title), Some(subtitle)) => Some(format!("{title}: {subtitle}")),
+        (title, _) => title,
+    };
     record.container = book.publishers.into_iter().next();
     // The date is free text — "1999", "March 1999", "1999-03-01".
     record.year = book.publish_date.as_deref().and_then(year_in);
+    record.subjects = book.subjects;
+    // "/languages/eng" names the language by the last segment of a key.
+    record.language = book
+        .languages
+        .into_iter()
+        .find_map(|l| l.key.rsplit('/').next().map(str::to_string))
+        .filter(|l| !l.is_empty());
+    record.pages = book.number_of_pages;
     Ok(record)
 }
 
@@ -257,7 +288,20 @@ struct SearchDoc {
     first_publish_year: Option<i64>,
     #[serde(default)]
     publisher: Vec<String>,
+    #[serde(default)]
+    language: Vec<String>,
+    #[serde(default)]
+    subject: Vec<String>,
+    #[serde(rename = "number_of_pages_median", default)]
+    pages: Option<u32>,
 }
+
+/// How many of a work's subject headings are worth carrying.
+///
+/// The index lists every heading every edition has ever been given, which on a
+/// well-known book is hundreds and on Hamlet is thousands. A shelf is filed
+/// from a handful, and the first are the broadest.
+const SUBJECT_LIMIT: usize = 12;
 
 /// A search that matched nothing answers with no documents rather than a
 /// status, so an empty reply is the absence and not a failure.
@@ -275,6 +319,12 @@ fn open_library_search(id: &str, kind: &str, body: &str) -> Result<Record, Error
     record.authors = doc.author_name;
     record.year = doc.first_publish_year;
     record.container = doc.publisher.into_iter().next();
+    record.language = doc.language.into_iter().next();
+    // The index lists every subject any edition of the work carries, which
+    // runs to hundreds on a well-known book. A shelf needs a handful.
+    record.subjects = doc.subject;
+    record.subjects.truncate(SUBJECT_LIMIT);
+    record.pages = doc.pages;
     Ok(record)
 }
 
@@ -304,6 +354,12 @@ struct GoogleVolume {
     publisher: Option<String>,
     #[serde(default)]
     description: Option<String>,
+    #[serde(default)]
+    categories: Vec<String>,
+    #[serde(rename = "language", default)]
+    language: Option<String>,
+    #[serde(rename = "pageCount", default)]
+    page_count: Option<u32>,
 }
 
 /// A search that matched nothing answers with no items rather than a status,
@@ -324,6 +380,9 @@ fn google_books(id: &str, kind: &str, body: &str) -> Result<Record, Error> {
     record.year = volume.published_date.as_deref().and_then(year_in);
     record.container = volume.publisher;
     record.summary = volume.description.map(|text| collapse(&text));
+    record.subjects = volume.categories;
+    record.language = volume.language;
+    record.pages = volume.page_count;
     Ok(record)
 }
 

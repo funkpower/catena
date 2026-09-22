@@ -3,39 +3,39 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.2.3"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MPL-2.0"
 repository = "https://git.pumpin.online/funkpower/catena"
 
 [workspace.dependencies]
-catena-cli = { path = "crates/catena-cli", version = "0.2.3" }
-corpus-core = { path = "crates/corpus-core", version = "0.2.3" }
-cuekit = { path = "crates/cuekit", version = "0.2.3" }
-textkit = { path = "crates/textkit", version = "0.2.3" }
-chunkmd = { path = "crates/chunkmd", version = "0.2.3" }
-mdscrub = { path = "crates/mdscrub", version = "0.2.3" }
-mdsplit = { path = "crates/mdsplit", version = "0.2.3" }
-pdftriage = { path = "crates/pdftriage", version = "0.2.3" }
-cuenorm = { path = "crates/cuenorm", version = "0.2.3" }
-cueseg = { path = "crates/cueseg", version = "0.2.3" }
-rrf = { path = "crates/rrf", version = "0.2.3" }
-cuepack = { path = "crates/cuepack", version = "0.2.3" }
-bibclean = { path = "crates/bibclean", version = "0.2.3" }
-avplan = { path = "crates/avplan", version = "0.2.3" }
-pdfgutter = { path = "crates/pdfgutter", version = "0.2.3" }
-catena = { path = "crates/bindings", version = "0.2.3" }
-seriesof = { path = "crates/seriesof", version = "0.2.3" }
-idnorm = { path = "crates/idnorm", version = "0.2.3" }
-bibfetch = { path = "crates/bibfetch", version = "0.2.3" }
-bookmeta = { path = "crates/bookmeta", version = "0.2.3" }
-langid = { path = "crates/langid", version = "0.2.3" }
-tocfind = { path = "crates/tocfind", version = "0.2.3" }
-booksniff = { path = "crates/booksniff", version = "0.2.3" }
-citefind = { path = "crates/citefind", version = "0.2.3" }
-colophon = { path = "crates/colophon", version = "0.2.3" }
-emb = { path = "crates/emb", version = "0.2.3" }
+catena-cli = { path = "crates/catena-cli", version = "0.3.0" }
+corpus-core = { path = "crates/corpus-core", version = "0.3.0" }
+cuekit = { path = "crates/cuekit", version = "0.3.0" }
+textkit = { path = "crates/textkit", version = "0.3.0" }
+chunkmd = { path = "crates/chunkmd", version = "0.3.0" }
+mdscrub = { path = "crates/mdscrub", version = "0.3.0" }
+mdsplit = { path = "crates/mdsplit", version = "0.3.0" }
+pdftriage = { path = "crates/pdftriage", version = "0.3.0" }
+cuenorm = { path = "crates/cuenorm", version = "0.3.0" }
+cueseg = { path = "crates/cueseg", version = "0.3.0" }
+rrf = { path = "crates/rrf", version = "0.3.0" }
+cuepack = { path = "crates/cuepack", version = "0.3.0" }
+bibclean = { path = "crates/bibclean", version = "0.3.0" }
+avplan = { path = "crates/avplan", version = "0.3.0" }
+pdfgutter = { path = "crates/pdfgutter", version = "0.3.0" }
+catena = { path = "crates/bindings", version = "0.3.0" }
+seriesof = { path = "crates/seriesof", version = "0.3.0" }
+idnorm = { path = "crates/idnorm", version = "0.3.0" }
+bibfetch = { path = "crates/bibfetch", version = "0.3.0" }
+bookmeta = { path = "crates/bookmeta", version = "0.3.0" }
+langid = { path = "crates/langid", version = "0.3.0" }
+tocfind = { path = "crates/tocfind", version = "0.3.0" }
+booksniff = { path = "crates/booksniff", version = "0.3.0" }
+citefind = { path = "crates/citefind", version = "0.3.0" }
+colophon = { path = "crates/colophon", version = "0.3.0" }
+emb = { path = "crates/emb", version = "0.3.0" }
 
 clap = { version = "4", features = ["derive"] }
 clap_mangen = "0.3"

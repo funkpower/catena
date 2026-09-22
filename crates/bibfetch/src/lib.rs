@@ -59,6 +59,21 @@ pub struct Record {
     /// The abstract, where the register carries one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// The subject headings the register files it under, as it words them.
+    ///
+    /// A register states these for far more books than print a cataloguing
+    /// block, which makes them the second source a shelf otherwise lacks.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subjects: Vec<String>,
+    /// The language it is written in, as the register gives it: a two- or
+    /// three-letter code, or a name. Not normalised here — what a register
+    /// said is the record, and deciding that "eng" and "English" are one
+    /// thing belongs to whoever is filing them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    /// How many pages the register says it has.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pages: Option<u32>,
 }
 
 fn version() -> u32 {
@@ -112,6 +127,70 @@ pub fn missing(id: &str, kind: &str, source: Source) -> Record {
         year: None,
         container: None,
         summary: None,
+        subjects: Vec::new(),
+        language: None,
+        pages: None,
+    }
+}
+
+impl Record {
+    /// Whether this record says everything a catalogue wants.
+    ///
+    /// Used to decide when to stop asking. Title and authors are the minimum
+    /// that makes a record usable; the rest is worth another register only
+    /// while one is left to ask.
+    pub fn complete(&self) -> bool {
+        self.found
+            && self.title.is_some()
+            && !self.authors.is_empty()
+            && self.container.is_some()
+            && self.language.is_some()
+    }
+
+    /// Take from another record whatever this one does not have.
+    ///
+    /// The registers are complementary rather than redundant, and asking them
+    /// in turn and keeping one answer throws away the difference. OpenLibrary's
+    /// edition record gives the publisher, the pagination and the language but
+    /// names its authors by key; its search index gives the authors but not the
+    /// publisher. One book, two half-answers, and the whole of it only if they
+    /// are put together.
+    ///
+    /// Nothing already answered is overwritten, so the order of the chain is
+    /// the order of trust.
+    pub fn fill_from(&mut self, other: Record) {
+        if !other.found {
+            return;
+        }
+        self.found = true;
+        if self.title.is_none() {
+            self.title = other.title;
+        }
+        if self.authors.is_empty() {
+            self.authors = other.authors;
+        }
+        if self.year.is_none() {
+            self.year = other.year;
+        }
+        if self.container.is_none() {
+            self.container = other.container;
+        }
+        if self.summary.is_none() {
+            self.summary = other.summary;
+        }
+        if self.subjects.is_empty() {
+            self.subjects = other.subjects;
+        }
+        if self.language.is_none() {
+            self.language = other.language;
+        }
+        if self.pages.is_none() {
+            self.pages = other.pages;
+        }
+        // Which register answered becomes which registers did.
+        if !self.source.split('+').any(|s| s == other.source) {
+            self.source = format!("{}+{}", self.source, other.source);
+        }
     }
 }
 
@@ -133,5 +212,76 @@ mod tests {
         assert!(!json.contains("title"), "{json}");
         assert!(!json.contains("authors"), "{json}");
         assert!(json.contains("\"found\":false"), "{json}");
+    }
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::*;
+
+    fn rec(source: &str) -> Record {
+        let mut r = missing("9780199205592", "isbn", Source::OpenLibrary);
+        r.source = source.to_string();
+        r.found = true;
+        r
+    }
+
+    #[test]
+    fn two_half_answers_make_one_record() {
+        // Exactly what the two OpenLibrary endpoints give for one book: the
+        // edition record has the publisher and the language and names its
+        // authors by key; the index has the authors and not the publisher.
+        let mut edition = rec("openlibrary");
+        edition.title = Some("The First World War: A Very Short Introduction".into());
+        edition.container = Some("Oxford University Press".into());
+        edition.language = Some("eng".into());
+
+        let mut index = rec("openlibrary");
+        index.title = Some("The First World War".into());
+        index.authors = vec!["Michael Howard".into()];
+        index.year = Some(2007);
+
+        edition.fill_from(index);
+        assert_eq!(edition.authors, ["Michael Howard"]);
+        assert_eq!(edition.year, Some(2007));
+        // The fuller title arrived first and is not displaced by the shorter.
+        assert_eq!(
+            edition.title.as_deref(),
+            Some("The First World War: A Very Short Introduction")
+        );
+    }
+
+    #[test]
+    fn a_register_that_has_nothing_contributes_nothing() {
+        let mut kept = rec("openlibrary");
+        kept.title = Some("A Book".into());
+        let absent = missing("9780199205592", "isbn", Source::GoogleBooks);
+        kept.fill_from(absent);
+        assert_eq!(kept.title.as_deref(), Some("A Book"));
+        assert_eq!(kept.source, "openlibrary");
+    }
+
+    #[test]
+    fn the_record_names_every_register_that_answered() {
+        let mut a = rec("openlibrary");
+        a.title = Some("A Book".into());
+        let mut b = rec("googlebooks");
+        b.found = true;
+        b.pages = Some(134);
+        a.fill_from(b);
+        assert_eq!(a.source, "openlibrary+googlebooks");
+        assert_eq!(a.pages, Some(134));
+    }
+
+    #[test]
+    fn complete_means_a_catalogue_has_what_it_needs() {
+        let mut r = rec("openlibrary");
+        assert!(!r.complete());
+        r.title = Some("A Book".into());
+        r.authors = vec!["Someone".into()];
+        assert!(!r.complete(), "still missing the publisher and language");
+        r.container = Some("A Press".into());
+        r.language = Some("eng".into());
+        assert!(r.complete());
     }
 }

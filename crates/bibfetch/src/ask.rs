@@ -63,13 +63,18 @@ pub fn lookup(
     for source in chain {
         match ask(agent, *source, id, kind, attempts) {
             Ok(record) => {
-                let complete = record.found && record.title.is_some() && !record.authors.is_empty();
-                let better = best.as_ref().is_none_or(|kept| record.found && !kept.found);
-                if complete {
-                    return Ok(Some(record));
+                match &mut best {
+                    // Merged rather than replaced. The registers answer about
+                    // different parts of one book: OpenLibrary's edition record
+                    // carries the publisher, the pagination and the language
+                    // and names its authors by key, while its search index
+                    // carries the authors and not the publisher. Keeping
+                    // whichever arrived first throws the other half away.
+                    Some(kept) => kept.fill_from(record),
+                    None => best = Some(record),
                 }
-                if better {
-                    best = Some(record);
+                if best.as_ref().is_some_and(Record::complete) {
+                    break;
                 }
             }
             Err(why) => last_error = Some(why),
