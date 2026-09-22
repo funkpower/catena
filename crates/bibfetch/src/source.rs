@@ -55,9 +55,17 @@ impl Source {
         match kind {
             "doi" => &[Source::Crossref],
             "arxiv" => &[Source::Arxiv],
+            // The index first. Asked for the fields by name it answers with
+            // the title, the authors, the publisher, the language, a page
+            // count and the subjects in one request, which is the whole of
+            // what a catalogue wants; the edition record is then needed only
+            // for a subtitle or a publisher the index did not give. Asking it
+            // second cost three requests per book where one usually does, and
+            // at three books in flight that is the difference between two
+            // days and two hours.
             "isbn" => &[
-                Source::OpenLibrary,
                 Source::OpenLibrarySearch,
+                Source::OpenLibrary,
                 Source::GoogleBooks,
             ],
             _ => &[],
