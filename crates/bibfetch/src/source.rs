@@ -446,7 +446,10 @@ mod tests {
     fn each_kind_goes_to_the_body_that_assigns_it() {
         assert_eq!(Source::for_kind("doi"), Some(Source::Crossref));
         assert_eq!(Source::for_kind("arxiv"), Some(Source::Arxiv));
-        assert_eq!(Source::for_kind("isbn"), Some(Source::OpenLibrary));
+        // The index, not the edition record: it answers with the whole of
+        // what a catalogue wants in one request, where the edition record
+        // takes up to twenty-eight seconds and names its authors by key.
+        assert_eq!(Source::for_kind("isbn"), Some(Source::OpenLibrarySearch));
         // No register answers about an ISSN without a key.
         assert_eq!(Source::for_kind("issn"), None);
     }
