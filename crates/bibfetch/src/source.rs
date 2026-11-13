@@ -17,9 +17,10 @@ pub enum Source {
     Arxiv,
     /// OpenLibrary, for books by ISBN.
     OpenLibrary,
-    /// OpenLibrary's index, rather than its edition record. Asked when the
-    /// edition record has the book but not who wrote it, which is often: an
-    /// edition names its authors by key, and the index names them.
+    /// OpenLibrary's index, rather than its edition record. Asked for what is
+    /// true of the work — the title, the authors by name, the subjects —
+    /// because an edition names its authors by key and the index names them.
+    /// Never for what differs between editions.
     OpenLibrarySearch,
     /// Google Books, for books by ISBN. Asked last, because it answers
     /// anonymous callers only until a daily quota runs out.
@@ -55,13 +56,14 @@ impl Source {
         match kind {
             "doi" => &[Source::Crossref],
             "arxiv" => &[Source::Arxiv],
-            // The index first, for what is true of the whole work: the title,
-            // the authors by name and the subjects. It answers about the
-            // work, not the edition, so its publishers, languages, years and
-            // page counts belong to every edition at once, and Penguin's
-            // English War and Peace came back Spanish, Norton's, and 1845.
-            // The edition record says those for this ISBN; it names its
-            // authors only by key, which is why the index is still asked.
+            // The index first, for what is true of the work: the title, the
+            // authors by name, the subjects. Then the edition record, for
+            // what is true of this edition only: the publisher, the language,
+            // the year and the length. The index answers about the work, and
+            // its publishers, languages and years are every edition's at
+            // once, so they are not asked of it; the lookup goes on to the
+            // edition record for them. Google Books last, for whatever the
+            // edition record does not say.
             "isbn" => &[
                 Source::OpenLibrarySearch,
                 Source::OpenLibrary,
@@ -82,11 +84,13 @@ impl Source {
             Source::OpenLibrary => {
                 format!("https://openlibrary.org/isbn/{}.json", encode(id))
             }
-            // `fields` or the index answers with a handful of defaults and
-            // keeps the rest, which is how a language it holds went unread.
-            // Not `cover_i`: that is the cover chosen for the whole work, and
-            // on a work with hundreds of editions it is usually another
-            // edition's, in another translation or language.
+            // Only what is true of the work. Not `publisher`, `language`,
+            // `first_publish_year` or `number_of_pages_median`: those are every
+            // edition's at once, and the first of each is usually another
+            // edition's (the Penguin *War and Peace* came back Spanish, from
+            // W.W. Norton, in 1845). Not `cover_i`: that is the cover chosen
+            // for the whole work, often another edition's in another
+            // translation or language.
             Source::OpenLibrarySearch => format!(
                 "https://openlibrary.org/search.json?q=isbn:{}\
 &fields=title,subtitle,author_name,subject&limit=1",
@@ -293,6 +297,8 @@ struct SearchReply {
     docs: Vec<SearchDoc>,
 }
 
+/// What the index says about a work. Only the fields true of every edition
+/// are read, so an answer that carries the others anyway cannot leak them.
 #[derive(Deserialize)]
 struct SearchDoc {
     #[serde(default)]
@@ -314,6 +320,11 @@ pub(crate) const SUBJECT_LIMIT: usize = 12;
 
 /// A search that matched nothing answers with no documents rather than a
 /// status, so an empty reply is the absence and not a failure.
+///
+/// The record says what is true of the work and nothing that belongs to one
+/// edition: no publisher, language, year or page count. Those come from the
+/// edition record, which [`crate::ask::lookup`] asks next because a record
+/// without them is never complete.
 fn open_library_search(id: &str, kind: &str, body: &str) -> Result<Record, Error> {
     let reply: SearchReply = serde_json::from_str(body).map_err(|e| Error::Shape(e.to_string()))?;
     let Some(doc) = reply.docs.into_iter().next() else {
@@ -326,10 +337,6 @@ fn open_library_search(id: &str, kind: &str, body: &str) -> Result<Record, Error
         (title, _) => title,
     };
     record.authors = doc.author_name;
-    // Not the year, publisher, language or page count: the index gives them
-    // for the work, gathered from every edition, and the edition record is
-    // asked for this one's.
-    //
     // The index lists every subject any edition of the work carries, which
     // runs to hundreds on a well-known book. A shelf needs a handful.
     record.subjects = doc.subject;
@@ -465,9 +472,8 @@ mod tests {
     fn each_kind_goes_to_the_body_that_assigns_it() {
         assert_eq!(Source::for_kind("doi"), Some(Source::Crossref));
         assert_eq!(Source::for_kind("arxiv"), Some(Source::Arxiv));
-        // The index, not the edition record: it answers with the whole of
-        // what a catalogue wants in one request, where the edition record
-        // takes up to twenty-eight seconds and names its authors by key.
+        // The index first, for the authors by name; the edition record names
+        // them by key, and is asked next for what only the edition knows.
         assert_eq!(Source::for_kind("isbn"), Some(Source::OpenLibrarySearch));
         // No register answers about an ISSN without a key.
         assert_eq!(Source::for_kind("issn"), None);
@@ -585,58 +591,98 @@ mod tests {
     }
 
     #[test]
-    fn what_is_true_of_one_edition_comes_from_its_record_and_not_the_index() {
-        // ISBN 9780140447934, Penguin's English War and Peace, as the index
-        // answered on 2026-11-13: the work's languages, publishers and first
-        // year, gathered from every edition.
-        let index = r#"{"docs":[{"title":"War and Peace","author_name":["Leo Tolstoy"],
-            "first_publish_year":1845,"publisher":["W.W. Norton"],
-            "language":["spa","eng"],"number_of_pages_median":1296,
-            "subject":["Napoleonic Wars, 1800-1815"]}]}"#;
-        let alone = open_library_search("9780140447934", "isbn", index).expect("a record");
-        assert_eq!(alone.title.as_deref(), Some("War and Peace"));
-        assert_eq!(alone.authors, ["Leo Tolstoy"]);
-        assert_eq!(alone.subjects, ["Napoleonic Wars, 1800-1815"]);
-        assert_eq!(
-            (
-                alone.year,
-                alone.container.as_deref(),
-                alone.language.as_deref(),
-                alone.pages
-            ),
-            (None, None, None, None)
-        );
-        // Not complete, so `lookup` goes on to ask the edition record.
-        assert!(!alone.complete());
-
-        let edition = r#"{"title":"War and Peace","publishers":["Penguin Classics"],
-            "publish_date":"2007","languages":[{"key":"/languages/eng"}],
-            "number_of_pages":1392}"#;
-        let mut kept = alone;
-        kept.fill_from(open_library("9780140447934", "isbn", edition).expect("a record"));
-        assert_eq!(kept.year, Some(2007));
-        assert_eq!(kept.container.as_deref(), Some("Penguin Classics"));
-        assert_eq!(kept.language.as_deref(), Some("eng"));
-        assert_eq!(kept.pages, Some(1392));
-        assert_eq!(kept.authors, ["Leo Tolstoy"]);
-    }
-
-    #[test]
-    fn the_index_is_not_asked_for_what_belongs_to_editions() {
-        let url = Source::OpenLibrarySearch.url("1");
-        for field in [
-            "first_publish_year",
-            "publisher",
-            "language",
-            "number_of_pages",
-        ] {
-            assert!(!url.contains(field), "{field} in {url}");
-        }
-    }
-
-    #[test]
     fn the_index_is_not_asked_for_the_works_cover() {
         assert!(!Source::OpenLibrarySearch.url("1").contains("cover_i"));
+    }
+
+    /// What the index said for ISBN 9780140447934, the Penguin Classics *War
+    /// and Peace*, on 2026-11-13, asked for the fields the lookup asked for
+    /// before #6: the publishers, languages and first year of every edition
+    /// of the work.
+    const WAR_AND_PEACE_INDEX: &str = r#"{"docs":[{"title":"War and Peace",
+        "author_name":["Leo Tolstoy"],"first_publish_year":1845,
+        "publisher":["W.W. Norton","IndyPublish.com","Canterbury Classics"],
+        "language":["spa","gre","dut","eng"],"subject":["Fiction"],
+        "number_of_pages_median":1296}]}"#;
+
+    /// The edition record for the same ISBN, `/isbn/9780140447934.json`, with
+    /// the English language its `languages` field should name.
+    const WAR_AND_PEACE_EDITION: &str = r#"{"title":"War and Peace (Penguin Classics)",
+        "publishers":["Penguin Books"],"publish_date":"September 27, 2007",
+        "languages":[{"key":"/languages/eng"}],"number_of_pages":1440}"#;
+
+    /// Index first, then the edition record, merged as `ask::lookup` merges.
+    fn looked_up(edition: &str) -> Record {
+        let mut kept =
+            open_library_search("9780140447934", "isbn", WAR_AND_PEACE_INDEX).expect("a record");
+        kept.fill_from(open_library("9780140447934", "isbn", edition).expect("a record"));
+        kept
+    }
+
+    #[test]
+    fn the_index_says_nothing_only_an_edition_can() {
+        let record =
+            open_library_search("9780140447934", "isbn", WAR_AND_PEACE_INDEX).expect("a record");
+        // What is true of the work is kept.
+        assert_eq!(record.title.as_deref(), Some("War and Peace"));
+        assert_eq!(record.authors, ["Leo Tolstoy"]);
+        // What belongs to one edition is not taken from all of them.
+        assert_eq!(record.language, None);
+        assert_eq!(record.container, None);
+        assert_eq!(record.year, None);
+        assert_eq!(record.pages, None);
+    }
+
+    #[test]
+    fn a_lookup_by_isbn_gives_the_editions_language_publisher_and_year() {
+        let record = looked_up(WAR_AND_PEACE_EDITION);
+        assert_eq!(record.language.as_deref(), Some("eng"));
+        assert_eq!(record.container.as_deref(), Some("Penguin Books"));
+        assert_eq!(record.year, Some(2007));
+        assert_eq!(record.pages, Some(1440));
+        assert_eq!(record.authors, ["Leo Tolstoy"]);
+    }
+
+    #[test]
+    fn what_the_edition_does_not_say_is_missing_rather_than_the_works() {
+        // The real edition record today names no language at all.
+        let record = looked_up(
+            r#"{"title":"War and Peace (Penguin Classics)","publishers":["Penguin Books"],
+            "publish_date":"September 27, 2007","number_of_pages":1440}"#,
+        );
+        assert_eq!(record.language, None);
+        assert_eq!(record.container.as_deref(), Some("Penguin Books"));
+        assert_eq!(record.year, Some(2007));
+        // Nor a date: the work's first year is not this edition's.
+        let record = looked_up(r#"{"title":"War and Peace (Penguin Classics)"}"#);
+        assert_eq!(record.year, None);
+        assert_eq!(record.container, None);
+        assert_eq!(record.pages, None);
+    }
+
+    #[test]
+    fn the_index_alone_never_ends_a_lookup() {
+        // `lookup` stops at the first complete record; the index must not be
+        // one, or the edition record is never asked.
+        let record =
+            open_library_search("9780140447934", "isbn", WAR_AND_PEACE_INDEX).expect("a record");
+        assert!(!record.complete());
+    }
+
+    #[test]
+    fn the_index_is_not_asked_for_what_its_editions_differ_in() {
+        let url = Source::OpenLibrarySearch.url("9780140447934");
+        for field in [
+            "publisher",
+            "language",
+            "first_publish_year",
+            "number_of_pages_median",
+        ] {
+            assert!(
+                !url.split(['=', ',', '&']).any(|f| f == field),
+                "{field} in {url}"
+            );
+        }
     }
 
     #[test]

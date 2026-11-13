@@ -93,12 +93,17 @@ identifier is the only one that has it. A book is different. An ISBN is
 assigned by a publisher and recorded by whoever gets round to it, so an
 answer that names the book but not who wrote it is common — OpenLibrary's
 edition record names its authors by key rather than by name, and its index
-names them. The index answers about the work, though, not the edition: the
-publishers, languages, years and page counts it holds belong to every edition
-at once, so only the title, the authors and the subjects are taken from it,
-and the rest comes from the edition record for that ISBN. So the registers are
-asked in turn and the first complete answer wins. An incomplete one is kept in case nothing better comes, and a register
+names them. So the registers are asked in turn and the first complete answer
+wins. An incomplete one is kept in case nothing better comes, and a register
 being down is a failure only when every register is.
+
+OpenLibrary's index answers about the work, not the edition: its publishers,
+languages, years and page counts are every edition's at once, and the first
+of each is usually another edition's. So for a book it gives only the title,
+the authors and the subjects, and the `container`, `language`, `year` and
+`pages` of a record come from the edition record for that ISBN, or from
+Google Books when the edition record does not say. A field neither gives is
+left out rather than filled from the work.
 
 Google Books is asked last because it answers anonymous callers only until a
 daily quota runs out, after which it replies `429` to everyone sharing the

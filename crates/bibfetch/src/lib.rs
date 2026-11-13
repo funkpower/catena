@@ -265,11 +265,10 @@ mod merge_tests {
         let mut index = rec("openlibrary");
         index.title = Some("The First World War".into());
         index.authors = vec!["Michael Howard".into()];
-        index.year = Some(2007);
 
         edition.fill_from(index);
         assert_eq!(edition.authors, ["Michael Howard"]);
-        assert_eq!(edition.year, Some(2007));
+        assert_eq!(edition.language.as_deref(), Some("eng"));
         // The fuller title arrived first and is not displaced by the shorter.
         assert_eq!(
             edition.title.as_deref(),
