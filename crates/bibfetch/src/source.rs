@@ -88,7 +88,7 @@ impl Source {
             Source::OpenLibrarySearch => format!(
                 "https://openlibrary.org/search.json?q=isbn:{}\
 &fields=title,subtitle,author_name,first_publish_year,publisher,language,subject,\
-number_of_pages_median&limit=1",
+number_of_pages_median,cover_i&limit=1",
                 encode(id)
             ),
             Source::GoogleBooks => format!(
@@ -245,6 +245,9 @@ struct OpenLibraryBook {
     languages: Vec<OpenLibraryKey>,
     #[serde(default)]
     number_of_pages: Option<u32>,
+    /// Cover ids, best first. A deleted cover is left in the list as `-1`.
+    #[serde(default)]
+    covers: Vec<i64>,
 }
 
 #[derive(serde::Deserialize)]
@@ -275,6 +278,10 @@ fn open_library(id: &str, kind: &str, body: &str) -> Result<Record, Error> {
         .find_map(|l| l.key.rsplit('/').next().map(str::to_string))
         .filter(|l| !l.is_empty());
     record.pages = book.number_of_pages;
+    record.cover_id = book
+        .covers
+        .into_iter()
+        .find_map(|id| u64::try_from(id).ok().filter(|id| *id > 0));
     Ok(record)
 }
 
@@ -302,6 +309,8 @@ struct SearchDoc {
     subject: Vec<String>,
     #[serde(rename = "number_of_pages_median", default)]
     pages: Option<u32>,
+    #[serde(default)]
+    cover_i: Option<i64>,
 }
 
 /// How many of a work's subject headings are worth carrying.
@@ -333,6 +342,10 @@ fn open_library_search(id: &str, kind: &str, body: &str) -> Result<Record, Error
     record.subjects = doc.subject;
     record.subjects.truncate(SUBJECT_LIMIT);
     record.pages = doc.pages;
+    record.cover_id = doc
+        .cover_i
+        .and_then(|id| u64::try_from(id).ok())
+        .filter(|id| *id > 0);
     Ok(record)
 }
 
@@ -518,6 +531,29 @@ mod tests {
             let record = open_library("1", "isbn", &body).expect("a record");
             assert_eq!(record.year, year, "{date}");
         }
+    }
+
+    #[test]
+    fn the_cover_id_a_record_names_is_kept_for_the_cover_lookup() {
+        // A deleted cover stays in an edition's list as -1, ahead of the
+        // ones still there.
+        let record = open_library("1", "isbn", r#"{"title":"A","covers":[-1,1162784,99]}"#)
+            .expect("a record");
+        assert_eq!(record.cover_id, Some(1162784));
+        let record = open_library("1", "isbn", r#"{"title":"A"}"#).expect("a record");
+        assert_eq!(record.cover_id, None);
+
+        let record = open_library_search("1", "isbn", r#"{"docs":[{"title":"A","cover_i":2468}]}"#)
+            .expect("a record");
+        assert_eq!(record.cover_id, Some(2468));
+        let record = open_library_search("1", "isbn", r#"{"docs":[{"title":"A","cover_i":-1}]}"#)
+            .expect("a record");
+        assert_eq!(record.cover_id, None);
+    }
+
+    #[test]
+    fn the_index_is_asked_for_the_cover_id() {
+        assert!(Source::OpenLibrarySearch.url("1").contains("cover_i"));
     }
 
     #[test]
