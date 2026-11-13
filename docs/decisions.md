@@ -20,6 +20,7 @@ to any of them is a change to a decision rather than to an accident.
 - [pdfgutter — a page tree that does not add up is refused](#pdfgutter--a-page-tree-that-does-not-add-up-is-refused)
 - [pdfgutter — a sheet on its side is cut the way it is read](#pdfgutter--a-sheet-on-its-side-is-cut-the-way-it-is-read)
 - [pdfgutter — an unreadable file is an answer, not a false](#pdfgutter--an-unreadable-file-is-an-answer-not-a-false)
+- [bookmeta — a cover is what its bytes say it is](#bookmeta--a-cover-is-what-its-bytes-say-it-is)
 - [Every pattern — two regex engines, two Unicode tables](#every-pattern--two-regex-engines-two-unicode-tables)
 
 ## cuenorm — settings after the end time are the format, not a malformation
@@ -242,6 +243,23 @@ file, an encrypted one and an ordinary single-page book are three different
 answers, and the [contract](contract.md) gives them three different numbers. A
 caller wanting them collapsed treats 1 and 2 alike; a caller wanting to know
 which files it failed on can now find out.
+
+## bookmeta — a cover is what its bytes say it is
+
+An EPUB's manifest gives every image a media type, and the cover's is not
+used: the type comes from the image's first bytes, and a disagreement is a
+note. Elsewhere `bookmeta` reports what the file says rather than what is
+true, and this is the one place it does not.
+
+The difference is that a title nobody believes is still a title, while a
+media type that is wrong is an image that does not open. A caller handed
+`image/png` for a JPEG writes `cover.png`, serves it as PNG, or hands it to a
+decoder that refuses it. An image can be replaced by a converter or by hand
+without its manifest entry changing, and the note keeps what the file said,
+so nothing is lost by correcting it.
+
+The same reasoning goes the other way: bytes that are not an image are not a
+cover, whatever the manifest calls them.
 
 ## Every pattern — two regex engines, two Unicode tables
 

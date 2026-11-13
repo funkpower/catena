@@ -4,10 +4,17 @@
 //! document carries Dublin Core elements: title, creator, publisher, date,
 //! language, identifier, subject. Calibre adds its own `<meta>` entries for
 //! the series, which nothing in the standard has a place for.
+//!
+//! The cover is whichever image the package names, asked in the order the
+//! standards came: EPUB 3's `cover-image` property, EPUB 2's
+//! `<meta name="cover">`, the guide's cover page and the image on it, and
+//! last any image whose name says cover. Every address is resolved inside the
+//! archive and nowhere else, and every member is read no further than a fixed
+//! bound, [`MAX_COVER`] for an image.
 
 use std::io::Read;
 
-use crate::{Metadata, Source};
+use crate::{Cover, MAX_COVER, Metadata, Source, image_type};
 
 /// How large a package document is worth reading.
 ///
@@ -38,6 +45,7 @@ pub fn read(path: &str, bytes: &[u8]) -> Metadata {
     };
 
     fill(&mut meta, &package);
+    meta.cover = cover(&mut archive, &package_path, &package, &mut meta);
     if meta.is_empty() {
         meta.note("a package document with nothing filled in");
     }
@@ -248,6 +256,339 @@ fn unescape(text: &str) -> String {
         .replace("&amp;", "&")
 }
 
+/// One entry of the package's manifest.
+struct Item {
+    id: String,
+    href: String,
+    media_type: String,
+    properties: String,
+    /// Where `href` leads inside the archive, when it leads anywhere.
+    path: Option<String>,
+}
+
+/// The cover image, by the first of the four routes that reaches one.
+///
+/// A route that names something unusable leaves a note and the next route is
+/// asked, so a book whose declared cover is missing can still have the one
+/// its file name gives away.
+fn cover<R: std::io::Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    package_path: &str,
+    package: &str,
+    meta: &mut Metadata,
+) -> Option<Cover> {
+    let base = directory_of(package_path);
+    let items: Vec<Item> = tags(package)
+        .filter(|(name, _)| *name == "item")
+        .map(|(_, tag)| {
+            let href = attr(tag, "href").unwrap_or_default();
+            Item {
+                id: attr(tag, "id").unwrap_or_default(),
+                path: resolve(base, &href),
+                href,
+                media_type: attr(tag, "media-type").unwrap_or_default(),
+                properties: attr(tag, "properties").unwrap_or_default(),
+            }
+        })
+        .collect();
+    let mut look = Look {
+        archive,
+        items: &items,
+        tried: Vec::new(),
+        meta,
+    };
+
+    // EPUB 3: the manifest item whose properties say so.
+    for item in items.iter().filter(|item| {
+        item.properties
+            .split_ascii_whitespace()
+            .any(|property| property == "cover-image")
+    }) {
+        if let Some(found) = look.image(base, &item.href) {
+            return Some(found);
+        }
+    }
+
+    // EPUB 2: `<meta name="cover" content="…">` names an item by its id, or
+    // in some converters' hands by its address.
+    if let Some(named) = tags(package)
+        .filter(|(name, _)| *name == "meta")
+        .find(|(_, tag)| attr(tag, "name").as_deref() == Some("cover"))
+        .and_then(|(_, tag)| attr(tag, "content"))
+        .map(|content| content.trim().to_string())
+        .filter(|content| !content.is_empty())
+    {
+        let as_path = resolve(base, &named);
+        let href = items
+            .iter()
+            .find(|item| item.id == named)
+            .or_else(|| {
+                items
+                    .iter()
+                    .find(|item| item.path.is_some() && item.path == as_path)
+            })
+            .map_or(named.as_str(), |item| item.href.as_str());
+        if let Some(found) = look.image(base, href) {
+            return Some(found);
+        }
+    }
+
+    // The guide's cover page, and the first image on it.
+    if let Some(page) = tags(package)
+        .filter(|(name, _)| *name == "reference")
+        .find(|(_, tag)| attr(tag, "type").is_some_and(|kind| kind.eq_ignore_ascii_case("cover")))
+        .and_then(|(_, tag)| attr(tag, "href"))
+    {
+        if let Some(found) = look.page(base, &page) {
+            return Some(found);
+        }
+    }
+
+    // Last: an image whose id or address says cover.
+    for item in items.iter().filter(|item| {
+        item.media_type.starts_with("image/")
+            && (item.id.to_lowercase().contains("cover")
+                || item.href.to_lowercase().contains("cover"))
+    }) {
+        if let Some(found) = look.image(base, &item.href) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// The search for a cover, remembering what it has already looked at so
+/// that two routes to the same member read it, and note it, once.
+struct Look<'a, R> {
+    archive: &'a mut zip::ZipArchive<R>,
+    items: &'a [Item],
+    tried: Vec<String>,
+    meta: &'a mut Metadata,
+}
+
+impl<R: std::io::Read + std::io::Seek> Look<'_, R> {
+    /// Where an address leads, or a note saying it leads nowhere it may.
+    fn locate(&mut self, base: &str, href: &str) -> Option<String> {
+        let Some(path) = resolve(base, href) else {
+            self.meta.note(format!(
+                "the cover's address, {href}, is not a path inside the archive"
+            ));
+            return None;
+        };
+        if self.tried.contains(&path) {
+            return None;
+        }
+        self.tried.push(path.clone());
+        Some(path)
+    }
+
+    /// An image at an address, if that is what is there.
+    fn image(&mut self, base: &str, href: &str) -> Option<Cover> {
+        let path = self.locate(base, href)?;
+        let bytes = self.fetch(&path, MAX_COVER, "cover")?;
+        self.check(&path, bytes)
+    }
+
+    /// The image a cover page shows, or the page itself where the guide
+    /// points straight at an image.
+    fn page(&mut self, base: &str, href: &str) -> Option<Cover> {
+        let path = self.locate(base, href)?;
+        let bytes = self.fetch(&path, MAX_PACKAGE as usize, "cover page")?;
+        if image_type(&bytes).is_some() {
+            return self.check(&path, bytes);
+        }
+        let text = String::from_utf8_lossy(&bytes);
+        let Some(src) = tags(&text).find_map(|(name, tag)| match name {
+            "img" => attr(tag, "src"),
+            "image" => attr(tag, "xlink:href").or_else(|| attr(tag, "href")),
+            _ => None,
+        }) else {
+            self.meta
+                .note(format!("the cover page, {path}, shows no image"));
+            return None;
+        };
+        self.image(directory_of(&path), &src)
+    }
+
+    /// One member's bytes, read no further than `cap`.
+    ///
+    /// The size the archive declares is checked first and the read is
+    /// bounded anyway, because the declaration may be a lie.
+    fn fetch(&mut self, path: &str, cap: usize, what: &str) -> Option<Vec<u8>> {
+        let file = match self.archive.by_name(path) {
+            Ok(file) => file,
+            Err(zip::result::ZipError::FileNotFound) => {
+                self.meta
+                    .note(format!("the {what}, {path}, is not in the archive"));
+                return None;
+            }
+            Err(_) => {
+                self.meta
+                    .note(format!("the {what}, {path}, could not be read"));
+                return None;
+            }
+        };
+        let too_large = format!("the {what}, {path}, is larger than {}", crate::size(cap));
+        if file.size() > cap as u64 {
+            self.meta.note(too_large);
+            return None;
+        }
+        let mut bytes = Vec::new();
+        if file.take(cap as u64 + 1).read_to_end(&mut bytes).is_err() {
+            self.meta
+                .note(format!("the {what}, {path}, could not be read"));
+            return None;
+        }
+        if bytes.len() > cap {
+            self.meta.note(too_large);
+            return None;
+        }
+        Some(bytes)
+    }
+
+    /// The bytes as a cover when they are an image, typed by what they are
+    /// rather than by what the manifest says.
+    fn check(&mut self, path: &str, bytes: Vec<u8>) -> Option<Cover> {
+        let Some(media_type) = image_type(&bytes) else {
+            self.meta
+                .note(format!("the cover, {path}, is not an image"));
+            return None;
+        };
+        if let Some(item) = self
+            .items
+            .iter()
+            .find(|item| item.path.as_deref() == Some(path))
+        {
+            let declared = item.media_type.trim();
+            if !declared.is_empty() && !declared.eq_ignore_ascii_case(media_type) {
+                self.meta.note(format!(
+                    "the manifest calls the cover, {path}, {declared}, but it is {media_type}"
+                ));
+            }
+        }
+        Some(Cover {
+            media_type: media_type.to_string(),
+            bytes,
+        })
+    }
+}
+
+/// The directory a member sits in, with no trailing slash.
+fn directory_of(path: &str) -> &str {
+    path.rsplit_once('/').map_or("", |(dir, _)| dir)
+}
+
+/// Where an address written in a member in `base` leads inside the archive.
+///
+/// The fragment comes off and percent-escapes are undone. An address with a
+/// scheme, or one that climbs above the root of the archive, leads nowhere
+/// this will follow.
+fn resolve(base: &str, href: &str) -> Option<String> {
+    let href = href.split('#').next().unwrap_or("").trim();
+    // `http:`, `data:`, `file:`: a scheme before the first slash.
+    if let Some(colon) = href.find(':') {
+        if !href[..colon].contains('/') {
+            return None;
+        }
+    }
+    let href = percent_decode(href)?;
+    let mut parts: Vec<&str> = if href.starts_with('/') {
+        Vec::new()
+    } else {
+        base.split('/').filter(|part| !part.is_empty()).collect()
+    };
+    for part in href.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop()?;
+            }
+            part => parts.push(part),
+        }
+    }
+    // An address of nothing but the directory it is written in names no
+    // member at all.
+    if href.is_empty() || parts.is_empty() {
+        return None;
+    }
+    Some(parts.join("/"))
+}
+
+/// `%20` back to a space, and so on, where the result is still UTF-8.
+fn percent_decode(text: &str) -> Option<String> {
+    let raw = text.as_bytes();
+    let mut out = Vec::with_capacity(raw.len());
+    let mut at = 0;
+    while at < raw.len() {
+        if raw[at] == b'%' {
+            let hex = std::str::from_utf8(raw.get(at + 1..at + 3)?).ok()?;
+            out.push(u8::from_str_radix(hex, 16).ok()?);
+            at += 3;
+        } else {
+            out.push(raw[at]);
+            at += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+/// Every start tag in a document, in order, as its local name and its text.
+///
+/// Comments, declarations, processing instructions and end tags are passed
+/// over. The local name is what follows any namespace prefix, so
+/// `<opf:item>` is an `item`.
+fn tags(xml: &str) -> impl Iterator<Item = (&str, &str)> {
+    let mut rest = xml;
+    std::iter::from_fn(move || {
+        loop {
+            let at = rest.find('<')?;
+            rest = &rest[at..];
+            if let Some(after) = rest.strip_prefix("<!--") {
+                rest = after.find("-->").map_or("", |end| &after[end + 3..]);
+                continue;
+            }
+            let end = rest.find('>')?;
+            let tag = &rest[1..end];
+            rest = &rest[end + 1..];
+            if tag.starts_with(['/', '!', '?']) {
+                continue;
+            }
+            let name = tag
+                .split(|c: char| c.is_ascii_whitespace() || c == '/')
+                .next()
+                .unwrap_or("");
+            let local = name.rsplit_once(':').map_or(name, |(_, local)| local);
+            return Some((local, tag));
+        }
+    })
+}
+
+/// The value of one attribute in a tag's text, entities undone.
+///
+/// The name has to stand on its own — `id` is not the end of `xml:id` or
+/// `data-id` — and may have space either side of its `=`.
+fn attr(tag: &str, name: &str) -> Option<String> {
+    let mut from = 0;
+    while let Some(found) = tag[from..].find(name) {
+        let at = from + found;
+        from = at + name.len();
+        if !tag[..at].ends_with(|c: char| c.is_ascii_whitespace()) {
+            continue;
+        }
+        let Some(rest) = tag[from..].trim_start().strip_prefix('=') else {
+            continue;
+        };
+        let rest = rest.trim_start();
+        let Some(quote) = rest.chars().next().filter(|c| matches!(c, '"' | '\'')) else {
+            continue;
+        };
+        let value = &rest[1..];
+        let end = value.find(quote)?;
+        return Some(unescape(&value[..end]));
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -355,5 +696,387 @@ mod tests {
         let meta = read("x.epub", b"not a zip at all");
         assert_eq!(meta.source, "none");
         assert!(!meta.notes.is_empty());
+    }
+
+    // Covers. Each book is built here, a few members zipped in memory: the
+    // container, a package in `OEBPS/`, and whatever the case is about.
+
+    const JPEG: &[u8] = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00jpeg body";
+    const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR png body";
+    const GIF: &[u8] = b"GIF89a\x01\x00\x01\x00 gif body";
+    const WEBP: &[u8] = b"RIFF\x20\x00\x00\x00WEBPVP8 webp body";
+
+    const CONTAINER: &str = r#"<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>"#;
+
+    /// A package with this manifest and these extra elements, around a title.
+    fn opf(manifest: &str, extra: &str) -> String {
+        format!(
+            r#"<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Covered</dc:title>
+  </metadata>
+  <manifest>
+    <item id="text" href="text/one.xhtml" media-type="application/xhtml+xml"/>
+    {manifest}
+  </manifest>
+  {extra}
+</package>"#
+        )
+    }
+
+    /// An EPUB of these members, after the container.
+    fn epub(members: &[(&str, &[u8])]) -> Vec<u8> {
+        use std::io::Write;
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        let container: (&str, &[u8]) = ("META-INF/container.xml", CONTAINER.as_bytes());
+        for (name, data) in std::iter::once(&container).chain(members) {
+            zip.start_file(*name, options).unwrap();
+            zip.write_all(data).unwrap();
+        }
+        zip.finish().unwrap().into_inner()
+    }
+
+    fn book(package: &str, members: &[(&str, &[u8])]) -> Metadata {
+        let mut all = vec![("OEBPS/content.opf", package.as_bytes())];
+        all.extend_from_slice(members);
+        read("x.epub", &epub(&all))
+    }
+
+    #[test]
+    fn epub_3_names_its_cover_with_a_property() {
+        let package = opf(
+            r#"<item id="decoy-cover" href="images/cover-thumb.png" media-type="image/png"/>
+               <item id="c" href="images/front.jpg" media-type="image/jpeg" properties="svg cover-image"/>"#,
+            r#"<metadata><meta name="cover" content="decoy-cover"/></metadata>"#,
+        );
+        let meta = book(
+            &package,
+            &[
+                ("OEBPS/images/front.jpg", JPEG),
+                ("OEBPS/images/cover-thumb.png", PNG),
+            ],
+        );
+        let cover = meta.cover.expect("a cover");
+        assert_eq!(cover.media_type, "image/jpeg");
+        assert_eq!(cover.bytes, JPEG);
+        assert!(meta.notes.is_empty(), "{:?}", meta.notes);
+    }
+
+    #[test]
+    fn epub_2_names_its_cover_with_a_meta_holding_an_id() {
+        let package = opf(
+            r#"<opf:item id="cover-img" href="Images/Front%20Page.png#top" media-type="image/png"/>"#,
+            r#"<metadata><meta content="cover-img" name="cover" /></metadata>"#,
+        );
+        let meta = book(&package, &[("OEBPS/Images/Front Page.png", PNG)]);
+        let cover = meta.cover.expect("a cover");
+        assert_eq!(cover.media_type, "image/png");
+        assert_eq!(cover.bytes, PNG);
+        assert!(meta.notes.is_empty(), "{:?}", meta.notes);
+    }
+
+    #[test]
+    fn a_cover_meta_holding_an_address_is_followed_as_one() {
+        // Listed in the manifest under another id, and not listed at all.
+        let listed = opf(
+            r#"<item id="x1" href="../art/front.gif" media-type="image/gif"/>"#,
+            r#"<metadata><meta name="cover" content="../art/front.gif"/></metadata>"#,
+        );
+        let meta = book(&listed, &[("art/front.gif", GIF)]);
+        assert_eq!(meta.cover.expect("a cover").media_type, "image/gif");
+
+        let unlisted = opf(
+            "",
+            r#"<metadata><meta name="cover" content="front.webp"/></metadata>"#,
+        );
+        let meta = book(&unlisted, &[("OEBPS/front.webp", WEBP)]);
+        let cover = meta.cover.expect("a cover");
+        assert_eq!(cover.media_type, "image/webp");
+        assert_eq!(cover.bytes, WEBP);
+    }
+
+    #[test]
+    fn the_guide_cover_page_gives_the_first_image_on_it() {
+        let package = opf(
+            r#"<item id="page" href="text/cover.xhtml" media-type="application/xhtml+xml"/>
+               <item id="art" href="images/art.jpg" media-type="image/jpeg"/>"#,
+            r#"<guide><reference type="Cover" title="Cover" href="text/cover.xhtml#start"/></guide>"#,
+        );
+        let page = br#"<html><body><!-- <img src="nothing.png"/> -->
+            <img alt="cover" src="../images/art.jpg"/><img src="../images/later.png"/></body></html>"#;
+        let meta = book(
+            &package,
+            &[
+                ("OEBPS/text/cover.xhtml", page),
+                ("OEBPS/images/art.jpg", JPEG),
+                ("OEBPS/images/later.png", PNG),
+            ],
+        );
+        let cover = meta.cover.expect("a cover");
+        assert_eq!(cover.bytes, JPEG);
+        assert!(meta.notes.is_empty(), "{:?}", meta.notes);
+    }
+
+    #[test]
+    fn the_guide_cover_page_may_draw_its_image_in_svg() {
+        let package = opf(
+            "",
+            r#"<guide><reference type="cover" href="titlepage.xhtml"/></guide>"#,
+        );
+        for image in [
+            r#"<svg:image width="600" xlink:href="cover.png"/>"#,
+            r#"<image href="cover.png" />"#,
+        ] {
+            let page = format!(r#"<html><body><svg:svg>{image}</svg:svg></body></html>"#);
+            let meta = book(
+                &package,
+                &[
+                    ("OEBPS/titlepage.xhtml", page.as_bytes()),
+                    ("OEBPS/cover.png", PNG),
+                ],
+            );
+            assert_eq!(meta.cover.expect(image).bytes, PNG);
+        }
+    }
+
+    #[test]
+    fn last_an_image_whose_name_says_cover() {
+        let package = opf(
+            r#"<item id="pic1" href="images/plate.jpg" media-type="image/jpeg"/>
+               <item id="CoverImage" href="images/i2.gif" media-type="image/gif"/>"#,
+            "",
+        );
+        let meta = book(
+            &package,
+            &[
+                ("OEBPS/images/plate.jpg", JPEG),
+                ("OEBPS/images/i2.gif", GIF),
+            ],
+        );
+        assert_eq!(meta.cover.expect("a cover").bytes, GIF);
+
+        let by_address = opf(
+            r#"<item id="i9" href="images/Book_COVER.jpeg" media-type="image/jpeg"/>"#,
+            "",
+        );
+        let meta = book(&by_address, &[("OEBPS/images/Book_COVER.jpeg", JPEG)]);
+        assert_eq!(meta.cover.expect("a cover").bytes, JPEG);
+    }
+
+    #[test]
+    fn a_book_that_names_no_cover_has_none_and_says_nothing() {
+        let package = opf(
+            r#"<item id="plate" href="images/plate.jpg" media-type="image/jpeg"/>"#,
+            "",
+        );
+        let meta = book(&package, &[("OEBPS/images/plate.jpg", JPEG)]);
+        assert_eq!(meta.cover, None);
+        assert!(meta.notes.is_empty(), "{:?}", meta.notes);
+    }
+
+    #[test]
+    fn a_mislabelled_cover_is_what_its_bytes_say() {
+        let package = opf(
+            r#"<item id="c" href="c.png" media-type="image/png" properties="cover-image"/>"#,
+            "",
+        );
+        let meta = book(&package, &[("OEBPS/c.png", JPEG)]);
+        assert_eq!(meta.cover.expect("a cover").media_type, "image/jpeg");
+        assert_eq!(
+            meta.notes,
+            ["the manifest calls the cover, OEBPS/c.png, image/png, but it is image/jpeg"]
+        );
+    }
+
+    #[test]
+    fn a_cover_that_is_not_an_image_is_a_note_and_not_a_cover() {
+        let package = opf(
+            r#"<item id="c" href="c.jpg" media-type="image/jpeg" properties="cover-image"/>"#,
+            "",
+        );
+        let meta = book(&package, &[("OEBPS/c.jpg", b"<html>not an image</html>")]);
+        assert_eq!(meta.cover, None);
+        assert_eq!(meta.notes, ["the cover, OEBPS/c.jpg, is not an image"]);
+    }
+
+    #[test]
+    fn a_cover_larger_than_the_cap_is_left_out() {
+        let mut huge = JPEG.to_vec();
+        huge.resize(MAX_COVER + 1, 0);
+        let package = opf(
+            r#"<item id="c" href="c.jpg" media-type="image/jpeg" properties="cover-image"/>"#,
+            "",
+        );
+        let meta = book(&package, &[("OEBPS/c.jpg", &huge)]);
+        assert_eq!(meta.cover, None);
+        assert_eq!(
+            meta.notes,
+            ["the cover, OEBPS/c.jpg, is larger than 16 MiB"]
+        );
+    }
+
+    /// Read one member through `Look::fetch` with a cap of `cap`.
+    fn fetch(bytes: Vec<u8>, cap: usize) -> (Option<usize>, Vec<String>) {
+        let mut meta = Metadata::empty("x.epub", Source::Opf);
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let mut look = Look {
+            archive: &mut archive,
+            items: &[],
+            tried: Vec::new(),
+            meta: &mut meta,
+        };
+        let got = look.fetch("big.jpg", cap, "cover").map(|bytes| bytes.len());
+        (got, meta.notes)
+    }
+
+    #[test]
+    fn a_member_is_read_no_further_than_its_cap() {
+        let bytes = epub(&[("big.jpg", &[0u8; 4096])]);
+        assert_eq!(fetch(bytes.clone(), 4096).0, Some(4096));
+        assert_eq!(
+            fetch(bytes, 4095),
+            (
+                None,
+                vec!["the cover, big.jpg, is larger than 4095 bytes".to_string()]
+            )
+        );
+    }
+
+    #[test]
+    fn a_member_whose_archive_understates_its_size_is_still_bounded() {
+        let mut bytes = epub(&[("big.jpg", &[0u8; 4096])]);
+        // Declare 10 bytes uncompressed, in the local header and in the
+        // central directory, where 4096 are compressed in.
+        // The name comes 30 bytes into a local header and 46 into a central
+        // directory entry, and the uncompressed size 22 and 24.
+        let local = find(&bytes, b"big.jpg") - 30;
+        bytes[local + 22..local + 26].copy_from_slice(&10u32.to_le_bytes());
+        let central = local + 31 + find(&bytes[local + 31..], b"big.jpg") - 46;
+        assert_eq!(&bytes[central..central + 4], b"PK\x01\x02");
+        bytes[central + 24..central + 28].copy_from_slice(&10u32.to_le_bytes());
+
+        // The declaration passes the check, and the read stops at the cap.
+        let (got, notes) = fetch(bytes, 100);
+        assert_eq!(got, None);
+        assert_eq!(notes, ["the cover, big.jpg, is larger than 100 bytes"]);
+    }
+
+    fn find(haystack: &[u8], needle: &[u8]) -> usize {
+        haystack
+            .windows(needle.len())
+            .position(|window| window == needle)
+            .expect("present")
+    }
+
+    #[test]
+    fn a_cover_named_but_missing_is_a_note_and_the_next_route_is_asked() {
+        let package = opf(
+            r#"<item id="c" href="gone.jpg" media-type="image/jpeg" properties="cover-image"/>"#,
+            "",
+        );
+        let meta = book(&package, &[]);
+        assert_eq!(meta.cover, None);
+        assert_eq!(
+            meta.notes,
+            ["the cover, OEBPS/gone.jpg, is not in the archive"]
+        );
+
+        // A missing page is said the same way.
+        let page = opf(
+            "",
+            r#"<guide><reference type="cover" href="none.xhtml"/></guide>"#,
+        );
+        assert_eq!(
+            book(&page, &[]).notes,
+            ["the cover page, OEBPS/none.xhtml, is not in the archive"]
+        );
+
+        // The same file reached again by another route is not read twice,
+        // and an image the name gives away still stands in.
+        let package = opf(
+            r#"<item id="cover" href="gone.jpg" media-type="image/jpeg" properties="cover-image"/>
+               <item id="cover-small" href="small.png" media-type="image/png"/>"#,
+            r#"<metadata><meta name="cover" content="cover"/></metadata>"#,
+        );
+        let meta = book(&package, &[("OEBPS/small.png", PNG)]);
+        assert_eq!(meta.cover.expect("the stand-in").bytes, PNG);
+        assert_eq!(
+            meta.notes,
+            ["the cover, OEBPS/gone.jpg, is not in the archive"]
+        );
+    }
+
+    #[test]
+    fn an_address_never_leaves_the_archive() {
+        assert_eq!(resolve("OEBPS", "../c.jpg").as_deref(), Some("c.jpg"));
+        assert_eq!(resolve("OEBPS", "/c.jpg").as_deref(), Some("c.jpg"));
+        assert_eq!(
+            resolve("OEBPS/text", "./a/../b.jpg").as_deref(),
+            Some("OEBPS/text/b.jpg")
+        );
+        assert_eq!(resolve("", "a%2Fb.jpg").as_deref(), Some("a/b.jpg"));
+        for hostile in [
+            "../../c.jpg",
+            "../../../etc/passwd",
+            "http://example.com/c.jpg",
+            "data:image/png;base64,AAAA",
+            "file:///etc/passwd",
+            "%ZZ.jpg",
+            "%ff.jpg",
+            "c%",
+            "#only-a-fragment",
+            "",
+        ] {
+            assert_eq!(resolve("OEBPS", hostile), None, "{hostile}");
+        }
+
+        let package = opf(
+            r#"<item id="c" href="../../c.jpg" media-type="image/jpeg" properties="cover-image"/>"#,
+            "",
+        );
+        let meta = book(&package, &[("c.jpg", JPEG)]);
+        assert_eq!(meta.cover, None);
+        assert_eq!(
+            meta.notes,
+            ["the cover's address, ../../c.jpg, is not a path inside the archive"]
+        );
+    }
+
+    #[test]
+    fn an_attribute_is_matched_by_its_whole_name() {
+        let tag = r#"item data-id="no" xml:id="no" id = 'yes' href="a&amp;b.jpg""#;
+        assert_eq!(attr(tag, "id").as_deref(), Some("yes"));
+        assert_eq!(attr(tag, "href").as_deref(), Some("a&b.jpg"));
+        assert_eq!(attr(r#"image xlink:href="x.png""#, "href"), None);
+        assert_eq!(attr(r#"item id="unterminated"#, "id"), None);
+    }
+
+    #[test]
+    fn every_truncation_of_a_book_with_a_cover_returns() {
+        let package = opf(
+            r#"<item id="c" href="c.jpg" media-type="image/jpeg" properties="cover-image"/>"#,
+            r#"<guide><reference type="cover" href="p.xhtml"/></guide>"#,
+        );
+        let bytes = epub(&[
+            ("OEBPS/content.opf", package.as_bytes()),
+            ("OEBPS/c.jpg", JPEG),
+            ("OEBPS/p.xhtml", b"<img src=\"c.jpg\"/>"),
+        ]);
+        for len in 0..=bytes.len() {
+            let _ = read("cut.epub", &bytes[..len]);
+        }
+        for at in 0..bytes.len() {
+            let mut broken = bytes.clone();
+            broken[at] ^= 0xff;
+            let _ = read("broken.epub", &broken);
+        }
     }
 }
