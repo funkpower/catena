@@ -86,15 +86,18 @@ is a failure — nobody replied, and the identifier may be perfectly good.
 |---|---|---|
 | `doi` | Crossref | It assigns most scholarly DOIs |
 | `arxiv` | the arXiv | Its own register of preprints |
-| `isbn` | OpenLibrary's edition record, then its index, then Google Books | Books, without a key |
+| `isbn` | OpenLibrary's index, then its edition record, then Google Books | Books, without a key |
 
 One register is enough for a DOI or a preprint: the body that assigns the
 identifier is the only one that has it. A book is different. An ISBN is
 assigned by a publisher and recorded by whoever gets round to it, so an
 answer that names the book but not who wrote it is common — OpenLibrary's
 edition record names its authors by key rather than by name, and its index
-names them. So the registers are asked in turn and the first complete answer
-wins. An incomplete one is kept in case nothing better comes, and a register
+names them. The index answers about the work, though, not the edition: the
+publishers, languages, years and page counts it holds belong to every edition
+at once, so only the title, the authors and the subjects are taken from it,
+and the rest comes from the edition record for that ISBN. So the registers are
+asked in turn and the first complete answer wins. An incomplete one is kept in case nothing better comes, and a register
 being down is a failure only when every register is.
 
 Google Books is asked last because it answers anonymous callers only until a
@@ -127,7 +130,8 @@ id is asked only when every form of the ISBN asked was answered with no cover; i
 asking by ISBN failed, that failure is the result.
 
 What comes back is checked before it is written: a JPEG or PNG by its bytes
-as well as by what the server says, no larger than ten megabytes, reached in at
+as well as by what the server says, whole to its end marker (`FF D9` for a
+JPEG, `IEND` for a PNG), no larger than ten megabytes, reached in at
 most three redirects, each over HTTPS to `covers.openlibrary.org`,
 `archive.org` or a host under `archive.org`, and never to an address by number.
 One request is made at a time, a `429` or `503` is waited out for as long as

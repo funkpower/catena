@@ -386,6 +386,23 @@ by ISBN every five minutes from one address"
     }
 }
 
+/// Whether an image's bytes run to its end marker: `FF D9` for a JPEG, which
+/// some encoders follow with zero padding, and the `IEND` chunk for a PNG,
+/// which is its last twelve bytes.
+fn ends_whole(media_type: &str, bytes: &[u8]) -> bool {
+    match media_type {
+        "image/jpeg" => {
+            let end = bytes.iter().rposition(|&b| b != 0).map_or(0, |at| at + 1);
+            end >= 5 && bytes[..end].ends_with(&[0xFF, 0xD9])
+        }
+        _ => {
+            bytes.len() >= 8 + 12
+                && bytes[bytes.len() - 12..].starts_with(&[0, 0, 0, 0])
+                && &bytes[bytes.len() - 8..bytes.len() - 4] == b"IEND"
+        }
+    }
+}
+
 /// Read and check a body that is meant to be a cover.
 fn read(mut response: ureq::http::Response<ureq::Body>, address: &str) -> Result<Answer, Error> {
     let declared = header(&response, "content-type")
@@ -436,6 +453,14 @@ fn read(mut response: ureq::http::Response<ureq::Body>, address: &str) -> Result
     if !agrees {
         return Err(Error::Shape(format!(
             "{address}: said {media_type} but is not one"
+        )));
+    }
+    // The start of an image is not an image. A body sent with no length,
+    // or a stub, can begin right and stop short; what ends it says it is
+    // whole.
+    if !ends_whole(media_type, &bytes) {
+        return Err(Error::Shape(format!(
+            "{address}: a {media_type} that stops before its end"
         )));
     }
     // No floor on the size. Open Library's stand-in for a missing cover is a
@@ -512,7 +537,12 @@ fn origin(url: &str) -> Option<&str> {
 
 /// Where a `Location` points, read against the address that sent it.
 fn resolve(from: &str, location: &str) -> String {
-    if location.contains("://") {
+    // Absolute only when the scheme comes first: a relative address can
+    // carry another address in its query.
+    if location
+        .find("://")
+        .is_some_and(|at| !location[..at].contains(['/', '?', '#']))
+    {
         return location.to_string();
     }
     if let Some(rest) = location.strip_prefix("//") {
@@ -670,15 +700,19 @@ mod tests {
         .agent()
     }
 
+    /// A JPEG's start, filler, and its end marker, `len` bytes in all.
     fn jpeg(len: usize) -> Vec<u8> {
         let mut bytes = vec![0xFF, 0xD8, 0xFF, 0xE0];
-        bytes.resize(len, 0x11);
+        bytes.resize(len - 2, 0x11);
+        bytes.extend([0xFF, 0xD9]);
         bytes
     }
 
+    /// A PNG's signature, filler, and its `IEND` chunk, `len` bytes in all.
     fn png(len: usize) -> Vec<u8> {
         let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
-        bytes.resize(len, 0x22);
+        bytes.resize(len - 12, 0x22);
+        bytes.extend(b"\0\0\0\0IEND\xAE\x42\x60\x82");
         bytes
     }
 
@@ -1171,6 +1205,38 @@ mod tests {
     }
 
     #[test]
+    fn a_magic_number_alone_is_not_a_cover() {
+        let mut cut_jpeg = jpeg(4096);
+        cut_jpeg.truncate(4000);
+        let mut cut_png = png(4096);
+        cut_png.truncate(4000);
+        for (media_type, body) in [
+            ("image/jpeg", vec![0xFF, 0xD8, 0xFF]),
+            ("image/png", b"\x89PNG\r\n\x1a\n".to_vec()),
+            ("image/jpeg", cut_jpeg),
+            ("image/png", cut_png),
+        ] {
+            let stub = Stub::start(move |_, _| Reply::image(media_type, body.clone()));
+            let found = stub
+                .covers()
+                .fetch(&agent(), "9780306406157", None, CoverSize::Large)
+                .map(|cover| cover.map(|cover| cover.bytes.len()));
+            assert!(
+                matches!(found, Err(Error::Shape(_))),
+                "{media_type}: {found:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_jpeg_padded_after_its_end_marker_is_whole() {
+        let mut padded = jpeg(2048);
+        padded.extend([0, 0, 0]);
+        assert!(ends_whole("image/jpeg", &padded));
+        assert!(!ends_whole("image/jpeg", &[0xFF, 0xD8, 0xFF, 0, 0]));
+    }
+
+    #[test]
     fn a_redirect_to_an_address_by_number_is_refused() {
         // A listener standing in for a service on the LAN; it only counts.
         let lan = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
@@ -1217,6 +1283,15 @@ mod tests {
         assert_eq!(resolve(from, "//c.example/x"), "https://c.example/x");
         assert_eq!(resolve(from, "/x?y=1"), "https://a.example/x?y=1");
         assert_eq!(resolve(from, "x.jpg"), "https://a.example/b/isbn/x.jpg");
+        // An address in a relative one's query does not make it absolute.
+        assert_eq!(
+            resolve(from, "/view_archive.php?from=https://archive.org/x"),
+            "https://a.example/view_archive.php?from=https://archive.org/x"
+        );
+        assert_eq!(
+            resolve(from, "x?u=https://c.example/"),
+            "https://a.example/b/isbn/x?u=https://c.example/"
+        );
         assert_eq!(
             origin("http://127.0.0.1:8080/a?b"),
             Some("http://127.0.0.1:8080")

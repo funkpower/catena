@@ -55,14 +55,13 @@ impl Source {
         match kind {
             "doi" => &[Source::Crossref],
             "arxiv" => &[Source::Arxiv],
-            // The index first. Asked for the fields by name it answers with
-            // the title, the authors, the publisher, the language, a page
-            // count and the subjects in one request, which is the whole of
-            // what a catalogue wants; the edition record is then needed only
-            // for a subtitle or a publisher the index did not give. Asking it
-            // second cost three requests per book where one usually does, and
-            // at three books in flight that is the difference between two
-            // days and two hours.
+            // The index first, for what is true of the whole work: the title,
+            // the authors by name and the subjects. It answers about the
+            // work, not the edition, so its publishers, languages, years and
+            // page counts belong to every edition at once, and Penguin's
+            // English War and Peace came back Spanish, Norton's, and 1845.
+            // The edition record says those for this ISBN; it names its
+            // authors only by key, which is why the index is still asked.
             "isbn" => &[
                 Source::OpenLibrarySearch,
                 Source::OpenLibrary,
@@ -90,8 +89,7 @@ impl Source {
             // edition's, in another translation or language.
             Source::OpenLibrarySearch => format!(
                 "https://openlibrary.org/search.json?q=isbn:{}\
-&fields=title,subtitle,author_name,first_publish_year,publisher,language,subject,\
-number_of_pages_median&limit=1",
+&fields=title,subtitle,author_name,subject&limit=1",
                 encode(id)
             ),
             Source::GoogleBooks => format!(
@@ -304,15 +302,7 @@ struct SearchDoc {
     #[serde(default)]
     author_name: Vec<String>,
     #[serde(default)]
-    first_publish_year: Option<i64>,
-    #[serde(default)]
-    publisher: Vec<String>,
-    #[serde(default)]
-    language: Vec<String>,
-    #[serde(default)]
     subject: Vec<String>,
-    #[serde(rename = "number_of_pages_median", default)]
-    pages: Option<u32>,
 }
 
 /// How many of a work's subject headings are worth carrying.
@@ -336,14 +326,14 @@ fn open_library_search(id: &str, kind: &str, body: &str) -> Result<Record, Error
         (title, _) => title,
     };
     record.authors = doc.author_name;
-    record.year = doc.first_publish_year;
-    record.container = doc.publisher.into_iter().next();
-    record.language = doc.language.into_iter().next();
+    // Not the year, publisher, language or page count: the index gives them
+    // for the work, gathered from every edition, and the edition record is
+    // asked for this one's.
+    //
     // The index lists every subject any edition of the work carries, which
     // runs to hundreds on a well-known book. A shelf needs a handful.
     record.subjects = doc.subject;
     record.subjects.truncate(SUBJECT_LIMIT);
-    record.pages = doc.pages;
     Ok(record)
 }
 
@@ -591,6 +581,56 @@ mod tests {
             let mut kept = open_library_search("9780140447934", "isbn", index).expect("a record");
             kept.fill_from(open_library("9780140447934", "isbn", edition).expect("a record"));
             assert_eq!(kept.cover_id, None, "{edition}");
+        }
+    }
+
+    #[test]
+    fn what_is_true_of_one_edition_comes_from_its_record_and_not_the_index() {
+        // ISBN 9780140447934, Penguin's English War and Peace, as the index
+        // answered on 2026-11-13: the work's languages, publishers and first
+        // year, gathered from every edition.
+        let index = r#"{"docs":[{"title":"War and Peace","author_name":["Leo Tolstoy"],
+            "first_publish_year":1845,"publisher":["W.W. Norton"],
+            "language":["spa","eng"],"number_of_pages_median":1296,
+            "subject":["Napoleonic Wars, 1800-1815"]}]}"#;
+        let alone = open_library_search("9780140447934", "isbn", index).expect("a record");
+        assert_eq!(alone.title.as_deref(), Some("War and Peace"));
+        assert_eq!(alone.authors, ["Leo Tolstoy"]);
+        assert_eq!(alone.subjects, ["Napoleonic Wars, 1800-1815"]);
+        assert_eq!(
+            (
+                alone.year,
+                alone.container.as_deref(),
+                alone.language.as_deref(),
+                alone.pages
+            ),
+            (None, None, None, None)
+        );
+        // Not complete, so `lookup` goes on to ask the edition record.
+        assert!(!alone.complete());
+
+        let edition = r#"{"title":"War and Peace","publishers":["Penguin Classics"],
+            "publish_date":"2007","languages":[{"key":"/languages/eng"}],
+            "number_of_pages":1392}"#;
+        let mut kept = alone;
+        kept.fill_from(open_library("9780140447934", "isbn", edition).expect("a record"));
+        assert_eq!(kept.year, Some(2007));
+        assert_eq!(kept.container.as_deref(), Some("Penguin Classics"));
+        assert_eq!(kept.language.as_deref(), Some("eng"));
+        assert_eq!(kept.pages, Some(1392));
+        assert_eq!(kept.authors, ["Leo Tolstoy"]);
+    }
+
+    #[test]
+    fn the_index_is_not_asked_for_what_belongs_to_editions() {
+        let url = Source::OpenLibrarySearch.url("1");
+        for field in [
+            "first_publish_year",
+            "publisher",
+            "language",
+            "number_of_pages",
+        ] {
+            assert!(!url.contains(field), "{field} in {url}");
         }
     }
 
