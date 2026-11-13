@@ -13,6 +13,7 @@
 
 pub mod arxiv;
 pub mod doi;
+pub mod isbn;
 pub mod issn;
 
 use schemars::JsonSchema;
