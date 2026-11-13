@@ -163,7 +163,7 @@ bytes, the media type and the address asked when there is.
 
 ```
 $ bibfetch search --title 'The First World War' --author Howard --limit 2
-{"v":1,"id":"9780192853622","kind":"isbn","found":true,"source":"openlibrary","title":"The First World War","authors":["Michael Eliot Howard"],"year":2002,"container":"Oxford University Press","subjects":["World War, 1914-1918"],"language":"eng","pages":154,"cover_id":1123124}
+{"v":1,"id":"9780192853622","kind":"isbn","found":true,"source":"openlibrary","title":"The First World War","authors":["Michael Eliot Howard"],"year":2002,"container":"Oxford University Press","subjects":["World War, 1914-1918"],"language":"eng","cover_id":1123124}
 {"v":1,"id":"9780199205592","kind":"isbn","found":true,"source":"openlibrary","title":"The First World War: A Very Short Introduction","authors":["Michael Howard"],"year":2007,"container":"Oxford University Press","language":"eng","cover_id":14606475}
 ```
 
@@ -173,16 +173,22 @@ and prints one record per candidate: Open Library's index first, and Google
 Books only when Open Library has nothing.
 
 Each candidate is one edition. Open Library's index answers with works, and
-names the edition of each that best matches the search; what belongs to an
-edition — its ISBN, publisher, language, year and cover — is that edition's,
-and what belongs to the work — the title, the authors, the subjects and the
-length — is the work's. Google Books answers with volumes, which are editions
-already.
+names the edition of each that best matches the search. The ISBN, publisher,
+language, year and cover are that edition's and no other's: a field the
+edition does not give is left out rather than filled from the work, whose
+publishers, years and ISBNs belong to all its editions at once. Only the
+title, the authors and the subjects, which describe the work, are the work's.
+Open Library's index gives no length for an edition, so its candidates carry
+no `pages`. Google Books answers with volumes, which are editions already.
 
 | Field | When the candidate has an ISBN | When it has none |
 |---|---|---|
-| `id` | The first ISBN whose check digit agrees, in thirteen digits; one written in thirteen is taken over one written in ten | The register's own key: an Open Library id such as `OL37863121M` for the edition, or `OL267171W` for the work when no edition was named; a Google Books volume id |
+| `id` | The first ISBN of the edition whose check digit agrees, in thirteen digits; one written in thirteen is taken over one written in ten | The register's own key: an Open Library id such as `OL37863121M` for the edition, or `OL267171W` for the work when no edition was named; a Google Books volume id |
 | `kind` | `isbn` | `olid` for Open Library, `googlebooks` for Google Books |
+
+A work the index names no edition of, or names one it gives neither an ISBN
+nor a key for, is a candidate named by the work's key, with its title,
+authors and subjects and nothing an edition would say.
 
 An ISBN whose check digit is wrong is passed over rather than corrected, and
 Google's shelfmarks, typed `OTHER`, are not read as ISBNs even when their
@@ -194,9 +200,8 @@ to `bibfetch` for everything the registers say about that edition; `olid` and
 Open Library's record of the edition the record names, by that edition's ISBN
 or its key, so `bibfetch cover --cover-id` fetches that edition's cover and no
 other. The cover the index picked for the whole work is never asked for,
-because it is often another edition's. A work the index names no edition of
-gives the first ISBN it lists that reads, which may be any edition's, and no
-cover id; Google Books knows nothing of Open Library's covers and gives none.
+because it is often another edition's. Google Books knows nothing of Open
+Library's covers and gives none.
 
 The candidates are what the register said, in the order it said them. This
 makes no judgement about which one is the book in hand, and keeps one that is
@@ -210,10 +215,14 @@ bibfetch search --title 'Anathem' --author Stephenson \
   | jq -r 'select(.kind == "isbn") | .id' | head -1
 ```
 
-Open Library answering that it has nothing is an answer, and it stands when
-Google Books cannot be reached; a register being down is a failure only when
-both are. Each is asked the same way a lookup asks, retried with the same
-waits. Open Library is sent the title and the author as written; Google Books
+Open Library having nothing is an answer only once Google Books has been
+asked and has nothing either. When Google Books cannot be reached, the search
+fails rather than say no register has the title, and when it refuses for its
+quota (`403`, or `429` on every attempt) the failure says so and the command
+exits `75`. Open Library being down is a failure only when Google Books has
+nothing to offer in its place. Each is asked the same way a lookup asks,
+retried with the same waits, except that a `403` from Google Books is not
+asked again. Open Library is sent the title and the author as written; Google Books
 is sent each word as its own `intitle:` or `inauthor:` term, so nothing in a
 title is read as search syntax.
 
@@ -224,8 +233,9 @@ title is read as search syntax.
 | `--limit <COUNT>` | The most candidates to print, `1` to `40`. Default `10` |
 
 Exit `0` at least one candidate was printed, `1` no register has the title,
-`65` the title was empty, `69` no register could be reached, `74` the output
-could not be written.
+`65` the title was empty, `69` a register that had to answer could not be
+reached, `74` the output could not be written, `75` Google Books refused for
+its quota.
 
 From Rust, `bibfetch::search(&agent, title, author, limit, attempts)` returns
 the candidates, empty when no register has the title.

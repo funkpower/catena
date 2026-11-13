@@ -256,6 +256,7 @@ fn search(
             eprintln!("bibfetch: {why}");
             ExitCode::from(match why {
                 bibfetch::Error::Invalid(_) => exit::DATA,
+                bibfetch::Error::Limited(_) => exit::TEMPFAIL,
                 _ => exit::UNAVAILABLE,
             })
         }
