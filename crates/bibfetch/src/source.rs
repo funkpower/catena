@@ -85,10 +85,13 @@ impl Source {
             }
             // `fields` or the index answers with a handful of defaults and
             // keeps the rest, which is how a language it holds went unread.
+            // Not `cover_i`: that is the cover chosen for the whole work, and
+            // on a work with hundreds of editions it is usually another
+            // edition's, in another translation or language.
             Source::OpenLibrarySearch => format!(
                 "https://openlibrary.org/search.json?q=isbn:{}\
 &fields=title,subtitle,author_name,first_publish_year,publisher,language,subject,\
-number_of_pages_median,cover_i&limit=1",
+number_of_pages_median&limit=1",
                 encode(id)
             ),
             Source::GoogleBooks => format!(
@@ -278,6 +281,7 @@ fn open_library(id: &str, kind: &str, body: &str) -> Result<Record, Error> {
         .find_map(|l| l.key.rsplit('/').next().map(str::to_string))
         .filter(|l| !l.is_empty());
     record.pages = book.number_of_pages;
+    // The edition's own cover, and the only place a cover id is taken from.
     record.cover_id = book
         .covers
         .into_iter()
@@ -309,8 +313,6 @@ struct SearchDoc {
     subject: Vec<String>,
     #[serde(rename = "number_of_pages_median", default)]
     pages: Option<u32>,
-    #[serde(default)]
-    cover_i: Option<i64>,
 }
 
 /// How many of a work's subject headings are worth carrying.
@@ -342,10 +344,6 @@ fn open_library_search(id: &str, kind: &str, body: &str) -> Result<Record, Error
     record.subjects = doc.subject;
     record.subjects.truncate(SUBJECT_LIMIT);
     record.pages = doc.pages;
-    record.cover_id = doc
-        .cover_i
-        .and_then(|id| u64::try_from(id).ok())
-        .filter(|id| *id > 0);
     Ok(record)
 }
 
@@ -542,18 +540,45 @@ mod tests {
         assert_eq!(record.cover_id, Some(1162784));
         let record = open_library("1", "isbn", r#"{"title":"A"}"#).expect("a record");
         assert_eq!(record.cover_id, None);
-
-        let record = open_library_search("1", "isbn", r#"{"docs":[{"title":"A","cover_i":2468}]}"#)
-            .expect("a record");
-        assert_eq!(record.cover_id, Some(2468));
-        let record = open_library_search("1", "isbn", r#"{"docs":[{"title":"A","cover_i":-1}]}"#)
-            .expect("a record");
-        assert_eq!(record.cover_id, None);
     }
 
     #[test]
-    fn the_index_is_asked_for_the_cover_id() {
-        assert!(Source::OpenLibrarySearch.url("1").contains("cover_i"));
+    fn the_cover_id_is_the_editions_and_not_the_works() {
+        // ISBN 9780140447934 today: the index (asked first) names the work's
+        // cover; the edition record has none. Merged as `ask::lookup` merges.
+        let mut kept = open_library_search(
+            "9780140447934",
+            "isbn",
+            r#"{"docs":[{"title":"War and Peace","cover_i":12621906}]}"#,
+        )
+        .expect("a record");
+        let edition = open_library("9780140447934", "isbn", r#"{"title":"War and Peace"}"#)
+            .expect("a record");
+        kept.fill_from(edition);
+        // Cover 12621906 is OL34941467M, Standard Ebooks' Maude translation.
+        assert_eq!(kept.cover_id, None);
+    }
+
+    #[test]
+    fn an_edition_with_no_covers_gives_no_cover_id() {
+        let index = r#"{"docs":[{"title":"War and Peace","cover_i":12621906}]}"#;
+        // `lookup` often stops at the index, before the edition is asked.
+        let alone = open_library_search("9780140447934", "isbn", index).expect("a record");
+        assert_eq!(alone.cover_id, None);
+        // An edition whose only cover was deleted, and one with an empty list.
+        for edition in [
+            r#"{"title":"War and Peace","covers":[-1]}"#,
+            r#"{"title":"War and Peace","covers":[]}"#,
+        ] {
+            let mut kept = open_library_search("9780140447934", "isbn", index).expect("a record");
+            kept.fill_from(open_library("9780140447934", "isbn", edition).expect("a record"));
+            assert_eq!(kept.cover_id, None, "{edition}");
+        }
+    }
+
+    #[test]
+    fn the_index_is_not_asked_for_the_works_cover() {
+        assert!(!Source::OpenLibrarySearch.url("1").contains("cover_i"));
     }
 
     #[test]

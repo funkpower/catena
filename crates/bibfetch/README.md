@@ -118,14 +118,21 @@ writes the image. The thirteen-digit form is asked first and the ten-digit
 form second, because a book is often filed under only one of them; an ISBN
 whose check digit is wrong is asked about as written, since converting it
 would give another book's number. `--cover-id` names an Open Library cover id
-to ask by last, which is what the `cover_id` field of a lookup record holds.
+to ask by last, which is what the `cover_id` field of a lookup record holds:
+the first cover in Open Library's record of that edition, never the cover its
+index picked for the whole work, which is often another edition's. The cover
+id is asked only when every form of the ISBN asked was answered with no cover; if
+asking by ISBN failed, that failure is the result.
 
 What comes back is checked before it is written: a JPEG or PNG by its bytes
-as well as by what the server says, between one kilobyte (Open Library's
-stand-in for a missing cover is smaller) and ten megabytes, reached in at most
-three redirects that never leave HTTPS. One request is made at a time, and a
-`429` or `503` is waited out for as long as its `Retry-After` says, up to a
-minute.
+as well as by what the server says, no larger than ten megabytes, reached in at
+most three redirects, each over HTTPS to `covers.openlibrary.org`,
+`archive.org` or a host under `archive.org`, and never to an address by number.
+One request is made at a time, a `429` or `503` is waited out for as long as
+its `Retry-After` says, up to a minute, and the whole fetch, every attempt and
+redirect included, stops after two minutes. The two minutes start once it is
+the fetch's turn, so a fetch queued behind others in the same process can wait
+that long again first.
 
 | Option | Effect |
 |---|---|

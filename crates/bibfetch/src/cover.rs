@@ -4,16 +4,18 @@
 //! `covers.openlibrary.org`, and answers by ISBN or by the cover's own id. An
 //! ISBN is asked in its thirteen-digit form first and its ten-digit form
 //! second, because a book is often filed under only one of them; the cover id
-//! a record already named is asked last, since it may be the cover of another
-//! edition of the work rather than of this one.
+//! of the edition's record is asked last, and only when every form of the
+//! ISBN asked was answered and had none.
 //!
 //! What comes back is checked before it is trusted, because it is written to
 //! disk next to a book: an image (JPEG or PNG, by what the bytes are as well
 //! as what the server says), no larger than [`MAX_BYTES`], reached in at most
-//! [`MAX_REDIRECTS`] redirects that never leave HTTPS.
+//! [`MAX_REDIRECTS`] redirects, each over HTTPS to Open Library's covers or
+//! the Internet Archive, all within [`DEADLINE`].
 
+use std::net::IpAddr;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::Error;
 
@@ -24,14 +26,25 @@ pub const OPEN_LIBRARY_COVERS: &str = "https://covers.openlibrary.org";
 /// hundred kilobytes; ten megabytes is something that is not a cover.
 pub const MAX_BYTES: u64 = 10 * 1024 * 1024;
 
-/// The smallest cover accepted. Open Library's stand-in for a missing cover
-/// is a one-pixel image of a few dozen bytes, and nothing under a kilobyte
-/// is a picture of a book.
-pub const MIN_BYTES: usize = 1024;
-
 /// How many redirects to follow. A cover is served from the Internet
 /// Archive two redirects away from the address asked.
 pub const MAX_REDIRECTS: u32 = 3;
+
+/// The hosts a redirect may lead to, besides the covers store it began at.
+/// Today a cover goes `covers.openlibrary.org`, then `archive.org`, then an
+/// `ia*.us.archive.org` storage node.
+const REDIRECT_HOSTS: [&str; 2] = ["covers.openlibrary.org", "archive.org"];
+
+/// How long one fetch may take, start to finish: every address, attempt,
+/// redirect, body and wait between attempts. One fetch runs at a time in a
+/// process, and the clock starts once it is this fetch's turn, so time spent
+/// waiting behind another fetch is not counted; a caller sharing the process
+/// with other fetches can wait that long again before this one begins.
+///
+/// Without it the worst case at the defaults ran to about eighteen minutes:
+/// three addresses, three attempts, up to four requests an attempt at the
+/// agent's timeout each, and a minute's `Retry-After` between attempts.
+pub const DEADLINE: Duration = Duration::from_secs(120);
 
 /// The longest a `Retry-After` is honoured for. A register asking for more
 /// than this is better treated as down than waited on.
@@ -110,6 +123,10 @@ pub struct Covers {
     pub base: String,
     /// How many times to ask an address that is unreachable or busy.
     pub attempts: u32,
+    /// How long the whole fetch may take; [`DEADLINE`] by default. Each
+    /// request is given whatever is left of it, or the agent's own timeout
+    /// if that is shorter, and a wait that would run past it is not waited.
+    pub deadline: Duration,
 }
 
 impl Default for Covers {
@@ -117,6 +134,7 @@ impl Default for Covers {
         Self {
             base: OPEN_LIBRARY_COVERS.to_string(),
             attempts: crate::ATTEMPTS,
+            deadline: DEADLINE,
         }
     }
 }
@@ -140,9 +158,10 @@ impl Covers {
     ///
     /// The ISBN may be either form, with or without hyphens. One whose check
     /// digit is wrong is asked about as written and not converted, since a
-    /// converted one would be another book's number. A failure at one address
-    /// does not stop the next being asked; it is returned only when no
-    /// address gave a cover.
+    /// converted one would be another book's number. A failure at one form
+    /// of the ISBN does not stop the other being asked, but it does stop the
+    /// cover id being asked: the ISBN's own cover may exist, and is the one
+    /// wanted. The failure is returned when no ISBN form gave a cover.
     pub fn fetch(
         &self,
         agent: &ureq::Agent,
@@ -162,69 +181,99 @@ impl Covers {
         };
 
         let letter = size.letter();
-        let mut addresses: Vec<String> = forms
+        let addresses: Vec<String> = forms
             .iter()
             .map(|form| format!("{}/b/isbn/{form}-{letter}.jpg?default=false", self.base))
             .collect();
-        if let Some(id) = cover_id {
-            addresses.push(format!(
-                "{}/b/id/{id}-{letter}.jpg?default=false",
-                self.base
-            ));
-        }
 
         let _turn = ONE_AT_A_TIME
             .lock()
             .unwrap_or_else(|held| held.into_inner());
+        // From here, not from the call: waiting for the lock is time another
+        // fetch spent, and counting it would let a busy process starve this
+        // one of the time its own requests need.
+        let until = Instant::now() + self.deadline;
         let mut failed = None;
-        for address in addresses {
-            match self.ask(agent, &address) {
+        for address in &addresses {
+            match self.ask(agent, address, until) {
                 Ok(Answer::Image(cover)) => return Ok(Some(cover)),
                 Ok(Answer::Absent) => {}
                 Err(why) => failed = Some(why),
             }
         }
-        match failed {
-            Some(why) => Err(why),
-            None => Ok(None),
+        if let Some(why) = failed {
+            return Err(why);
+        }
+        let Some(id) = cover_id else {
+            return Ok(None);
+        };
+        let address = format!("{}/b/id/{id}-{letter}.jpg?default=false", self.base);
+        match self.ask(agent, &address, until)? {
+            Answer::Image(cover) => Ok(Some(cover)),
+            Answer::Absent => Ok(None),
         }
     }
 
     /// Ask one address, again while it is busy or unreachable.
     ///
     /// Waits as long as a `Retry-After` says, up to a minute, or else a
-    /// second and then two, the same as a record lookup does.
-    fn ask(&self, agent: &ureq::Agent, address: &str) -> Result<Answer, Error> {
+    /// second and then two, the same as a record lookup does; but not past
+    /// `until`, where a wait that would end later is given up at once.
+    fn ask(&self, agent: &ureq::Agent, address: &str, until: Instant) -> Result<Answer, Error> {
         let attempts = self.attempts.max(1);
         let mut last = Error::Unreachable("no attempt was made".into());
         for attempt in 0..attempts {
-            match self.once(agent, address) {
+            match self.once(agent, address, until) {
                 Ok(answer) => return Ok(answer),
                 Err(Fault::Final(why)) => return Err(why),
                 Err(Fault::Again(why, wait)) => {
-                    last = why;
                     if attempt + 1 < attempts {
-                        std::thread::sleep(
-                            wait.unwrap_or(Duration::from_secs(1 << attempt.min(5))),
-                        );
+                        let wait = wait.unwrap_or(Duration::from_secs(1 << attempt.min(5)));
+                        if Instant::now() + wait >= until {
+                            return Err(self.out_of_time(address, &why));
+                        }
+                        std::thread::sleep(wait);
                     }
+                    last = why;
                 }
             }
         }
         Err(last)
     }
 
+    fn out_of_time(&self, address: &str, after: &Error) -> Error {
+        Error::Unreachable(format!(
+            "{address}: past the {:?} deadline, after {after}",
+            self.deadline
+        ))
+    }
+
     /// One attempt at an address, following its redirects by hand so that
     /// each one can be checked before it is followed.
-    fn once(&self, agent: &ureq::Agent, address: &str) -> Result<Answer, Fault> {
+    fn once(&self, agent: &ureq::Agent, address: &str, until: Instant) -> Result<Answer, Fault> {
         let mut at = address.to_string();
         let mut hops = 0;
         loop {
+            // The agent's timeout bounds one request, body included; what is
+            // left of the deadline bounds it too, so no request outlives it.
+            let left = until.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return Err(Fault::Final(Error::Unreachable(format!(
+                    "{at}: past the {:?} deadline",
+                    self.deadline
+                ))));
+            }
+            let timeout = agent
+                .config()
+                .timeouts()
+                .global
+                .map_or(left, |own| own.min(left));
             let response = agent
                 .get(&at)
                 .config()
                 .max_redirects(0)
                 .http_status_as_error(false)
+                .timeout_global(Some(timeout))
                 .build()
                 .call()
                 .map_err(|e| Fault::Again(Error::Unreachable(format!("{at}: {e}")), None))?;
@@ -250,9 +299,10 @@ impl Covers {
                         ))));
                     }
                     let next = resolve(&at, &location);
-                    if !next.starts_with("https://") && origin(&next) != origin(&self.base) {
+                    if !may_follow(&next, &self.base) {
                         return Err(Fault::Final(Error::Unreachable(format!(
-                            "{at}: refused a redirect off HTTPS, to {next}"
+                            "{at}: refused a redirect to {next}, which is not HTTPS to \
+Open Library's covers or the Internet Archive"
                         ))));
                     }
                     at = next;
@@ -338,9 +388,15 @@ fn read(mut response: ureq::http::Response<ureq::Body>, address: &str) -> Result
             "{address}: said {media_type} but is not one"
         )));
     }
-    if bytes.len() < MIN_BYTES {
-        return Ok(Answer::Absent);
-    }
+    // No floor on the size. Open Library's stand-in for a missing cover is a
+    // 43-byte, one-pixel GIF, and it serves that only when `default=false`
+    // is left off: with it, as every address here has it, a missing cover is
+    // a 404, for an ISBN and for a cover id alike (checked 2026-11-13). The
+    // stand-in would fail the media type check above in any case, being a
+    // GIF. So a floor could only drop real covers, and real Small ones sit
+    // close to any floor worth having: thumbnails measured 1032 to 2148
+    // bytes, the smallest eight bytes over a kilobyte floor, so smaller ones
+    // not yet seen would have been dropped.
     Ok(Answer::Image(Cover {
         bytes,
         media_type,
@@ -355,6 +411,44 @@ fn header(response: &ureq::http::Response<ureq::Body>, name: &str) -> Option<Str
         .get(name)
         .and_then(|value| value.to_str().ok())
         .map(str::to_string)
+}
+
+/// Whether a redirect may be followed to `next`.
+///
+/// Back to the covers store the fetch began at, which the caller chose, or
+/// else over HTTPS on the standard port to [`REDIRECT_HOSTS`] or a host under
+/// `archive.org`, named and not numbered. A redirect is the server choosing
+/// where this process connects next, and an address by number, or a host
+/// that is neither Open Library nor the Archive, is somewhere a compromised
+/// or mistaken redirect could reach a service on the local network.
+fn may_follow(next: &str, base: &str) -> bool {
+    if origin(next).is_some() && origin(next) == origin(base) {
+        return true;
+    }
+    // The same parser the request is made with, so the host checked is the
+    // host connected to.
+    let Ok(uri) = next.parse::<ureq::http::Uri>() else {
+        return false;
+    };
+    if uri.scheme_str() != Some("https") || uri.port_u16().is_some_and(|port| port != 443) {
+        return false;
+    }
+    let Some(authority) = uri.authority() else {
+        return false;
+    };
+    if authority.as_str().contains('@') {
+        return false;
+    }
+    let host = authority.host().to_ascii_lowercase();
+    if host
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .parse::<IpAddr>()
+        .is_ok()
+    {
+        return false;
+    }
+    REDIRECT_HOSTS.contains(&host.as_str()) || host.ends_with(".archive.org")
 }
 
 /// `scheme://host:port` of an absolute URL.
@@ -508,6 +602,7 @@ mod tests {
             Covers {
                 base: self.base.clone(),
                 attempts: 3,
+                deadline: DEADLINE,
             }
         }
 
@@ -639,13 +734,17 @@ mod tests {
     }
 
     #[test]
-    fn a_placeholder_sized_image_is_no_cover() {
-        let stub = Stub::start(|_, _| Reply::image("image/jpeg", jpeg(MIN_BYTES - 1)));
-        let found = stub
+    fn open_librarys_stand_in_is_never_a_cover() {
+        // What Open Library serves for a missing cover when `default=false`
+        // is left off: a one-pixel GIF89a, 43 bytes.
+        let mut gif = b"GIF89a\x01\x00\x01\x00".to_vec();
+        gif.resize(43, 0);
+        let stub = Stub::start(move |_, _| Reply::image("image/gif", gif.clone()));
+        let failed = stub
             .covers()
-            .fetch(&agent(), "9780306406157", None, CoverSize::Large)
-            .expect("an answer");
-        assert_eq!(found, None);
+            .fetch(&agent(), "9780306406157", None, CoverSize::Small)
+            .expect_err("not a cover");
+        assert!(matches!(failed, Error::Shape(_)), "{failed:?}");
     }
 
     #[test]
@@ -819,9 +918,41 @@ mod tests {
             .fetch(&agent(), "9780306406157", None, CoverSize::Large)
             .expect_err("plain http elsewhere");
         assert!(
-            matches!(&failed, Error::Unreachable(why) if why.contains("off HTTPS")),
+            matches!(&failed, Error::Unreachable(why) if why.contains("refused")),
             "{failed:?}"
         );
+    }
+
+    #[test]
+    fn redirects_go_only_to_open_library_and_the_archive_over_https() {
+        let base = "https://covers.openlibrary.org";
+        for next in [
+            "https://covers.openlibrary.org/b/id/1-L.jpg",
+            "https://archive.org/download/l_covers_0001/x.jpg",
+            "https://ia800100.us.archive.org/view_archive.php?f=1",
+            "https://ARCHIVE.org/x",
+            "https://archive.org:443/x",
+        ] {
+            assert!(may_follow(next, base), "{next}");
+        }
+        for next in [
+            "http://archive.org/x",
+            "https://archive.org:8443/x",
+            "https://evilarchive.org/x",
+            "https://archive.org.example/x",
+            "https://openlibrary.org.example/x",
+            "https://covers.openlibrary.org@127.0.0.1/x",
+            "https://127.0.0.1/x",
+            "https://10.7.1.5/x",
+            "https://[::1]/x",
+            "https://example.com/x",
+            "ftp://archive.org/x",
+        ] {
+            assert!(!may_follow(next, base), "{next}");
+        }
+        // The store it began at, whatever it is, for a test or a mirror.
+        assert!(may_follow("http://127.0.0.1:9/x", "http://127.0.0.1:9"));
+        assert!(!may_follow("http://127.0.0.1:10/x", "http://127.0.0.1:9"));
     }
 
     #[test]
@@ -839,15 +970,126 @@ mod tests {
             attempts: 1,
             ..stub.covers()
         };
-        let started = std::time::Instant::now();
+        // No stopwatch: one started here would count the wait for the
+        // process lock, which other tests hold. The failure is proof enough,
+        // since a reply waited out is a cover.
         let failed = covers
             .fetch(&agent, "9780306406157", None, CoverSize::Large)
             .expect_err("timed out");
         assert!(matches!(failed, Error::Unreachable(_)), "{failed:?}");
+    }
+
+    #[test]
+    fn a_slow_answer_is_cut_at_the_deadline() {
+        let stub = Stub::start(|_, _| Reply {
+            delay: Duration::from_secs(10),
+            ..Reply::image("image/jpeg", jpeg(2048))
+        });
+        // The agent would wait the reply out; the deadline will not.
+        let agent = crate::ask::Ask {
+            timeout: Duration::from_secs(30),
+            ..Default::default()
+        }
+        .agent();
+        let covers = Covers {
+            attempts: 3,
+            deadline: Duration::from_millis(500),
+            ..stub.covers()
+        };
+        let found = covers
+            .fetch(&agent, "9780306406157", Some(42), CoverSize::Large)
+            .map(|cover| cover.map(|cover| cover.url));
+        assert!(matches!(found, Err(Error::Unreachable(_))), "{found:?}");
+        // Out of time after the first request: no second attempt, no other
+        // form of the ISBN, no cover id.
+        assert_eq!(stub.asked(), [ISBN13]);
+    }
+
+    #[test]
+    fn a_wait_past_the_deadline_is_not_waited() {
+        let stub = Stub::start(|_, _| Reply::status(429).header("Retry-After", "30"));
+        let covers = Covers {
+            attempts: 3,
+            deadline: Duration::from_secs(5),
+            ..stub.covers()
+        };
+        let started = Instant::now();
+        let failed = covers
+            .fetch(&agent(), "9780306406157", None, CoverSize::Large)
+            .expect_err("busy");
         assert!(
-            started.elapsed() < Duration::from_secs(3),
-            "waited the reply out"
+            matches!(&failed, Error::Unreachable(why) if why.contains("deadline")),
+            "{failed:?}"
         );
+        // Each form asked once and given up on, not waited on for 30 s. The
+        // bound is loose because it includes any wait for the process lock.
+        assert_eq!(stub.asked(), [ISBN13, ISBN10]);
+        assert!(
+            started.elapsed() < Duration::from_secs(25),
+            "{:?}",
+            started.elapsed()
+        );
+    }
+
+    #[test]
+    fn an_isbn_that_fails_stops_the_cover_id_being_asked() {
+        // The ISBN-13 address fails (not a 404), the ISBN-10 has none, and
+        // the cover id has an image that might be another edition's.
+        let stub = Stub::start(|_, path| match path {
+            ISBN13 => Reply::status(500),
+            "/b/id/42-L.jpg?default=false" => Reply::image("image/jpeg", jpeg(4096)),
+            _ => Reply::status(404),
+        });
+        let covers = Covers {
+            attempts: 1,
+            ..stub.covers()
+        };
+        // Only the address of anything found, so a failure prints short.
+        let found = covers
+            .fetch(&agent(), "9780306406157", Some(42), CoverSize::Large)
+            .map(|cover| cover.map(|cover| cover.url));
+        assert!(matches!(found, Err(Error::Unreachable(_))), "{found:?}");
+        assert_eq!(stub.asked(), [ISBN13, ISBN10]);
+    }
+
+    #[test]
+    fn a_redirect_to_an_address_by_number_is_refused() {
+        // A listener standing in for a service on the LAN; it only counts.
+        let lan = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
+        let port = lan.local_addr().expect("an address").port();
+        let reached = Arc::new(Mutex::new(0u32));
+        let count = Arc::clone(&reached);
+        std::thread::spawn(move || {
+            for stream in lan.incoming() {
+                if stream.is_ok() {
+                    *count.lock().expect("a lock") += 1;
+                }
+            }
+        });
+        let stub =
+            Stub::start(move |_, _| Reply::redirect(format!("https://127.0.0.1:{port}/admin")));
+        let failed = stub
+            .covers()
+            .fetch(&agent(), "9780306406157", None, CoverSize::Large)
+            .expect_err("refused");
+        assert!(
+            matches!(&failed, Error::Unreachable(why) if why.contains("refused")),
+            "{failed:?}"
+        );
+        assert_eq!(*reached.lock().expect("a lock"), 0);
+    }
+
+    #[test]
+    fn a_small_thumbnail_is_a_cover() {
+        // Real Small covers run from about a kilobyte; one under it is
+        // still a cover.
+        let stub = Stub::start(|_, _| Reply::image("image/jpeg", jpeg(700)));
+        let cover = stub
+            .covers()
+            .fetch(&agent(), "9780306406157", None, CoverSize::Small)
+            .expect("an answer")
+            .expect("a cover");
+        assert_eq!(cover.bytes.len(), 700);
     }
 
     #[test]
@@ -874,7 +1116,7 @@ mod tests {
             .expect("an answer")
             .expect("a cover");
         assert_eq!(cover.media_type, "image/jpeg");
-        assert!(cover.bytes.len() > MIN_BYTES);
+        assert!(cover.bytes.len() > 1024);
         assert!(cover.url.starts_with(OPEN_LIBRARY_COVERS));
     }
 }

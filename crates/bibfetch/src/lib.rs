@@ -76,9 +76,11 @@ pub struct Record {
     /// How many pages the register says it has.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pages: Option<u32>,
-    /// The id Open Library files a cover of this book under, for
-    /// [`cover()`] to ask by when the ISBN has none. Its index names the
-    /// cover of the work, which may be another edition's.
+    /// The first cover id in Open Library's record of this edition, for
+    /// [`cover()`] to ask by when the ISBN has none. Taken from the edition
+    /// record only, never from the index's cover for the work, which is
+    /// often another edition's; `None` when the edition names no cover or
+    /// the lookup stopped before asking for the edition record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cover_id: Option<u64>,
 }
