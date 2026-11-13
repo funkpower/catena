@@ -136,6 +136,14 @@ redirect included, stops after two minutes. The two minutes start once it is
 the fetch's turn, so a fetch queued behind others in the same process can wait
 that long again first.
 
+Open Library allows a hundred covers by ISBN every five minutes from one
+address, and refuses the rest with `403`. Covers asked by ISBN are kept three
+seconds apart across the whole process (`Covers::pace`), which stays under that
+limit however long a run goes. A refusal all the same is not mistaken for an
+outage: the other form of the ISBN is not asked, the cover id is, because
+Open Library does not limit those, and with no cover found that way the fetch
+fails with `Error::Limited`, which means ask again later.
+
 | Option | Effect |
 |---|---|
 | `-o`, `--output <FILE>` | Where to write the image |
@@ -144,7 +152,8 @@ that long again first.
 
 Exit `0` the cover was written, `1` Open Library has none, `65` the argument
 was not an ISBN or the answer was not an image, `69` Open Library could not be
-reached, `74` the file could not be written.
+reached, `74` the file could not be written, `75` Open Library refused for
+being asked too often and will answer later.
 
 From Rust, `bibfetch::cover(&agent, isbn, cover_id, size)` returns
 `Ok(None)` when there is no cover, and a [`Cover`](src/cover.rs) with the

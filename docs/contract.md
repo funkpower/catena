@@ -47,6 +47,7 @@ that was concatenated or written on Windows still reads.
 | `69` | A program it needs is not installed |
 | `70` | Its own fault |
 | `74` | Reading or writing failed |
+| `75` | A service refused for now; try again later |
 
 Failures start where `sysexits.h` puts them, so "no" and "broke" are never the
 same number. That is what makes this work:

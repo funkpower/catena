@@ -10,7 +10,7 @@
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyBytes, PyDict, PyList};
 
 use crate::{ChunkBudgets, CueBudgets};
 
@@ -434,6 +434,9 @@ fn _catena(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(read_colophon, module)?)?;
     module.add_function(wrap_pyfunction!(shelve, module)?)?;
     module.add_function(wrap_pyfunction!(fetch_identifier, module)?)?;
+    module.add_function(wrap_pyfunction!(fetch_cover, module)?)?;
+    module.add_function(wrap_pyfunction!(search_title, module)?)?;
+    module.add("Limited", module.py().get_type::<Limited>())?;
     module.add_function(wrap_pyfunction!(colophon_prompt, module)?)?;
     module.add_function(wrap_pyfunction!(merge_colophon, module)?)?;
     Ok(())
@@ -512,11 +515,110 @@ fn fetch_identifier<'py>(
     // would stop every other thread in the interpreter for the whole request.
     let found = py
         .detach(|| bibfetch::ask::lookup(&agent, id, kind, ask.attempts))
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        .map_err(register_error)?;
     match found {
         Some(record) => Ok(Some(to_py(py, &record)?)),
         None => Ok(None),
     }
+}
+
+pyo3::create_exception!(
+    _catena,
+    Limited,
+    pyo3::exceptions::PyException,
+    "A register refused because it has been asked too often; ask again later."
+);
+
+/// A register's error as the Python exception that says what to do about it.
+fn register_error(error: bibfetch::Error) -> PyErr {
+    match error {
+        bibfetch::Error::Limited(why) => Limited::new_err(why),
+        other => PyValueError::new_err(other.to_string()),
+    }
+}
+
+/// The cover Open Library has for a book, by its ISBN, then by the cover id
+/// a record named.
+///
+/// Returns a dict with `bytes`, `media_type` (`image/jpeg` or `image/png`),
+/// `extension`, `source` and `url`, or `None` when there is no cover. Covers
+/// asked by ISBN are kept three seconds apart across the process, and the
+/// whole fetch stops after `deadline` seconds. Raises `catena.Limited` when
+/// Open Library refused for being asked too often, and `ValueError` when the
+/// ISBN is not one or the store could not be reached. Blocks on the network.
+#[pyfunction]
+#[pyo3(signature = (isbn, cover_id = None, size = "large", polite = None, timeout = 20, deadline = 120))]
+fn fetch_cover<'py>(
+    py: Python<'py>,
+    isbn: &str,
+    cover_id: Option<u64>,
+    size: &str,
+    polite: Option<String>,
+    timeout: u64,
+    deadline: u64,
+) -> PyResult<Option<Bound<'py, PyDict>>> {
+    let size = match size {
+        "small" => bibfetch::CoverSize::Small,
+        "medium" => bibfetch::CoverSize::Medium,
+        "large" => bibfetch::CoverSize::Large,
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "size is small, medium or large, not {other:?}"
+            )));
+        }
+    };
+    let agent = bibfetch::ask::Ask {
+        polite,
+        timeout: std::time::Duration::from_secs(timeout.max(1)),
+        ..Default::default()
+    }
+    .agent();
+    let covers = bibfetch::cover::Covers {
+        deadline: std::time::Duration::from_secs(deadline.max(1)),
+        ..Default::default()
+    };
+    let found = py
+        .detach(|| covers.fetch(&agent, isbn, cover_id, size))
+        .map_err(register_error)?;
+    let Some(cover) = found else {
+        return Ok(None);
+    };
+    let out = PyDict::new(py);
+    out.set_item("bytes", PyBytes::new(py, &cover.bytes))?;
+    out.set_item("media_type", cover.media_type)?;
+    out.set_item("extension", cover.extension())?;
+    out.set_item("source", cover.source)?;
+    out.set_item("url", cover.url)?;
+    Ok(Some(out))
+}
+
+/// The editions the registers list for a title, and an author if one is known.
+///
+/// Open Library is asked first and Google Books only when it has nothing.
+/// The candidates come back in the register's own order, as records shaped
+/// like `fetch_identifier`'s; nothing here decides which is the book, which is
+/// what `same_work` is for. Blocks on the network.
+#[pyfunction]
+#[pyo3(signature = (title, author = None, limit = 10, polite = None, timeout = 20, attempts = 3))]
+fn search_title<'py>(
+    py: Python<'py>,
+    title: &str,
+    author: Option<&str>,
+    limit: usize,
+    polite: Option<String>,
+    timeout: u64,
+    attempts: u32,
+) -> PyResult<Bound<'py, PyList>> {
+    let ask = bibfetch::ask::Ask {
+        polite,
+        timeout: std::time::Duration::from_secs(timeout.max(1)),
+        attempts: attempts.max(1),
+    };
+    let agent = ask.agent();
+    let found = py
+        .detach(|| bibfetch::search(&agent, title, author, limit, ask.attempts))
+        .map_err(register_error)?;
+    list_to_py(py, &found)
 }
 
 /// The question to put to a model about the fields a book's pages did not

@@ -31,6 +31,7 @@ fn says_what_it_was_given(meta: &bookmeta::Metadata) {
 
     let cover = meta.cover.as_ref().expect("a cover");
     assert_eq!(cover.media_type, "image/jpeg");
+    assert!(!cover.guessed, "EXTH 201 names the cover");
     let original = std::fs::read(fixture("lantern-cover.jpg")).expect("the cover fixture");
     assert_eq!(cover.bytes, original);
 }
@@ -84,6 +85,7 @@ fn a_file_naming_no_cover_gets_its_first_image_record() {
     let meta = bookmeta::from_bytes("x.mobi", &lantern_naming_no_cover());
     let cover = meta.cover.expect("the first image record");
     assert_eq!(cover.media_type, "image/jpeg");
+    assert!(cover.guessed, "a cover taken by position is a guess");
     let original = std::fs::read(fixture("lantern-cover.jpg")).expect("the cover fixture");
     assert_eq!(cover.bytes, original);
 }

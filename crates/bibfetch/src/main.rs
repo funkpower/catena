@@ -225,6 +225,7 @@ fn cover(
             eprintln!("bibfetch: {isbn}: {why}");
             ExitCode::from(match why {
                 bibfetch::Error::Unreachable(_) => exit::UNAVAILABLE,
+                bibfetch::Error::Limited(_) => exit::TEMPFAIL,
                 _ => exit::DATA,
             })
         }

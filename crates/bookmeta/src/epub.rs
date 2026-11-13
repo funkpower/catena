@@ -350,7 +350,8 @@ fn cover<R: std::io::Read + std::io::Seek>(
             && (item.id.to_lowercase().contains("cover")
                 || item.href.to_lowercase().contains("cover"))
     }) {
-        if let Some(found) = look.image(base, &item.href) {
+        if let Some(mut found) = look.image(base, &item.href) {
+            found.guessed = true;
             return Some(found);
         }
     }
@@ -469,6 +470,7 @@ impl<R: std::io::Read + std::io::Seek> Look<'_, R> {
         Some(Cover {
             media_type: media_type.to_string(),
             bytes,
+            guessed: false,
         })
     }
 }
@@ -767,6 +769,8 @@ mod tests {
         let cover = meta.cover.expect("a cover");
         assert_eq!(cover.media_type, "image/jpeg");
         assert_eq!(cover.bytes, JPEG);
+        assert!(!cover.guessed, "a declared cover is not a guess");
+        assert_eq!(cover.extension(), "jpg");
         assert!(meta.notes.is_empty(), "{:?}", meta.notes);
     }
 
@@ -861,7 +865,10 @@ mod tests {
                 ("OEBPS/images/i2.gif", GIF),
             ],
         );
-        assert_eq!(meta.cover.expect("a cover").bytes, GIF);
+        let cover = meta.cover.expect("a cover");
+        assert_eq!(cover.bytes, GIF);
+        assert!(cover.guessed, "a cover found by its name is a guess");
+        assert_eq!(cover.extension(), "gif");
 
         let by_address = opf(
             r#"<item id="i9" href="images/Book_COVER.jpeg" media-type="image/jpeg"/>"#,
