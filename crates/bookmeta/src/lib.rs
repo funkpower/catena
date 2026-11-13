@@ -14,6 +14,7 @@
 //! [`bibfetch`]: https://git.pumpin.online/funkpower/catena
 
 pub mod epub;
+pub mod mobi;
 pub mod pdf;
 pub mod prompt;
 
@@ -30,6 +31,8 @@ pub enum Source {
     Opf,
     /// A PDF's information dictionary.
     PdfInfo,
+    /// A Kindle book's MOBI header and the EXTH records after it.
+    Mobi,
     /// Nothing was found to read.
     None,
 }
@@ -40,6 +43,7 @@ impl Source {
         match self {
             Source::Opf => "opf",
             Source::PdfInfo => "pdf_info",
+            Source::Mobi => "mobi",
             Source::None => "none",
         }
     }
@@ -64,6 +68,9 @@ pub struct Metadata {
     /// Who published it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub publisher: Option<String>,
+    /// The publisher's description of the book, as written: often HTML.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     /// The publication date, in whatever form the file wrote it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub date: Option<String>,
@@ -86,6 +93,23 @@ pub struct Metadata {
     /// What was worth saying about the reading.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<String>,
+    /// The cover image the file carries.
+    ///
+    /// Not part of the record: a record is a line of text and this is an
+    /// image. A library caller takes it from here.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub cover: Option<Cover>,
+}
+
+/// A cover image, as the file stores it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Cover {
+    /// What kind of image it is, read off its first bytes: `image/jpeg`,
+    /// `image/png`, `image/gif` or `image/bmp`.
+    pub media_type: String,
+    /// The image itself.
+    pub bytes: Vec<u8>,
 }
 
 fn version() -> u32 {
@@ -143,6 +167,7 @@ impl Metadata {
         self.title.is_none()
             && self.authors.is_empty()
             && self.publisher.is_none()
+            && self.description.is_none()
             && self.date.is_none()
             && self.language.is_none()
             && self.identifiers.is_empty()
@@ -170,6 +195,9 @@ pub fn from_bytes(path: &str, bytes: &[u8]) -> Metadata {
     }
     if bytes.starts_with(b"%PDF") {
         return pdf::read(path, bytes);
+    }
+    if mobi::is_mobi(bytes) {
+        return mobi::read(path, bytes);
     }
     let mut meta = Metadata::empty(path, Source::None);
     meta.note("not a format this reads metadata out of");

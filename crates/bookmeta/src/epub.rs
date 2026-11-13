@@ -85,6 +85,7 @@ fn fill(meta: &mut Metadata, package: &str) {
     meta.title = first(package, "title");
     meta.authors = creators(package);
     meta.publisher = first(package, "publisher");
+    meta.description = first(package, "description");
     meta.date = first(package, "date");
     meta.language = first(package, "language");
     meta.subjects = all(package, "subject");
@@ -179,7 +180,7 @@ fn identifiers(package: &str) -> Vec<(String, String)> {
 }
 
 /// Whether a string is ten or thirteen digits once its hyphens come off.
-fn is_isbn(value: &str) -> bool {
+pub(crate) fn is_isbn(value: &str) -> bool {
     let digits = digits_of(value);
     matches!(digits.len(), 10 | 13)
         && value
@@ -187,7 +188,8 @@ fn is_isbn(value: &str) -> bool {
             .all(|c| c.is_ascii_digit() || "- xX".contains(c))
 }
 
-fn digits_of(value: &str) -> String {
+/// The digits of an ISBN, with its check character, and nothing else.
+pub(crate) fn digits_of(value: &str) -> String {
     value
         .chars()
         .filter(|c| c.is_ascii_digit() || matches!(c, 'x' | 'X'))
@@ -253,6 +255,7 @@ mod tests {
     <dc:creator opf:role="aut">Kallistos Ware</dc:creator>
     <dc:contributor>A Typesetter</dc:contributor>
     <dc:publisher>Faber &amp; Faber</dc:publisher>
+    <dc:description>&lt;p&gt;Writings of the Fathers.&lt;/p&gt;</dc:description>
     <dc:date>1984-09-17</dc:date>
     <dc:language>en</dc:language>
     <dc:subject>Orthodox Christianity</dc:subject>
@@ -275,6 +278,10 @@ mod tests {
         let meta = read_package();
         assert_eq!(meta.title.as_deref(), Some("The Philokalia, Volume 3"));
         assert_eq!(meta.publisher.as_deref(), Some("Faber & Faber"));
+        assert_eq!(
+            meta.description.as_deref(),
+            Some("<p>Writings of the Fathers.</p>")
+        );
         assert_eq!(meta.date.as_deref(), Some("1984-09-17"));
         assert_eq!(meta.language.as_deref(), Some("en"));
     }

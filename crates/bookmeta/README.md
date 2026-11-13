@@ -84,6 +84,7 @@ bookmeta library/*.epub \
 |---|---|
 | EPUB | The package document named by `META-INF/container.xml` — Dublin Core, plus the `<meta>` entries Calibre adds for a series |
 | PDF | The trailer's information dictionary |
+| MOBI, AZW, AZW3 | The MOBI header in the first record, and the EXTH records after it |
 
 An EPUB whose container is malformed falls back to the first `.opf` in the
 archive, because a converter that wrote a bad container often still wrote a
@@ -93,6 +94,28 @@ Identifiers come back under the scheme they are: `urn:isbn:…` and a bare ISBN
 both become `isbn`, a UUID becomes `uuid`, anything else `other`. PDF dates
 are reduced to the day where they parse and kept verbatim where they do not,
 because a date nobody can read is still evidence.
+
+A Kindle book's title is EXTH 503 where it is there, then the MOBI header's
+full name, then the Palm database name (cut to 31 bytes, with a note). Authors
+(100) and subjects (105) are every record of their kind, in order; publisher
+(101), description (103), date (106) and language (524) the first. EXTH 104 is
+an `isbn` when it is shaped like one and `other` when not, and 113 is an
+`asin`. A contributor (108) is not an author, the same as an EPUB's
+`dc:contributor`, and is not reported. With no EXTH language, the language
+comes from the header's locale. Strings are decoded as the header says,
+UTF-8 or Windows-1252. A book whose text is encrypted still has its header
+read, and carries the note `drm`.
+
+Every offset in a Kindle book is checked before it is followed: headers that
+are cut short or point outside the file give an empty record with a note, and
+an EXTH block that breaks off keeps the records before the break.
+
+## Covers
+
+`Metadata::cover` is the cover image a Kindle book carries (EXTH 201, or the
+thumbnail, 202, when no cover is named), with its media type read off its
+first bytes. It is for library callers and is not part of the JSON record,
+which is a line of text.
 
 ## Asking a model
 
@@ -147,7 +170,7 @@ if let Some(prompt) = bookmeta::prompt::compose(&meta, Some(opening)) {
 }
 ```
 
-`bookmeta::epub` and `bookmeta::pdf` read one format each, and
+`bookmeta::epub`, `bookmeta::pdf` and `bookmeta::mobi` read one format each, and
 `Metadata::missing` says which fields a record still wants.
 
 ## See also
