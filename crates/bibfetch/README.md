@@ -107,6 +107,47 @@ register that is rate-limiting, short enough that one which is simply down
 does not hold up a pipeline. An answer this cannot read is not retried,
 because it will not read any better next time.
 
+## Covers
+
+```sh
+bibfetch cover 978-0-306-40615-7 -o cover.jpg
+```
+
+Fetches a book's cover from Open Library's covers store by its ISBN and
+writes the image. The thirteen-digit form is asked first and the ten-digit
+form second, because a book is often filed under only one of them; an ISBN
+whose check digit is wrong is asked about as written, since converting it
+would give another book's number. `--cover-id` names an Open Library cover id
+to ask by last, which is what the `cover_id` field of a lookup record holds:
+the first cover in Open Library's record of that edition, never the cover its
+index picked for the whole work, which is often another edition's. The cover
+id is asked only when every form of the ISBN asked was answered with no cover; if
+asking by ISBN failed, that failure is the result.
+
+What comes back is checked before it is written: a JPEG or PNG by its bytes
+as well as by what the server says, no larger than ten megabytes, reached in at
+most three redirects, each over HTTPS to `covers.openlibrary.org`,
+`archive.org` or a host under `archive.org`, and never to an address by number.
+One request is made at a time, a `429` or `503` is waited out for as long as
+its `Retry-After` says, up to a minute, and the whole fetch, every attempt and
+redirect included, stops after two minutes. The two minutes start once it is
+the fetch's turn, so a fetch queued behind others in the same process can wait
+that long again first.
+
+| Option | Effect |
+|---|---|
+| `-o`, `--output <FILE>` | Where to write the image |
+| `--size <SIZE>` | `small`, `medium` or `large`. Default `large` |
+| `--cover-id <ID>` | An Open Library cover id to ask by when the ISBN has none |
+
+Exit `0` the cover was written, `1` Open Library has none, `65` the argument
+was not an ISBN or the answer was not an image, `69` Open Library could not be
+reached, `74` the file could not be written.
+
+From Rust, `bibfetch::cover(&agent, isbn, cover_id, size)` returns
+`Ok(None)` when there is no cover, and a [`Cover`](src/cover.rs) with the
+bytes, the media type and the address asked when there is.
+
 ## Reaching the network
 
 This and [`emb`](../emb/README.md) are the only two tools here that do. Both
@@ -114,8 +155,9 @@ say so in `--help`, and for both it is the whole of what they do rather than
 something that happens on the way to something else — which is the condition
 under which [the contract](../../docs/contract.md) allows it at all.
 
-Nothing is cached, nothing is stored, and nothing is sent but the identifier
-and the address you pass to `--polite`.
+Nothing is cached, nothing is stored but a cover you asked to have written,
+and nothing is sent but the identifier and the address you pass to
+`--polite`.
 
 ## See also
 

@@ -14,6 +14,7 @@
 //! ISSN is looked up as the journal of a work rather than on its own.
 
 pub mod ask;
+pub mod cover;
 pub mod source;
 
 use std::time::Duration;
@@ -21,6 +22,7 @@ use std::time::Duration;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+pub use cover::{Cover, CoverSize, cover};
 pub use source::Source;
 
 /// How long to wait on a register before giving up.
@@ -74,6 +76,13 @@ pub struct Record {
     /// How many pages the register says it has.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pages: Option<u32>,
+    /// The first cover id in Open Library's record of this edition, for
+    /// [`cover()`] to ask by when the ISBN has none. Taken from the edition
+    /// record only, never from the index's cover for the work, which is
+    /// often another edition's; `None` when the edition names no cover or
+    /// the lookup stopped before asking for the edition record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cover_id: Option<u64>,
 }
 
 fn version() -> u32 {
@@ -95,6 +104,8 @@ pub enum Error {
     Shape(String),
     /// Nothing here knows where to ask about this kind.
     NoRegister(String),
+    /// What was asked about is not an identifier of the kind it should be.
+    Invalid(String),
 }
 
 impl std::fmt::Display for Error {
@@ -105,6 +116,7 @@ impl std::fmt::Display for Error {
             Error::NoRegister(kind) => {
                 write!(f, "no register here answers about {kind} identifiers")
             }
+            Error::Invalid(why) => write!(f, "{why}"),
         }
     }
 }
@@ -130,6 +142,7 @@ pub fn missing(id: &str, kind: &str, source: Source) -> Record {
         subjects: Vec::new(),
         language: None,
         pages: None,
+        cover_id: None,
     }
 }
 
@@ -186,6 +199,9 @@ impl Record {
         }
         if self.pages.is_none() {
             self.pages = other.pages;
+        }
+        if self.cover_id.is_none() {
+            self.cover_id = other.cover_id;
         }
         // Which register answered becomes which registers did.
         if !self.source.split('+').any(|s| s == other.source) {

@@ -29,25 +29,58 @@ Exit codes: 0 every identifier was found, 1 at least one was not,
 Example:
 
     idnorm refs.txt | bibfetch | jq -r 'select(.found) | .title'
-    idnorm --kind doi refs.txt | bibfetch --polite you@example.org"
+    idnorm --kind doi refs.txt | bibfetch --polite you@example.org
+    bibfetch cover 978-0-306-40615-7 -o cover.jpg"
 )]
 struct Args {
+    #[command(subcommand)]
+    command: Option<Command>,
+
     /// Identifier records to look up, as `idnorm` writes them. Reads stdin
     /// when absent.
     path: Option<PathBuf>,
 
     /// An address to put in the request, which the registers ask for and
     /// answer faster when they get.
-    #[arg(long, value_name = "EMAIL")]
+    #[arg(long, global = true, value_name = "EMAIL")]
     polite: Option<String>,
 
     /// How long to wait on a register, in seconds.
-    #[arg(long, default_value_t = bibfetch::TIMEOUT.as_secs(), value_name = "SECONDS")]
+    #[arg(long, global = true, default_value_t = bibfetch::TIMEOUT.as_secs(), value_name = "SECONDS")]
     timeout: u64,
 
     /// How many times to ask before believing a failure.
-    #[arg(long, default_value_t = bibfetch::ATTEMPTS, value_name = "COUNT")]
+    #[arg(long, global = true, default_value_t = bibfetch::ATTEMPTS, value_name = "COUNT")]
     attempts: u32,
+}
+
+#[derive(clap::Subcommand)]
+enum Command {
+    /// Fetch a book's cover from Open Library by its ISBN.
+    ///
+    /// Exit codes: 0 the cover was written, 1 Open Library has none,
+    /// 65 not an ISBN or not an image, 69 Open Library could not be reached,
+    /// 74 the file could not be written.
+    Cover {
+        /// The ISBN, ten or thirteen digits, hyphens or not.
+        isbn: String,
+        /// Where to write the image.
+        #[arg(short, long, value_name = "FILE")]
+        output: PathBuf,
+        /// Which size to ask for.
+        #[arg(long, value_enum, default_value_t = Size::Large)]
+        size: Size,
+        /// An Open Library cover id to ask by when the ISBN has no cover.
+        #[arg(long, value_name = "ID")]
+        cover_id: Option<u64>,
+    },
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum Size {
+    Small,
+    Medium,
+    Large,
 }
 
 fn main() -> ExitCode {
@@ -56,6 +89,23 @@ fn main() -> ExitCode {
         Err(code) => return code,
     };
 
+    let agent = bibfetch::ask::Ask {
+        polite: args.polite.clone(),
+        timeout: Duration::from_secs(args.timeout),
+        attempts: args.attempts,
+    }
+    .agent();
+
+    if let Some(Command::Cover {
+        isbn,
+        output,
+        size,
+        cover_id,
+    }) = &args.command
+    {
+        return cover(&agent, args.attempts, isbn, output, *size, *cover_id);
+    }
+
     let text = match catena_cli::read_text(args.path.as_deref()) {
         Ok(text) => text,
         Err((code, why)) => {
@@ -63,13 +113,6 @@ fn main() -> ExitCode {
             return ExitCode::from(code);
         }
     };
-
-    let agent = bibfetch::ask::Ask {
-        polite: args.polite.clone(),
-        timeout: Duration::from_secs(args.timeout),
-        attempts: args.attempts,
-    }
-    .agent();
 
     let mut records = Vec::new();
     let mut missing = 0usize;
@@ -112,6 +155,46 @@ fn main() -> ExitCode {
         0 => exit::OK,
         _ => exit::NO,
     })
+}
+
+/// Fetch one cover and write it where asked.
+fn cover(
+    agent: &ureq::Agent,
+    attempts: u32,
+    isbn: &str,
+    output: &std::path::Path,
+    size: Size,
+    cover_id: Option<u64>,
+) -> ExitCode {
+    let covers = bibfetch::cover::Covers {
+        attempts,
+        ..Default::default()
+    };
+    let size = match size {
+        Size::Small => bibfetch::CoverSize::Small,
+        Size::Medium => bibfetch::CoverSize::Medium,
+        Size::Large => bibfetch::CoverSize::Large,
+    };
+    match covers.fetch(agent, isbn, cover_id, size) {
+        Ok(Some(found)) => match std::fs::write(output, &found.bytes) {
+            Ok(()) => ExitCode::from(exit::OK),
+            Err(why) => {
+                eprintln!("bibfetch: {}: {why}", output.display());
+                ExitCode::from(exit::IO)
+            }
+        },
+        Ok(None) => {
+            eprintln!("bibfetch: {isbn}: Open Library has no cover");
+            ExitCode::from(exit::NO)
+        }
+        Err(why) => {
+            eprintln!("bibfetch: {isbn}: {why}");
+            ExitCode::from(match why {
+                bibfetch::Error::Unreachable(_) => exit::UNAVAILABLE,
+                _ => exit::DATA,
+            })
+        }
+    }
 }
 
 /// The identifier and its kind out of one record.
