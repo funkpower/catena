@@ -22,6 +22,13 @@ use crate::{Cover, MAX_COVER, Metadata, Source, image_type};
 /// document or is trying to be a decompression bomb.
 const MAX_PACKAGE: u64 = 4 * 1024 * 1024;
 
+/// How many members one search for a cover will decompress.
+///
+/// Each is bounded by [`MAX_COVER`], but a manifest can list as many
+/// cover-named images as it likes, and reading every one of them is time a
+/// single book is not owed. A real cover is found in one or two reads.
+const MAX_READS: usize = 8;
+
 /// Read what an EPUB says about itself.
 pub fn read(path: &str, bytes: &[u8]) -> Metadata {
     let mut meta = Metadata::empty(path, Source::Opf);
@@ -295,6 +302,8 @@ fn cover<R: std::io::Read + std::io::Seek>(
         archive,
         items: &items,
         tried: Vec::new(),
+        reads: 0,
+        spent: false,
         meta,
     };
 
@@ -344,12 +353,21 @@ fn cover<R: std::io::Read + std::io::Seek>(
         }
     }
 
-    // Last: an image whose id or address says cover.
-    for item in items.iter().filter(|item| {
-        item.media_type.starts_with("image/")
-            && (item.id.to_lowercase().contains("cover")
-                || item.href.to_lowercase().contains("cover"))
-    }) {
+    // Last: an image whose id or file name has the word cover in it, one
+    // named `cover` outright first, then in manifest order.
+    let file_stem = |item: &Item| stem(item.path.as_deref().unwrap_or(&item.href)).to_string();
+    let mut named: Vec<&Item> = items
+        .iter()
+        .filter(|item| {
+            item.media_type.starts_with("image/")
+                && (says_cover(&item.id) || says_cover(&file_stem(item)))
+        })
+        .collect();
+    named.sort_by_key(|item| !file_stem(item).eq_ignore_ascii_case("cover"));
+    for item in named {
+        if look.spent {
+            break;
+        }
         if let Some(mut found) = look.image(base, &item.href) {
             found.guessed = true;
             return Some(found);
@@ -364,12 +382,19 @@ struct Look<'a, R> {
     archive: &'a mut zip::ZipArchive<R>,
     items: &'a [Item],
     tried: Vec<String>,
+    /// How many members have been decompressed, against [`MAX_READS`].
+    reads: usize,
+    /// Whether the reads have run out, and said so.
+    spent: bool,
     meta: &'a mut Metadata,
 }
 
 impl<R: std::io::Read + std::io::Seek> Look<'_, R> {
     /// Where an address leads, or a note saying it leads nowhere it may.
     fn locate(&mut self, base: &str, href: &str) -> Option<String> {
+        if self.spent {
+            return None;
+        }
         let Some(path) = resolve(base, href) else {
             self.meta.note(format!(
                 "the cover's address, {href}, is not a path inside the archive"
@@ -392,6 +417,11 @@ impl<R: std::io::Read + std::io::Seek> Look<'_, R> {
 
     /// The image a cover page shows, or the page itself where the guide
     /// points straight at an image.
+    ///
+    /// A page with several images may lead with a logo or an ornament, so
+    /// the one whose file name, `alt`, `id` or `class` says cover is taken
+    /// over the first; with none of them saying so, the first is taken, and
+    /// a note says the page had others.
     fn page(&mut self, base: &str, href: &str) -> Option<Cover> {
         let path = self.locate(base, href)?;
         let bytes = self.fetch(&path, MAX_PACKAGE as usize, "cover page")?;
@@ -399,23 +429,55 @@ impl<R: std::io::Read + std::io::Seek> Look<'_, R> {
             return self.check(&path, bytes);
         }
         let text = String::from_utf8_lossy(&bytes);
-        let Some(src) = tags(&text).find_map(|(name, tag)| match name {
-            "img" => attr(tag, "src"),
-            "image" => attr(tag, "xlink:href").or_else(|| attr(tag, "href")),
-            _ => None,
-        }) else {
+        let images: Vec<(String, bool)> = tags(&text)
+            .filter_map(|(name, tag)| {
+                let src = match name {
+                    "img" => attr(tag, "src"),
+                    "image" => attr(tag, "xlink:href").or_else(|| attr(tag, "href")),
+                    _ => None,
+                }?;
+                let named = says_cover(stem(src.split('#').next().unwrap_or("")))
+                    || ["alt", "id", "class"]
+                        .iter()
+                        .any(|name| attr(tag, name).is_some_and(|value| says_cover(&value)));
+                Some((src, named))
+            })
+            .collect();
+        let src = if let Some((src, _)) = images.iter().find(|(_, named)| *named) {
+            src
+        } else if let Some((first, _)) = images.first() {
+            if images.len() > 1 {
+                self.meta.note(format!(
+                    "the cover page, {path}, shows {} images, and the first was taken",
+                    images.len()
+                ));
+            }
+            first
+        } else {
             self.meta
                 .note(format!("the cover page, {path}, shows no image"));
             return None;
         };
-        self.image(directory_of(&path), &src)
+        self.image(directory_of(&path), src)
     }
 
     /// One member's bytes, read no further than `cap`.
     ///
     /// The size the archive declares is checked first and the read is
-    /// bounded anyway, because the declaration may be a lie.
+    /// bounded anyway, because the declaration may be a lie. No more than
+    /// [`MAX_READS`] members are read in all; the first asked for after
+    /// that ends the search, with a note.
     fn fetch(&mut self, path: &str, cap: usize, what: &str) -> Option<Vec<u8>> {
+        if self.spent {
+            return None;
+        }
+        if self.reads == MAX_READS {
+            self.spent = true;
+            self.meta.note(format!(
+                "the search for a cover stopped after reading {MAX_READS} members"
+            ));
+            return None;
+        }
         let file = match self.archive.by_name(path) {
             Ok(file) => file,
             Err(zip::result::ZipError::FileNotFound) => {
@@ -434,6 +496,7 @@ impl<R: std::io::Read + std::io::Seek> Look<'_, R> {
             self.meta.note(too_large);
             return None;
         }
+        self.reads += 1;
         let mut bytes = Vec::new();
         if file.take(cap as u64 + 1).read_to_end(&mut bytes).is_err() {
             self.meta
@@ -480,6 +543,50 @@ fn directory_of(path: &str) -> &str {
     path.rsplit_once('/').map_or("", |(dir, _)| dir)
 }
 
+/// A path's file name without its extension.
+fn stem(path: &str) -> &str {
+    let name = path.rsplit_once('/').map_or(path, |(_, name)| name);
+    match name.rsplit_once('.') {
+        Some((stem, _)) if !stem.is_empty() => stem,
+        _ => name,
+    }
+}
+
+/// Whether a name has `cover` in it as a word of its own, in any case.
+///
+/// Words are split at anything not a letter or a digit and where a lower
+/// case letter meets a capital, so `CoverImage`, `Book_COVER` and
+/// `cover-thumb` say cover, and `discover` and `recovery` do not.
+fn says_cover(name: &str) -> bool {
+    words(name)
+        .iter()
+        .any(|word| word.eq_ignore_ascii_case("cover"))
+}
+
+/// The words of a name, as [`says_cover`] splits them.
+fn words(name: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut start: Option<usize> = None;
+    let mut prev = ' ';
+    for (at, c) in name.char_indices() {
+        let begins =
+            c.is_alphanumeric() && (start.is_none() || (prev.is_lowercase() && c.is_uppercase()));
+        if !c.is_alphanumeric() || begins {
+            if let Some(from) = start.take() {
+                out.push(&name[from..at]);
+            }
+        }
+        if begins {
+            start = Some(at);
+        }
+        prev = c;
+    }
+    if let Some(from) = start {
+        out.push(&name[from..]);
+    }
+    out
+}
+
 /// Where an address written in a member in `base` leads inside the archive.
 ///
 /// The fragment comes off and percent-escapes are undone. An address with a
@@ -523,7 +630,13 @@ fn percent_decode(text: &str) -> Option<String> {
     let mut at = 0;
     while at < raw.len() {
         if raw[at] == b'%' {
-            let hex = std::str::from_utf8(raw.get(at + 1..at + 3)?).ok()?;
+            // Two hex digits and nothing else: `from_str_radix` would also
+            // take a sign, and read `%+f` as 15.
+            let hex = raw.get(at + 1..at + 3)?;
+            if !hex.iter().all(u8::is_ascii_hexdigit) {
+                return None;
+            }
+            let hex = std::str::from_utf8(hex).ok()?;
             out.push(u8::from_str_radix(hex, 16).ok()?);
             at += 3;
         } else {
@@ -879,6 +992,147 @@ mod tests {
     }
 
     #[test]
+    fn a_name_says_cover_only_as_a_word_of_its_own() {
+        for yes in [
+            "cover",
+            "CoverImage",
+            "Book_COVER",
+            "cover-thumb",
+            "frontCover",
+            "x.cover",
+        ] {
+            assert!(says_cover(yes), "{yes}");
+        }
+        for no in [
+            "discover-ch1",
+            "recovery-map",
+            "covers",
+            "Coverage",
+            "uncover",
+            "",
+        ] {
+            assert!(!says_cover(no), "{no}");
+        }
+        assert_eq!(words("CoverImage_v2"), ["Cover", "Image", "v2"]);
+    }
+
+    #[test]
+    fn a_name_that_only_contains_cover_is_not_a_cover() {
+        let package = opf(
+            r#"<item id="ch1" href="images/discover-ch1.png" media-type="image/png"/>
+               <item id="i2" href="images/cover.jpg" media-type="image/jpeg"/>"#,
+            "",
+        );
+        let meta = book(
+            &package,
+            &[
+                ("OEBPS/images/discover-ch1.png", PNG),
+                ("OEBPS/images/cover.jpg", JPEG),
+            ],
+        );
+        let cover = meta.cover.expect("a cover");
+        assert_eq!(cover.bytes, JPEG);
+        assert!(cover.guessed);
+
+        let alone = opf(
+            r#"<item id="map" href="images/recovery-map.png" media-type="image/png"/>"#,
+            "",
+        );
+        let meta = book(&alone, &[("OEBPS/images/recovery-map.png", PNG)]);
+        assert_eq!(meta.cover, None);
+        assert!(meta.notes.is_empty(), "{:?}", meta.notes);
+    }
+
+    #[test]
+    fn an_image_named_cover_outright_beats_one_listed_before_it() {
+        let package = opf(
+            r#"<item id="cover-thumb" href="images/thumb.png" media-type="image/png"/>
+               <item id="i2" href="images/Cover.jpg" media-type="image/jpeg"/>"#,
+            "",
+        );
+        let meta = book(
+            &package,
+            &[
+                ("OEBPS/images/thumb.png", PNG),
+                ("OEBPS/images/Cover.jpg", JPEG),
+            ],
+        );
+        let cover = meta.cover.expect("a cover");
+        assert_eq!(cover.bytes, JPEG);
+        assert!(cover.guessed);
+    }
+
+    #[test]
+    fn the_guide_cover_page_prefers_the_image_that_says_cover() {
+        let package = opf(
+            "",
+            r#"<guide><reference type="cover" href="text/cover.xhtml"/></guide>"#,
+        );
+        for art in [
+            r#"<img src="../images/front-cover.jpg"/>"#,
+            r#"<img alt="Cover" src="../images/front-cover.jpg"/>"#,
+            r#"<img id="coverImage" src="../images/front-cover.jpg"/>"#,
+            r#"<img class="full cover" src="../images/front-cover.jpg"/>"#,
+        ] {
+            let page = format!(r#"<html><body><img src="../images/logo.png"/>{art}</body></html>"#);
+            let meta = book(
+                &package,
+                &[
+                    ("OEBPS/text/cover.xhtml", page.as_bytes()),
+                    ("OEBPS/images/logo.png", PNG),
+                    ("OEBPS/images/front-cover.jpg", JPEG),
+                ],
+            );
+            assert_eq!(meta.cover.expect(art).bytes, JPEG, "{art}");
+            assert!(meta.notes.is_empty(), "{art}: {:?}", meta.notes);
+        }
+    }
+
+    #[test]
+    fn a_guide_cover_page_with_several_unnamed_images_takes_the_first_and_says_so() {
+        let package = opf(
+            "",
+            r#"<guide><reference type="cover" href="text/cover.xhtml"/></guide>"#,
+        );
+        let page = br#"<html><body><img src="../images/logo.png"/><img src="../images/art.jpg"/></body></html>"#;
+        let meta = book(
+            &package,
+            &[
+                ("OEBPS/text/cover.xhtml", page),
+                ("OEBPS/images/logo.png", PNG),
+                ("OEBPS/images/art.jpg", JPEG),
+            ],
+        );
+        assert_eq!(meta.cover.expect("a cover").bytes, PNG);
+        assert_eq!(
+            meta.notes,
+            ["the cover page, OEBPS/text/cover.xhtml, shows 2 images, and the first was taken"]
+        );
+    }
+
+    #[test]
+    fn a_search_for_a_cover_reads_no_more_than_its_budget() {
+        let count = MAX_READS + 4;
+        let manifest: String = (0..count)
+            .map(|n| format!(r#"<item id="cover-{n}" href="c{n}.jpg" media-type="image/jpeg"/>"#))
+            .collect();
+        let names: Vec<String> = (0..count).map(|n| format!("OEBPS/c{n}.jpg")).collect();
+        let members: Vec<(&str, &[u8])> = names
+            .iter()
+            .map(|name| (name.as_str(), &b"<html>not an image</html>"[..]))
+            .collect();
+        let meta = book(&opf(&manifest, ""), &members);
+        assert_eq!(meta.cover, None);
+        let mut expected: Vec<String> = (0..MAX_READS)
+            .map(|n| format!("the cover, OEBPS/c{n}.jpg, is not an image"))
+            .collect();
+        expected.push(format!(
+            "the search for a cover stopped after reading {MAX_READS} members"
+        ));
+        assert_eq!(meta.notes, expected);
+    }
+
+    #[test]
     fn a_book_that_names_no_cover_has_none_and_says_nothing() {
         let package = opf(
             r#"<item id="plate" href="images/plate.jpg" media-type="image/jpeg"/>"#,
@@ -938,6 +1192,8 @@ mod tests {
             archive: &mut archive,
             items: &[],
             tried: Vec::new(),
+            reads: 0,
+            spent: false,
             meta: &mut meta,
         };
         let got = look.fetch("big.jpg", cap, "cover").map(|bytes| bytes.len());
@@ -1030,6 +1286,8 @@ mod tests {
             Some("OEBPS/text/b.jpg")
         );
         assert_eq!(resolve("", "a%2Fb.jpg").as_deref(), Some("a/b.jpg"));
+        assert_eq!(percent_decode("a%2fb%2F").as_deref(), Some("a/b/"));
+        assert_eq!(percent_decode("a%+fb"), None);
         for hostile in [
             "../../c.jpg",
             "../../../etc/passwd",
@@ -1038,6 +1296,9 @@ mod tests {
             "file:///etc/passwd",
             "%ZZ.jpg",
             "%ff.jpg",
+            "a%+fb",
+            "a%-1b",
+            "a% fb",
             "c%",
             "#only-a-fragment",
             "",
