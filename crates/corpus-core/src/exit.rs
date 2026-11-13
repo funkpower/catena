@@ -30,6 +30,8 @@ pub const UNAVAILABLE: u8 = 69;
 pub const SOFTWARE: u8 = 70;
 /// Reading or writing failed.
 pub const IO: u8 = 74;
+/// A service refused for now, and asking again later will work.
+pub const TEMPFAIL: u8 = 75;
 
 /// The answer a predicate tool gives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

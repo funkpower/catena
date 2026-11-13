@@ -46,6 +46,11 @@ const REDIRECT_HOSTS: [&str; 2] = ["covers.openlibrary.org", "archive.org"];
 /// agent's timeout each, and a minute's `Retry-After` between attempts.
 pub const DEADLINE: Duration = Duration::from_secs(120);
 
+/// How long to leave between two covers asked by ISBN. Open Library allows a
+/// hundred every five minutes from one address and refuses the rest with
+/// `403`; one every three seconds stays under that however long a run goes.
+pub const PACE: Duration = Duration::from_secs(3);
+
 /// The longest a `Retry-After` is honoured for. A register asking for more
 /// than this is better treated as down than waited on.
 const MAX_WAIT: Duration = Duration::from_secs(60);
@@ -54,7 +59,10 @@ const MAX_WAIT: Duration = Duration::from_secs(60);
 /// this, and limits covers asked by ISBN to a hundred every five minutes
 /// from one address; threads asking at once would only meet the limit
 /// sooner and all back off together.
-static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
+///
+/// It holds when the last cover was asked for by ISBN, so that [`PACE`] is
+/// kept across fetches and threads.
+static ONE_AT_A_TIME: Mutex<Option<Instant>> = Mutex::new(None);
 
 /// Which of Open Library's three sizes to ask for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -127,6 +135,9 @@ pub struct Covers {
     /// request is given whatever is left of it, or the agent's own timeout
     /// if that is shorter, and a wait that would run past it is not waited.
     pub deadline: Duration,
+    /// The least time between two covers asked by ISBN; [`PACE`] by default.
+    /// Covers asked by id are not limited and are not spaced out.
+    pub pace: Duration,
 }
 
 impl Default for Covers {
@@ -135,6 +146,7 @@ impl Default for Covers {
             base: OPEN_LIBRARY_COVERS.to_string(),
             attempts: crate::ATTEMPTS,
             deadline: DEADLINE,
+            pace: PACE,
         }
     }
 }
@@ -162,6 +174,12 @@ impl Covers {
     /// of the ISBN does not stop the other being asked, but it does stop the
     /// cover id being asked: the ISBN's own cover may exist, and is the one
     /// wanted. The failure is returned when no ISBN form gave a cover.
+    ///
+    /// Refusal for asking too often is the exception. It is
+    /// [`Error::Limited`], the other form is not asked, since it would only
+    /// be refused too, and the cover id is still asked, because Open Library
+    /// does not limit those. A cover found that way is returned; otherwise the
+    /// refusal is, so that the caller knows to ask again later.
     pub fn fetch(
         &self,
         agent: &ureq::Agent,
@@ -186,31 +204,54 @@ impl Covers {
             .map(|form| format!("{}/b/isbn/{form}-{letter}.jpg?default=false", self.base))
             .collect();
 
-        let _turn = ONE_AT_A_TIME
+        let mut last_by_isbn = ONE_AT_A_TIME
             .lock()
             .unwrap_or_else(|held| held.into_inner());
         // From here, not from the call: waiting for the lock is time another
         // fetch spent, and counting it would let a busy process starve this
-        // one of the time its own requests need.
-        let until = Instant::now() + self.deadline;
+        // one of the time its own requests need. A deadline too long to add
+        // to the clock is no deadline at all.
+        let now = Instant::now();
+        let until = now
+            .checked_add(self.deadline)
+            .unwrap_or_else(|| now + Duration::from_secs(365 * 24 * 60 * 60));
         let mut failed = None;
         for address in &addresses {
-            match self.ask(agent, address, until) {
+            if let Some(ready) = last_by_isbn.and_then(|at| at.checked_add(self.pace)) {
+                let now = Instant::now();
+                if ready > now {
+                    if ready >= until {
+                        return Err(Error::Unreachable(format!(
+                            "{address}: past the {:?} deadline, waiting to keep {:?} \
+between covers asked by ISBN",
+                            self.deadline, self.pace
+                        )));
+                    }
+                    std::thread::sleep(ready - now);
+                }
+            }
+            let answer = self.ask(agent, address, until);
+            *last_by_isbn = Some(Instant::now());
+            match answer {
                 Ok(Answer::Image(cover)) => return Ok(Some(cover)),
                 Ok(Answer::Absent) => {}
+                Err(why @ Error::Limited(_)) => {
+                    failed = Some(why);
+                    break;
+                }
                 Err(why) => failed = Some(why),
             }
         }
-        if let Some(why) = failed {
+        if let Some(why) = failed.take_if(|why| !matches!(why, Error::Limited(_))) {
             return Err(why);
         }
         let Some(id) = cover_id else {
-            return Ok(None);
+            return failed.map_or(Ok(None), Err);
         };
         let address = format!("{}/b/id/{id}-{letter}.jpg?default=false", self.base);
         match self.ask(agent, &address, until)? {
             Answer::Image(cover) => Ok(Some(cover)),
-            Answer::Absent => Ok(None),
+            Answer::Absent => failed.map_or(Ok(None), Err),
         }
     }
 
@@ -311,6 +352,15 @@ Open Library's covers or the Internet Archive"
                 // `default=false` makes a missing cover a 404 rather than a
                 // stand-in image.
                 404 | 410 => return Ok(Answer::Absent),
+                // Open Library's answer to more than a hundred covers asked by
+                // ISBN in five minutes from one address. Asking again at once
+                // would only be refused again.
+                403 => {
+                    return Err(Fault::Final(Error::Limited(format!(
+                        "{at}: refused (403); Open Library allows a hundred covers \
+by ISBN every five minutes from one address"
+                    ))));
+                }
                 429 | 503 => {
                     let wait = header(&response, "retry-after")
                         .and_then(|value| value.trim().parse::<u64>().ok())
@@ -603,6 +653,7 @@ mod tests {
                 base: self.base.clone(),
                 attempts: 3,
                 deadline: DEADLINE,
+                pace: Duration::ZERO,
             }
         }
 
@@ -1049,6 +1100,73 @@ mod tests {
             .fetch(&agent(), "9780306406157", Some(42), CoverSize::Large)
             .map(|cover| cover.map(|cover| cover.url));
         assert!(matches!(found, Err(Error::Unreachable(_))), "{found:?}");
+        assert_eq!(stub.asked(), [ISBN13, ISBN10]);
+    }
+
+    #[test]
+    fn a_refusal_for_asking_too_often_still_asks_the_cover_id() {
+        let stub = Stub::start(|_, path| match path {
+            ISBN13 => Reply::status(403),
+            "/b/id/42-L.jpg?default=false" => Reply::image("image/jpeg", jpeg(4096)),
+            _ => Reply::status(404),
+        });
+        let cover = stub
+            .covers()
+            .fetch(&agent(), "9780306406157", Some(42), CoverSize::Large)
+            .expect("an answer")
+            .expect("a cover");
+        assert!(cover.url.ends_with("/b/id/42-L.jpg?default=false"));
+        // The ten-digit form would only have been refused too.
+        assert_eq!(stub.asked(), [ISBN13, "/b/id/42-L.jpg?default=false"]);
+    }
+
+    #[test]
+    fn a_refusal_for_asking_too_often_is_not_an_absence() {
+        let stub = Stub::start(|_, path| match path {
+            ISBN13 => Reply::status(403),
+            _ => Reply::status(404),
+        });
+        let found = stub
+            .covers()
+            .fetch(&agent(), "9780306406157", None, CoverSize::Large)
+            .map(|cover| cover.map(|cover| cover.url));
+        assert!(matches!(found, Err(Error::Limited(_))), "{found:?}");
+        assert_eq!(stub.asked(), [ISBN13]);
+
+        // With a cover id that has no cover either, the refusal still stands:
+        // the ISBN's own cover may be there once the limit passes.
+        let found = stub
+            .covers()
+            .fetch(&agent(), "9780306406157", Some(42), CoverSize::Large)
+            .map(|cover| cover.map(|cover| cover.url));
+        assert!(matches!(found, Err(Error::Limited(_))), "{found:?}");
+    }
+
+    #[test]
+    fn a_deadline_too_long_to_count_is_no_deadline() {
+        let stub = Stub::start(|_, _| Reply::image("image/jpeg", jpeg(2048)));
+        let covers = Covers {
+            deadline: Duration::MAX,
+            ..stub.covers()
+        };
+        let cover = covers
+            .fetch(&agent(), "9780306406157", None, CoverSize::Large)
+            .expect("an answer");
+        assert!(cover.is_some());
+    }
+
+    #[test]
+    fn covers_asked_by_isbn_are_spaced_out() {
+        let stub = Stub::start(|_, _| Reply::status(404));
+        let covers = Covers {
+            pace: Duration::from_millis(300),
+            ..stub.covers()
+        };
+        let started = Instant::now();
+        let found = covers.fetch(&agent(), "9780306406157", None, CoverSize::Large);
+        assert!(matches!(found, Ok(None)), "{found:?}");
+        // Two forms of the ISBN, so at least one pause between them.
+        assert!(started.elapsed() >= Duration::from_millis(300));
         assert_eq!(stub.asked(), [ISBN13, ISBN10]);
     }
 

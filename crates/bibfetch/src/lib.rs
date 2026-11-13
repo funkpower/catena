@@ -112,6 +112,9 @@ pub enum Error {
     NoRegister(String),
     /// What was asked about is not an identifier of the kind it should be.
     Invalid(String),
+    /// The register refused because it has been asked too often from this
+    /// address. It is not down, and asking again later will work.
+    Limited(String),
 }
 
 impl std::fmt::Display for Error {
@@ -123,6 +126,7 @@ impl std::fmt::Display for Error {
                 write!(f, "no register here answers about {kind} identifiers")
             }
             Error::Invalid(why) => write!(f, "{why}"),
+            Error::Limited(why) => write!(f, "{why}"),
         }
     }
 }

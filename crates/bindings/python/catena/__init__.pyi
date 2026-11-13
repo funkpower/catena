@@ -103,6 +103,40 @@ def fetch_identifier(
     """
     ...
 
+class Limited(Exception):
+    """A register refused because it has been asked too often; ask again later."""
+
+def fetch_cover(
+    isbn: str,
+    cover_id: int | None = ...,
+    size: str = ...,
+    polite: str | None = ...,
+    timeout: int = ...,
+    deadline: int = ...,
+) -> dict[str, Any] | None:
+    """The cover Open Library has for a book, by ISBN, then by cover id.
+
+    A dict with `bytes`, `media_type`, `extension`, `source` and `url`, or
+    `None` when there is none. Raises `Limited` when Open Library refused for
+    being asked too often. Blocks on the network.
+    """
+    ...
+
+def search_title(
+    title: str,
+    author: str | None = ...,
+    limit: int = ...,
+    polite: str | None = ...,
+    timeout: int = ...,
+    attempts: int = ...,
+) -> list[dict[str, Any]]:
+    """The editions the registers list for a title and author, in their order.
+
+    Records shaped like `fetch_identifier`'s. Use `same_work` to decide which
+    one is the book. Blocks on the network.
+    """
+    ...
+
 def colophon_prompt(
     record: dict[str, Any], text: str, pages: int = ...
 ) -> str | None:

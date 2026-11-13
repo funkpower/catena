@@ -99,8 +99,10 @@ A Kindle book's title is EXTH 503 where it is there, then the MOBI header's
 full name, then the Palm database name (cut to 31 bytes, with a note). Authors
 (100) and subjects (105) are every record of their kind, in order; publisher
 (101), description (103), date (106) and language (524) the first. EXTH 104 is
-an `isbn` when it is shaped like one and `other` when not, and 113 is an
-`asin`. A contributor (108) is not an author, the same as an EPUB's
+an `isbn` when it is shaped like one and `other` when not. 113 is filed by
+its shape: a `uuid` when it is one (calibre writes its book id there), an
+`asin` when it is ten letters and digits, and `other` when it is neither. A
+contributor (108) is not an author, the same as an EPUB's
 `dc:contributor`, and is not reported. With no EXTH language, the language
 comes from the header's locale. Strings are decoded as the header says,
 UTF-8 or Windows-1252. A book whose text is encrypted still has its header
@@ -117,7 +119,10 @@ read off its first bytes: JPEG, PNG, GIF, WebP or BMP. It is for library
 callers and is not part of the JSON record, which is a line of text.
 
 A Kindle book's cover is EXTH 201, or the thumbnail, 202, when no cover is
-named, and with neither the first image record.
+named. With neither, it is the record at the header's first image index, as
+calibre does, and only that record: when it is not a JPEG, PNG or GIF there is
+no cover, because the records after it can be illustrations, and kindlegen
+sometimes puts a font there first.
 
 An EPUB's is the first of these that reaches an image:
 
@@ -125,10 +130,18 @@ An EPUB's is the first of these that reaches an image:
 2. The item `<meta name="cover" content="…">` names (EPUB 2). Some
    converters write the image's address there rather than its id, and that is
    followed too.
-3. The guide's `<reference type="cover">`, a page, and the first `<img src>`
-   or SVG `<image href>` on it. A guide that points straight at an image is
-   taken at its word.
-4. Any image in the manifest whose id or address says `cover`.
+3. The guide's `<reference type="cover">`, a page, and the `<img src>` or
+   SVG `<image href>` on it. Where the page has several, the one whose file
+   name, `alt`, `id` or `class` says `cover` is taken; where none does, the
+   first is, with a note that there were others. A guide that points straight
+   at an image is taken at its word.
+4. Any image in the manifest whose id or file name says `cover`, one named
+   `cover` outright first and the rest in manifest order.
+
+A name says `cover` when it has it as a word of its own, in any case. Words
+break at anything not a letter or digit and where a lower case letter meets a
+capital, so `CoverImage`, `Book_COVER` and `cover-thumb` say it, and
+`discover-ch1` and `recovery-map` do not.
 
 A route that names something unusable — not in the archive, not an image —
 leaves a note, and the next route is asked. Addresses are resolved against the
@@ -140,7 +153,16 @@ What the bytes say beats what the manifest says: a JPEG listed as
 `image/png` comes back as `image/jpeg`, with a note. A cover larger than
 `bookmeta::MAX_COVER` (16 MiB) is left out with a note, in either format, and
 an EPUB's is never decompressed further than that, whatever size the archive
-claims for it.
+claims for it. Nor are more than eight members read looking for one,
+however many candidates the manifest lists: the search stops there, with a
+note.
+
+`Cover::guessed` says the file left the choice open: a Kindle book's first
+image record, or an EPUB image picked because its name says `cover`. Either
+can be an illustration from inside the book, so a caller that can get a cover
+another way, from a register by ISBN, should prefer that one. A cover the file
+names is never a guess. `Cover::extension` gives the usual file extension for
+its media type.
 
 ## Asking a model
 

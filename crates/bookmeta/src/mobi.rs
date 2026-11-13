@@ -342,6 +342,7 @@ fn cover(
     Some(Cover {
         media_type: media_type.to_string(),
         bytes: data.to_vec(),
+        guessed: false,
     })
 }
 
@@ -361,6 +362,7 @@ fn first_image_record(bytes: &[u8], records: &[usize], first_image: Option<u32>)
     Some(Cover {
         media_type: media_type.to_string(),
         bytes: data.to_vec(),
+        guessed: true,
     })
 }
 

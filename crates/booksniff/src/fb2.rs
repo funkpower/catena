@@ -9,8 +9,21 @@
 //! windows-1251, which is not UTF-8 but spells its markup in ASCII all the
 //! same, and a reader that insisted on UTF-8 would call every one of them
 //! binary.
+//!
+//! A FictionBook saved as UTF-16 is the one case where the markup is not
+//! ASCII bytes. Its byte-order mark says so, and the front is decoded before
+//! the same walk is made over it.
 
 use crate::BOM;
+
+/// The UTF-16 byte-order mark, little-endian.
+const UTF16_LE: &[u8] = b"\xff\xfe";
+/// The UTF-16 byte-order mark, big-endian.
+const UTF16_BE: &[u8] = b"\xfe\xff";
+
+/// Most UTF-16 code units decoded from the front: the same window, in
+/// characters, as the bytes read for every other encoding.
+const UTF16_UNITS: usize = 2048;
 
 /// What the root element of a FictionBook is called.
 const ROOT: &[u8] = b"FictionBook";
@@ -21,7 +34,39 @@ const ROOT: &[u8] = b"FictionBook";
 /// does not begin inside it is not found, so the answer is no rather than a
 /// guess.
 pub fn is_fictionbook(head: &[u8]) -> bool {
+    match utf16(head) {
+        Some(decoded) => is_fictionbook_root(decoded.as_bytes()),
+        None => is_fictionbook_root(head),
+    }
+}
+
+fn is_fictionbook_root(head: &[u8]) -> bool {
     root_element(head).is_some_and(|name| local_name(name) == ROOT)
+}
+
+/// The front of a UTF-16 file as UTF-8, if a byte-order mark says it is one.
+///
+/// Only a bounded prefix is decoded. A half character at the end, or a
+/// surrogate without its pair, becomes a replacement character, which the
+/// walk takes as part of a name and so never as the end of one.
+fn utf16(head: &[u8]) -> Option<String> {
+    let (body, big_endian) = match head.strip_prefix(UTF16_LE) {
+        Some(body) => (body, false),
+        None => (head.strip_prefix(UTF16_BE)?, true),
+    };
+    let units = body.chunks_exact(2).take(UTF16_UNITS).map(|pair| {
+        let pair = [pair[0], pair[1]];
+        if big_endian {
+            u16::from_be_bytes(pair)
+        } else {
+            u16::from_le_bytes(pair)
+        }
+    });
+    Some(
+        char::decode_utf16(units)
+            .map(|c| c.unwrap_or(char::REPLACEMENT_CHARACTER))
+            .collect(),
+    )
 }
 
 /// The name of the first element, after the prolog.
@@ -144,6 +189,60 @@ mod tests {
         assert!(!is_fictionbook(b"<?xml version=\"1.0\"?><Fiction"));
         assert!(!is_fictionbook(b"<?xml version=\"1.0\""));
         assert!(!is_fictionbook(b"<!-- never closed <FictionBook>"));
+    }
+
+    fn utf16(text: &str, big_endian: bool) -> Vec<u8> {
+        let mut out = if big_endian {
+            UTF16_BE.to_vec()
+        } else {
+            UTF16_LE.to_vec()
+        };
+        for unit in text.encode_utf16() {
+            out.extend_from_slice(&if big_endian {
+                unit.to_be_bytes()
+            } else {
+                unit.to_le_bytes()
+            });
+        }
+        out
+    }
+
+    const UTF16_BOOK: &str = "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\r\n\
+        <FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\">\
+        <description><book-title>Мельница</book-title>";
+
+    #[test]
+    fn a_little_endian_utf16_fictionbook_is_recognised() {
+        assert!(is_fictionbook(&utf16(UTF16_BOOK, false)));
+        assert!(!is_fictionbook(&utf16(
+            "<?xml version=\"1.0\"?><rss>",
+            false
+        )));
+    }
+
+    #[test]
+    fn a_big_endian_utf16_fictionbook_is_recognised() {
+        assert!(is_fictionbook(&utf16(UTF16_BOOK, true)));
+        assert!(!is_fictionbook(&utf16(
+            "<?xml version=\"1.0\"?><rss>",
+            true
+        )));
+    }
+
+    #[test]
+    fn utf16_read_in_the_wrong_order_is_not_a_fictionbook() {
+        let mut swapped = utf16(UTF16_BOOK, false);
+        swapped[..2].copy_from_slice(UTF16_BE);
+        assert!(!is_fictionbook(&swapped));
+    }
+
+    #[test]
+    fn a_utf16_root_the_window_cut_short_is_not_taken() {
+        let head = utf16("<FictionBook>", false);
+        for cut in 0..head.len() {
+            assert!(!is_fictionbook(&head[..cut]), "cut at {cut}");
+        }
+        assert!(is_fictionbook(&head));
     }
 
     #[test]

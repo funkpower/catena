@@ -110,6 +110,24 @@ pub struct Cover {
     pub media_type: String,
     /// The image itself, never more than [`MAX_COVER`] bytes.
     pub bytes: Vec<u8>,
+    /// Whether the file left the choice open. A MOBI that names no cover, or
+    /// an EPUB whose only cover is an image with "cover" in its name, has one
+    /// picked by position or by name, and that pick can be an illustration
+    /// from inside the book. A caller with a better source should prefer it.
+    pub guessed: bool,
+}
+
+impl Cover {
+    /// The usual file extension for the image, without the dot.
+    pub fn extension(&self) -> &'static str {
+        match self.media_type.as_str() {
+            "image/png" => "png",
+            "image/gif" => "gif",
+            "image/webp" => "webp",
+            "image/bmp" => "bmp",
+            _ => "jpg",
+        }
+    }
 }
 
 /// How large a cover is worth keeping.
