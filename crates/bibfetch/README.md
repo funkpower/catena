@@ -172,6 +172,15 @@ title and perhaps a name. This asks which books a register has under those,
 and prints one record per candidate: Open Library's index first, and Google
 Books only when Open Library has nothing.
 
+Open Library's title search is strict. Given an author as well, it finds
+nothing for *The Ladder of Divine Ascent* and four editions of *Ladder of
+Divine Ascent*. So when the title as given finds nothing, the title without a
+leading "The", "A" or "An" is asked next, and then the title and author as one
+free-text query. Each is asked only when the one before found nothing, so a
+title that matches costs one request. The looser questions can bring back
+books that only share words with the title, which is one more reason the
+candidates are for the caller to judge.
+
 Each candidate is one edition. Open Library's index answers with works, and
 names the edition of each that best matches the search. The ISBN, publisher,
 language, year and cover are that edition's and no other's: a field the

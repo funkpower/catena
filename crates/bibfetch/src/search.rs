@@ -40,7 +40,13 @@ const GOOGLE_BOOKS: &str = "https://www.googleapis.com/books/v1/volumes";
 /// named.
 ///
 /// Open Library's index first, and Google Books only when that answered with
-/// nothing. Once Google Books has been asked, its failure is the answer:
+/// nothing. Open Library's title search is strict: given an author too, it
+/// finds nothing for "The Ladder of Divine Ascent" that it finds for "Ladder
+/// of Divine Ascent". So when the title as given finds nothing, the title
+/// without a leading article is asked, and then the title and author as one
+/// free-text query, before Google Books is. Each later question is asked only
+/// when the one before it found nothing, and a looser one can return books
+/// that only share words with the title, which the caller judges. Once Google Books has been asked, its failure is the answer:
 /// [`Error::Limited`] when it refused for its quota, [`Error::Unreachable`]
 /// when it could not be reached, since saying no register has the title
 /// would be a claim no register made. Asks nothing when `limit` is zero; a
@@ -79,8 +85,14 @@ fn search_with(
         None => Err(Error::Unreachable(format!("{url}: answered 404"))),
     };
 
-    let open_library =
-        fetch(open_library_url(title, author, limit)).and_then(|body| open_library(&body, limit));
+    let mut from_open_library = Ok(Vec::new());
+    for url in open_library_urls(title, author, limit) {
+        from_open_library = fetch(url).and_then(|body| open_library(&body, limit));
+        if !from_open_library.as_ref().is_ok_and(Vec::is_empty) {
+            break;
+        }
+    }
+    let open_library = from_open_library;
     if open_library.as_ref().is_ok_and(|found| !found.is_empty()) {
         return open_library;
     }
@@ -141,7 +153,36 @@ fn refused(url: &str, status: u16) -> Option<Error> {
     })
 }
 
-/// Where to ask Open Library.
+/// Every question to put to Open Library, strictest first.
+fn open_library_urls(title: &str, author: Option<&str>, limit: usize) -> Vec<String> {
+    let mut urls = vec![open_library_url(title, author, limit)];
+    if let Some(rest) = without_article(title) {
+        urls.push(open_library_url(rest, author, limit));
+    }
+    let words = match author {
+        Some(author) => format!("{title} {author}"),
+        None => title.to_string(),
+    };
+    urls.push(format!(
+        "https://openlibrary.org/search.json?q={}&fields={OPEN_LIBRARY_FIELDS}&limit={limit}",
+        source::encode(&words),
+    ));
+    urls
+}
+
+/// A title without its leading English article, when it has one and
+/// something follows it.
+fn without_article(title: &str) -> Option<&str> {
+    let (first, rest) = title.split_once(char::is_whitespace)?;
+    let rest = rest.trim_start();
+    (["the", "a", "an"]
+        .iter()
+        .any(|article| first.eq_ignore_ascii_case(article))
+        && !rest.is_empty())
+    .then_some(rest)
+}
+
+/// Where to ask Open Library by title and author.
 fn open_library_url(title: &str, author: Option<&str>, limit: usize) -> String {
     let author = author
         .map(|author| format!("&author={}", source::encode(author)))
@@ -630,8 +671,19 @@ mod tests {
             recorded(&mut asked, &bodies),
         )
         .expect("candidates");
-        assert_eq!(asked.len(), 2);
-        assert!(asked[1].starts_with("https://www.googleapis.com/books/v1/volumes?q="));
+        // The title as given, without its article, as free text, then Google.
+        assert_eq!(asked.len(), 4, "{asked:?}");
+        assert!(
+            asked[1].contains("?title=Google%20Story&author=Vise&"),
+            "{}",
+            asked[1]
+        );
+        assert!(
+            asked[2].contains("?q=The%20Google%20Story%20Vise&"),
+            "{}",
+            asked[2]
+        );
+        assert!(asked[3].starts_with("https://www.googleapis.com/books/v1/volumes?q="));
 
         assert_eq!(found.len(), 2);
         let first = &found[0];
@@ -686,7 +738,8 @@ mod tests {
         ];
         let failed = search_with("Nothing", None, 5, recorded(&mut asked, &bodies));
         assert!(matches!(failed, Err(Error::Unreachable(_))), "{failed:?}");
-        assert_eq!(asked.len(), 2);
+        // By title, as free text, then Google.
+        assert_eq!(asked.len(), 3, "{asked:?}");
     }
 
     #[test]
@@ -765,8 +818,50 @@ mod tests {
         ];
         search_with("Anathem", Some("  "), 5, recorded(&mut asked, &bodies)).expect("ok");
         assert!(!asked[0].contains("author="), "{}", asked[0]);
-        assert!(!asked[1].contains("inauthor"), "{}", asked[1]);
-        assert!(asked[1].contains("q=intitle%3AAnathem&"), "{}", asked[1]);
+        assert!(asked[1].contains("?q=Anathem&"), "{}", asked[1]);
+        assert!(!asked[2].contains("inauthor"), "{}", asked[2]);
+        assert!(asked[2].contains("q=intitle%3AAnathem&"), "{}", asked[2]);
+    }
+
+    #[test]
+    fn a_leading_article_is_dropped_when_the_title_as_given_finds_nothing() {
+        let mut asked = Vec::new();
+        let mut answered = 0;
+        let found = search_with(
+            "The Ladder of Divine Ascent",
+            Some("John Climacus"),
+            5,
+            |url: &str| {
+                asked.push(url.to_string());
+                answered += 1;
+                Ok(Some(
+                    if answered == 2 { TOLSTOY } else { NOTHING }.to_string(),
+                ))
+            },
+        )
+        .expect("candidates");
+        assert!(!found.is_empty());
+        assert_eq!(
+            asked.len(),
+            2,
+            "nothing is asked after a question finds something"
+        );
+        assert!(
+            asked[1].contains("?title=Ladder%20of%20Divine%20Ascent&author=John%20Climacus&"),
+            "{}",
+            asked[1]
+        );
+    }
+
+    #[test]
+    fn only_a_leading_article_with_words_after_it_is_dropped() {
+        assert_eq!(without_article("The Republic"), Some("Republic"));
+        assert_eq!(without_article("an  Essay"), Some("Essay"));
+        assert_eq!(without_article("A"), None);
+        assert_eq!(without_article("The "), None);
+        assert_eq!(without_article("Theology"), None);
+        assert_eq!(without_article("Anathem"), None);
+        assert_eq!(open_library_urls("Anathem", None, 5).len(), 2);
     }
 
     #[test]
@@ -838,7 +933,9 @@ intitle:y intitle:z inauthor:O'Brien inauthor:Sons";
         let found = search_with("?!", Some("Someone"), 5, recorded(&mut asked, &bodies))
             .expect("an answer");
         assert!(found.is_empty());
-        assert_eq!(asked.len(), 1);
+        // By title and as free text; never Google.
+        assert_eq!(asked.len(), 2, "{asked:?}");
+        assert!(asked.iter().all(|url| url.contains("openlibrary.org")));
     }
 
     #[test]
@@ -859,13 +956,25 @@ intitle:y intitle:z inauthor:O'Brien inauthor:Sons";
         let found =
             search_with("The Google Story", None, 1, recorded(&mut asked, &bodies)).expect("ok");
         assert_eq!(found.len(), 1);
-        assert!(asked[0].ends_with("&limit=1"), "{}", asked[0]);
-        assert!(asked[1].ends_with("&maxResults=1"), "{}", asked[1]);
+        let google = asked.last().expect("Google was asked");
+        assert!(
+            asked[..asked.len() - 1]
+                .iter()
+                .all(|url| url.ends_with("&limit=1")),
+            "{asked:?}"
+        );
+        assert!(google.ends_with("&maxResults=1"), "{google}");
 
         let mut asked = Vec::new();
         search_with("The Google Story", None, 500, recorded(&mut asked, &bodies)).expect("ok");
-        assert!(asked[0].ends_with("&limit=40"), "{}", asked[0]);
-        assert!(asked[1].ends_with("&maxResults=40"), "{}", asked[1]);
+        let google = asked.last().expect("Google was asked");
+        assert!(
+            asked[..asked.len() - 1]
+                .iter()
+                .all(|url| url.ends_with("&limit=40")),
+            "{asked:?}"
+        );
+        assert!(google.ends_with("&maxResults=40"), "{google}");
 
         let mut asked = Vec::new();
         let found =
