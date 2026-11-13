@@ -135,7 +135,8 @@ id is asked only when every form of the ISBN asked was answered with no cover; i
 asking by ISBN failed, that failure is the result.
 
 What comes back is checked before it is written: a JPEG or PNG by its bytes
-as well as by what the server says, no larger than ten megabytes, reached in at
+as well as by what the server says, whole to its end marker (`FF D9` for a
+JPEG, `IEND` for a PNG), no larger than ten megabytes, reached in at
 most three redirects, each over HTTPS to `covers.openlibrary.org`,
 `archive.org` or a host under `archive.org`, and never to an address by number.
 One request is made at a time, a `429` or `503` is waited out for as long as
