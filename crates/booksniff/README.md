@@ -89,12 +89,12 @@ one bad file does not stop a sweep.
 | `ole2` | The compound-file header every binary Word document starts with |
 | `epub` | A zip holding `mimetype` and `META-INF/container.xml` |
 | `zip-wrapped-pdf` | A zip whose only real member is one PDF |
-| `zip-wrapped-fb2` | A zip whose only real member is one FictionBook — the `.fb2.zip` most of them are passed around as |
-| `cbz` | A zip whose every real member is a page image: JPEG, PNG, GIF or WebP |
+| `zip-wrapped-fb2` | A zip whose only real member is named `.fb2` — the `.fb2.zip` most FictionBooks are passed around as |
+| `cbz` | A zip whose every real member is a page image (JPEG, PNG, GIF or WebP), and which carries a `ComicInfo.xml` or is itself named `.cbz` or `.cbr` |
 | `azw3`, `mobi` | A Palm database tagged `BOOKMOBI`, told apart by the format version inside the first record |
 | `lit` | `ITOLITLS`, Microsoft Reader's signature |
-| `rtf` | `{\rtf` at the front, after any byte-order mark and blank space |
-| `fb2` | XML whose root element is `FictionBook`, found by stepping over the declaration, comments and doctype in the first four kilobytes |
+| `rtf` | `{\rtf` at the front, after any byte-order mark and blank space, followed by the version digit, a space or the next control word |
+| `fb2` | XML whose root element is `FictionBook`, found by stepping over the declaration, comments and doctype in the first four kilobytes; UTF-16 with a byte-order mark is decoded first |
 | `html` | Markup at the front, after any byte-order mark |
 | `txt` | Text that is none of the above |
 | `unknown` | Anything else, with a note saying what was seen |
@@ -110,8 +110,17 @@ kind is there to stop exactly that.
 A comic is the pages and nothing else. Directories, the `ComicInfo.xml` a
 comic reader writes into the archive, and the desktop clutter every archive
 picks up are passed over; anything more — one PDF among the pages, a readme —
-and the zip is not a comic, and says what it holds instead. Only names are
-read, out of the archive's directory, so no member is ever unpacked.
+and the zip is not a comic, and says what it holds instead.
+
+A zip of pictures is as often a holiday as a comic, so images alone are not
+enough. It is a comic when it carries a `ComicInfo.xml`, or when its own name
+ends `.cbz` or `.cbr`. Otherwise it is `unknown`, with a note saying it is a
+zip of so many images and would be a comic book if its name said `.cbz`.
+
+Members are judged by name. Only the archive's directory is read, so no
+member is ever unpacked and a page called `001.jpg` is taken to be an image
+without its bytes being looked at. The same goes for a wrapped FictionBook:
+the one member is taken to be a FictionBook because its name ends `.fb2`.
 
 FictionBook is read as bytes rather than as text. A great many are written in
 windows-1251, which spells its markup in ASCII but is not UTF-8, and would

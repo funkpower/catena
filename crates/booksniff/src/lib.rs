@@ -36,7 +36,10 @@ const ARCHIVE_NOISE: &[&str] = &["__macosx/", ".ds_store", "thumbs.db"];
 
 /// What a comic book archive carries besides its pages: the catalogue entry
 /// comic readers write into it.
-const COMIC_NOISE: &[&str] = &["comicinfo.xml"];
+const COMIC_CATALOGUE: &str = "comicinfo.xml";
+
+/// The extensions that say an archive is a comic book.
+const COMIC_EXTENSIONS: &[&str] = &["cbz", "cbr"];
 
 /// The extensions of the images a comic book archive is made of.
 const PAGE_IMAGES: &[&str] = &[".jpg", ".jpeg", ".png", ".gif", ".webp"];
@@ -125,8 +128,23 @@ fn archive(source: &impl Bytes, doc: &mut Doc) -> Kind {
         doc.note(format!("a zip holding one FictionBook, {fb2:?}"));
         return Kind::ZipWrappedFb2;
     }
-    if is_comic(&names) {
-        return Kind::Cbz;
+    if let Some(pages) = comic_pages(&names) {
+        // A zip of pictures is as often a holiday as a comic, and only the
+        // names have been read. It is a comic when something says so: the
+        // catalogue entry a comic reader writes, or a name that claims it.
+        let named_comic = doc
+            .declared_ext
+            .as_deref()
+            .is_some_and(|ext| COMIC_EXTENSIONS.contains(&ext));
+        if pages.catalogued || named_comic {
+            return Kind::Cbz;
+        }
+        doc.note(format!(
+            "a zip of {} image{}, which would be a comic book if its name said .cbz",
+            pages.count,
+            if pages.count == 1 { "" } else { "s" }
+        ));
+        return Kind::Unknown;
     }
     if lower
         .iter()
@@ -160,23 +178,39 @@ fn sole_member<'a>(names: &'a [String], extension: &str) -> Option<&'a str> {
     }
 }
 
-/// Whether an archive is the pages of a comic and nothing else.
+/// The pages of an archive that is images and nothing else.
+struct Pages {
+    /// How many images there are.
+    count: usize,
+    /// Whether a comic reader's catalogue entry is there beside them.
+    catalogued: bool,
+}
+
+/// The pages, if an archive is images and nothing else.
 ///
 /// Every real member has to be an image. One PDF or one text file among the
-/// pages makes it something else, and saying what would be a guess.
-fn is_comic(names: &[String]) -> bool {
+/// pages makes it something else, and saying what would be a guess. Images
+/// are known by their names alone: only the archive's directory is read.
+fn comic_pages(names: &[String]) -> Option<Pages> {
+    let mut catalogued = false;
     let pages: Vec<String> = real_members(names)
         .into_iter()
         .map(|name| name.to_lowercase())
         .filter(|name| {
             let file = name.rsplit('/').next().unwrap_or(name);
-            !COMIC_NOISE.contains(&file)
+            let catalogue = file == COMIC_CATALOGUE;
+            catalogued |= catalogue;
+            !catalogue
         })
         .collect();
-    !pages.is_empty()
+    let all_images = !pages.is_empty()
         && pages
             .iter()
-            .all(|name| PAGE_IMAGES.iter().any(|image| name.ends_with(image)))
+            .all(|name| PAGE_IMAGES.iter().any(|image| name.ends_with(image)));
+    all_images.then_some(Pages {
+        count: pages.len(),
+        catalogued,
+    })
 }
 
 /// The members that carry content: no directories, no desktop clutter.
@@ -198,13 +232,24 @@ fn front(head: &[u8], doc: &mut Doc) -> Kind {
     // design but not always in practice, and a FictionBook is as often
     // windows-1251 as UTF-8.
     let lead = head.strip_prefix(BOM).unwrap_or(head).trim_ascii_start();
-    if lead.starts_with(RTF) {
+    if is_rtf(lead) {
         return Kind::Rtf;
     }
     if fb2::is_fictionbook(head) {
         return Kind::Fb2;
     }
     text(head, doc)
+}
+
+/// Whether `lead` opens an RTF document.
+///
+/// `{\rtf` has to be the whole control word: what follows it is the version,
+/// normally `1`, or the space or next control word that ends it. `{\rtfoo` is
+/// some other word that happens to start the same way.
+fn is_rtf(lead: &[u8]) -> bool {
+    lead.strip_prefix(RTF)
+        .and_then(|rest| rest.first())
+        .is_some_and(|next| next.is_ascii_digit() || next.is_ascii_whitespace() || *next == b'\\')
 }
 
 /// Text, markup, or nothing this knows.
@@ -432,8 +477,21 @@ mod tests {
     #[test]
     fn rtf_cut_short_of_its_control_word_is_not_rtf() {
         assert_eq!(sniff(&br"{\rt".as_slice(), "a.rtf").kind, Kind::Txt);
+        assert_eq!(sniff(&br"{\rtf".as_slice(), "a.rtf").kind, Kind::Txt);
         assert_eq!(kind_of(br"{\rtx1", "a.rtf"), Kind::Txt);
         assert_eq!(kind_of(br"text {\rtf1", "a.rtf"), Kind::Txt);
+    }
+
+    #[test]
+    fn rtf_is_the_whole_control_word() {
+        assert_eq!(kind_of(br"{\rtf\ansi\deff0", "a.rtf"), Kind::Rtf);
+        assert_eq!(kind_of(b"{\\rtf \\ansi", "a.rtf"), Kind::Rtf);
+        assert_eq!(kind_of(b"{\\rtf\r\n\\ansi", "a.rtf"), Kind::Rtf);
+        assert_eq!(kind_of(br"{\rtf2", "a.rtf"), Kind::Rtf);
+
+        assert_eq!(kind_of(br"{\rtfoo bar}", "a.rtf"), Kind::Txt);
+        assert_eq!(kind_of(br"{\rtf}", "a.rtf"), Kind::Txt);
+        assert_eq!(kind_of(br"{\rtf-1", "a.rtf"), Kind::Txt);
     }
 
     #[test]
@@ -469,6 +527,28 @@ mod tests {
 
         let feed = b"<?xml version=\"1.0\"?>\n<rss version=\"2.0\"><channel>";
         assert_eq!(kind_of(feed, "feed.xml"), Kind::Html);
+    }
+
+    #[test]
+    fn a_utf16_fictionbook_is_recognised_in_either_byte_order() {
+        let book = "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\n<FictionBook>";
+        for big_endian in [false, true] {
+            let mut bytes = if big_endian {
+                vec![0xfe, 0xff]
+            } else {
+                vec![0xff, 0xfe]
+            };
+            for unit in book.encode_utf16() {
+                bytes.extend_from_slice(&if big_endian {
+                    unit.to_be_bytes()
+                } else {
+                    unit.to_le_bytes()
+                });
+            }
+            let doc = sniff(&padded(&bytes).as_slice(), "mill.fb2");
+            assert_eq!(doc.kind, Kind::Fb2, "big-endian: {big_endian}");
+            assert!(doc.notes.is_empty(), "{:?}", doc.notes);
+        }
     }
 
     #[test]
@@ -526,11 +606,55 @@ mod tests {
     }
 
     #[test]
-    fn a_comic_saved_as_a_zip_is_remarked_on() {
-        let doc = archive_of(&["001.jpg", "002.jpg"], "issue-1.zip");
+    fn a_zip_of_photographs_is_not_a_comic() {
+        let doc = archive_of(&["IMG_0001.jpg", "IMG_0002.jpg"], "holiday.zip");
+        assert_eq!(doc.kind, Kind::Unknown);
+        assert!(
+            doc.notes.iter().any(|note| note
+                == "a zip of 2 images, which would be a comic book if its name said .cbz"),
+            "{:?}",
+            doc.notes
+        );
+
+        let one = archive_of(&["IMG_0001.jpg"], "holiday.zip");
+        assert!(
+            one.notes
+                .iter()
+                .any(|note| note.starts_with("a zip of 1 image,")),
+            "{:?}",
+            one.notes
+        );
+    }
+
+    #[test]
+    fn the_same_images_named_as_a_comic_are_one() {
+        let doc = archive_of(&["IMG_0001.jpg", "IMG_0002.jpg"], "holiday.cbz");
         assert_eq!(doc.kind, Kind::Cbz);
         assert!(
-            doc.notes.iter().any(|note| note.contains("comic")),
+            !doc.notes.iter().any(|note| note.contains("named .")),
+            "{:?}",
+            doc.notes
+        );
+
+        // A comic zipped and named as if it were RAR is still a comic, and
+        // the name is remarked on.
+        let rar = archive_of(&["001.jpg", "002.jpg"], "issue-1.cbr");
+        assert_eq!(rar.kind, Kind::Cbz);
+        assert!(
+            rar.notes.iter().any(|note| note.contains("named .cbr")),
+            "{:?}",
+            rar.notes
+        );
+    }
+
+    #[test]
+    fn a_comic_saved_as_a_zip_is_known_by_its_catalogue_and_remarked_on() {
+        let doc = archive_of(&["001.jpg", "002.jpg", "ComicInfo.xml"], "issue-1.zip");
+        assert_eq!(doc.kind, Kind::Cbz);
+        assert!(
+            doc.notes
+                .iter()
+                .any(|note| note == "named .zip, but the bytes say a comic book archive"),
             "{:?}",
             doc.notes
         );
