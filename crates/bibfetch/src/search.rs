@@ -23,22 +23,28 @@ pub const MAX_LIMIT: usize = 40;
 /// What Open Library's index is asked to say about each work, and about the
 /// one edition of it that best matches the search.
 ///
-/// Not the work's own `cover_i` or `cover_edition_key`: the cover the index
-/// chose for a work is often another edition's. The edition's `cover_i` is
-/// the first cover in that edition's record, which is what a lookup by ISBN
-/// gives as `cover_id`.
-const OPEN_LIBRARY_FIELDS: &str = "key,title,subtitle,author_name,first_publish_year,publisher,\
-isbn,language,subject,number_of_pages_median,editions,editions.key,editions.isbn,\
-editions.publisher,editions.language,editions.publish_date,editions.cover_i";
+/// Of the work, only what describes the work: its publishers, ISBNs,
+/// languages, years and page counts are every edition's at once, and a
+/// record made from them would describe no edition. Not the work's own
+/// `cover_i` or `cover_edition_key` either: the cover the index chose for a
+/// work is often another edition's. The edition's `cover_i` is the first
+/// cover in that edition's record, which is what a lookup by ISBN gives as
+/// `cover_id`.
+const OPEN_LIBRARY_FIELDS: &str = "key,title,subtitle,author_name,subject,editions,editions.key,\
+editions.isbn,editions.publisher,editions.language,editions.publish_date,editions.cover_i";
+
+/// Where Google Books is asked.
+const GOOGLE_BOOKS: &str = "https://www.googleapis.com/books/v1/volumes";
 
 /// Ask which books a register has under a title, and by an author if one is
 /// named.
 ///
 /// Open Library's index first, and Google Books only when that answered with
-/// nothing. A register being down is a failure only when every register
-/// asked is: Open Library answering that it has nothing is an answer, and it
-/// stands when Google Books cannot be reached. Asks nothing when `limit` is
-/// zero; a `limit` over [`MAX_LIMIT`] is taken as that.
+/// nothing. Once Google Books has been asked, its failure is the answer:
+/// [`Error::Limited`] when it refused for its quota, [`Error::Unreachable`]
+/// when it could not be reached, since saying no register has the title
+/// would be a claim no register made. Asks nothing when `limit` is zero; a
+/// `limit` over [`MAX_LIMIT`] is taken as that.
 pub fn search(
     agent: &ureq::Agent,
     title: &str,
@@ -46,9 +52,7 @@ pub fn search(
     limit: usize,
     attempts: u32,
 ) -> Result<Vec<Record>, Error> {
-    search_with(title, author, limit, |url| {
-        crate::ask::get(agent, url, attempts)
-    })
+    search_with(title, author, limit, |url| get(agent, url, attempts))
 }
 
 /// [`search`], with how to fetch an address passed in.
@@ -81,16 +85,60 @@ fn search_with(
         return open_library;
     }
 
-    let google = match google_url(title, author, limit) {
-        Some(url) => fetch(url).and_then(|body| google_books(&body, limit)),
+    let Some(url) = google_url(title, author, limit) else {
         // Nothing in the title Google could be asked by.
-        None => Ok(Vec::new()),
+        return open_library;
     };
-    match (open_library, google) {
-        (_, Ok(found)) if !found.is_empty() => Ok(found),
-        (Ok(none), _) => Ok(none),
-        (Err(why), _) => Err(why),
+    let google = fetch(url).and_then(|body| google_books(&body, limit))?;
+    if google.is_empty() {
+        // Open Library's nothing, or its failure, which Google Books having
+        // nothing either does not excuse.
+        return open_library;
     }
+    Ok(google)
+}
+
+/// The body at an address, asked as a lookup asks, or `None` when the
+/// register says there is no such thing.
+///
+/// Except that Google Books refusing for its quota is [`Error::Limited`]: a
+/// `403` at once, since it is the day's quota and asking again within
+/// seconds will not move it, and a `429` once every attempt has been refused.
+fn get(agent: &ureq::Agent, url: &str, attempts: u32) -> Result<Option<String>, Error> {
+    let attempts = attempts.max(1);
+    let mut last = Error::Unreachable("no attempt was made".into());
+    for attempt in 0..attempts {
+        match agent.get(url).call() {
+            Ok(mut response) => {
+                return response
+                    .body_mut()
+                    .read_to_string()
+                    .map(Some)
+                    .map_err(|e| Error::Unreachable(e.to_string()));
+            }
+            Err(ureq::Error::StatusCode(404)) => return Ok(None),
+            Err(ureq::Error::StatusCode(status)) => match refused(url, status) {
+                Some(why) if status == 403 => return Err(why),
+                Some(why) => last = why,
+                None => last = Error::Unreachable(format!("{url}: answered {status}")),
+            },
+            Err(e) => last = Error::Unreachable(e.to_string()),
+        }
+        if attempt + 1 < attempts {
+            std::thread::sleep(std::time::Duration::from_secs(1 << attempt.min(5)));
+        }
+    }
+    Err(last)
+}
+
+/// The refusal a status from a register is, when it is one for asking too
+/// often.
+fn refused(url: &str, status: u16) -> Option<Error> {
+    (url.starts_with(GOOGLE_BOOKS) && matches!(status, 403 | 429)).then(|| {
+        Error::Limited(format!(
+            "Google Books refused ({status}): its quota for this address is spent for now"
+        ))
+    })
 }
 
 /// Where to ask Open Library.
@@ -124,7 +172,7 @@ fn google_url(title: &str, author: Option<&str>, limit: usize) -> Option<String>
         return None;
     }
     Some(format!(
-        "https://www.googleapis.com/books/v1/volumes?q={}&maxResults={limit}",
+        "{GOOGLE_BOOKS}?q={}&maxResults={limit}",
         source::encode(&terms.join(" "))
     ))
 }
@@ -162,17 +210,7 @@ struct Work {
     #[serde(default)]
     author_name: Vec<String>,
     #[serde(default)]
-    first_publish_year: Option<i64>,
-    #[serde(default)]
-    publisher: Vec<String>,
-    #[serde(default)]
-    isbn: Vec<String>,
-    #[serde(default)]
-    language: Vec<String>,
-    #[serde(default)]
     subject: Vec<String>,
-    #[serde(default)]
-    number_of_pages_median: Option<u32>,
     #[serde(default)]
     editions: Option<Editions>,
 }
@@ -212,10 +250,11 @@ fn olid(key: &str) -> Option<String> {
 /// Read Open Library's answer into one candidate per work, in its order.
 ///
 /// What belongs to an edition — its ISBN, publisher, language, year and
-/// cover — is taken from the edition the index chose as matching best; what
-/// belongs to the work — its title, authors, subjects and length — from the
-/// work. A work the index names no edition of gives its first ISBN that reads,
-/// which may be any edition's, and no cover id.
+/// cover — is taken from the edition the index chose as matching best, and
+/// left out when that edition does not give it; only the title, authors and
+/// subjects, which describe the work, are the work's. A work the index names
+/// no edition of is named by the work's key and says nothing an edition
+/// would.
 fn open_library(body: &str, limit: usize) -> Result<Vec<Record>, Error> {
     let reply: OpenLibraryReply =
         serde_json::from_str(body).map_err(|e| Error::Shape(e.to_string()))?;
@@ -228,26 +267,47 @@ fn open_library(body: &str, limit: usize) -> Result<Vec<Record>, Error> {
 }
 
 fn candidate(work: Work) -> Option<Record> {
-    let edition = work.editions.and_then(|e| e.docs.into_iter().next());
+    // The edition, and what it is named by: its ISBN, or its key when it has
+    // none. One with neither cannot be named, and is as good as none.
+    let edition = work
+        .editions
+        .and_then(|e| e.docs.into_iter().next())
+        .and_then(|edition| {
+            match first_isbn(edition.isbn.iter().map(String::as_str)) {
+                Some(isbn) => Some((isbn, "isbn")),
+                None => edition
+                    .key
+                    .as_deref()
+                    .and_then(olid)
+                    .map(|key| (key, "olid")),
+            }
+            .map(|named| (named, edition))
+        });
 
-    // The cover is kept only when the record names the edition it is the
-    // cover of, by that edition's ISBN or its key.
-    let (id, kind, edition_named) = match &edition {
-        Some(edition) => match first_isbn(edition.isbn.iter().map(String::as_str)) {
-            Some(isbn) => (isbn, "isbn", true),
-            None => match edition.key.as_deref().and_then(olid) {
-                Some(key) => (key, "olid", true),
-                None => (work.key.as_deref().and_then(olid)?, "olid", false),
-            },
-        },
-        None => match first_isbn(work.isbn.iter().map(String::as_str)) {
-            Some(isbn) => (isbn, "isbn", false),
+    let mut record = match edition {
+        Some(((id, kind), edition)) => {
+            let mut record = source::blank(&id, kind, Source::OpenLibrarySearch);
+            record.container = edition.publisher.into_iter().next();
+            record.language = edition.language.into_iter().next();
+            record.year = edition
+                .publish_date
+                .iter()
+                .find_map(|date| source::year_in(date));
+            record.cover_id = edition
+                .cover_i
+                .and_then(|id| u64::try_from(id).ok())
+                .filter(|id| *id > 0);
+            record
+        }
+        // The work's own ISBNs, publishers and years are its editions', and
+        // which belongs with which the index does not say.
+        None => source::blank(
             // A work with no key cannot be named, so it is not a candidate.
-            None => (work.key.as_deref().and_then(olid)?, "olid", false),
-        },
+            &work.key.as_deref().and_then(olid)?,
+            "olid",
+            Source::OpenLibrarySearch,
+        ),
     };
-
-    let mut record = source::blank(&id, kind, Source::OpenLibrarySearch);
     record.title = match (work.title, work.subtitle) {
         (Some(title), Some(subtitle)) => Some(format!("{title}: {subtitle}")),
         (title, _) => title,
@@ -255,30 +315,6 @@ fn candidate(work: Work) -> Option<Record> {
     record.authors = work.author_name;
     record.subjects = work.subject;
     record.subjects.truncate(SUBJECT_LIMIT);
-    record.pages = work.number_of_pages_median;
-
-    let (publisher, language, year) = match edition {
-        Some(edition) => {
-            if edition_named {
-                record.cover_id = edition
-                    .cover_i
-                    .and_then(|id| u64::try_from(id).ok())
-                    .filter(|id| *id > 0);
-            }
-            (
-                edition.publisher.into_iter().next(),
-                edition.language.into_iter().next(),
-                edition
-                    .publish_date
-                    .iter()
-                    .find_map(|date| source::year_in(date)),
-            )
-        }
-        None => (None, None, None),
-    };
-    record.container = publisher.or_else(|| work.publisher.into_iter().next());
-    record.language = language.or_else(|| work.language.into_iter().next());
-    record.year = year.or(work.first_publish_year);
     Some(record)
 }
 
@@ -312,8 +348,9 @@ mod tests {
     use super::*;
 
     /// Open Library's answer to `title=the first world war&author=howard`,
-    /// recorded 2026-11-13 with the fields above and `limit=2`, the ISBN and
-    /// subject lists shortened.
+    /// recorded 2026-11-13 with `limit=2`, the ISBN and subject lists
+    /// shortened, and with the work's own publishers, ISBNs, years and length,
+    /// which are not asked for and are read past when they come.
     const HOWARD: &str = r#"{"numFound": 9, "start": 0, "numFoundExact": true, "num_found": 9,
         "documentation_url": "https://openlibrary.org/dev/docs/api/search", "q": "", "offset": null,
         "docs": [
@@ -420,7 +457,8 @@ mod tests {
         assert_eq!(first.container.as_deref(), Some("Oxford University Press"));
         assert_eq!(first.language.as_deref(), Some("eng"));
         assert_eq!(first.subjects, ["World War, 1914-1918"]);
-        assert_eq!(first.pages, Some(154));
+        // The work's median length is no edition's.
+        assert_eq!(first.pages, None);
         assert_eq!(first.cover_id, Some(1123124));
 
         let second = &found[1];
@@ -474,17 +512,64 @@ mod tests {
     }
 
     #[test]
-    fn a_work_with_no_edition_named_gives_its_isbn_but_no_cover() {
-        let body = r#"{"docs": [{"key": "/works/OL1W", "title": "A Book",
-            "isbn": ["0-306-40615-2"], "publisher": ["Plenum"], "first_publish_year": 1981}]}"#;
+    fn what_the_edition_does_not_give_is_left_out_not_taken_from_the_work() {
+        let body = r#"{"docs": [{"key": "/works/OL267171W", "title": "War and Peace",
+            "author_name": ["Leo Tolstoy"], "subject": ["Napoleonic Wars"],
+            "first_publish_year": 1867, "publisher": ["Crowell"], "language": ["eng"],
+            "number_of_pages_median": 1296,
+            "editions": {"docs": [{"key": "/books/OL1M", "isbn": ["9780199232765"],
+              "cover_i": 5}]}}]}"#;
         let found = open_library(body, 5).expect("candidates");
+        let only = &found[0];
         assert_eq!(
-            (found[0].id.as_str(), found[0].kind.as_str()),
-            ("9780306406157", "isbn")
+            (only.id.as_str(), only.kind.as_str()),
+            ("9780199232765", "isbn")
         );
-        assert_eq!(found[0].container.as_deref(), Some("Plenum"));
-        assert_eq!(found[0].year, Some(1981));
-        assert_eq!(found[0].cover_id, None);
+        assert_eq!(only.cover_id, Some(5));
+        // 1867 and Crowell are other editions'.
+        assert_eq!(only.year, None);
+        assert_eq!(only.container, None);
+        assert_eq!(only.language, None);
+        assert_eq!(only.pages, None);
+        // What describes the work is the work's.
+        assert_eq!(only.title.as_deref(), Some("War and Peace"));
+        assert_eq!(only.authors, ["Leo Tolstoy"]);
+        assert_eq!(only.subjects, ["Napoleonic Wars"]);
+    }
+
+    #[test]
+    fn a_work_with_no_edition_named_is_named_by_its_key_and_says_nothing_an_edition_would() {
+        let work = r#""key": "/works/OL1W", "title": "A Book", "author_name": ["A. Writer"],
+            "isbn": ["0-306-40615-2"], "publisher": ["Plenum"], "first_publish_year": 1981,
+            "language": ["eng"], "number_of_pages_median": 300"#;
+        // No edition, and an edition with neither an ISBN nor a key.
+        for editions in [
+            "",
+            r#", "editions": {"docs": [{"publisher": ["Plenum"], "cover_i": 7}]}"#,
+        ] {
+            let body = format!(r#"{{"docs": [{{{work}{editions}}}]}}"#);
+            let found = open_library(&body, 5).expect("candidates");
+            let only = &found[0];
+            // Not 9780306406157: which edition that is, the index does not say.
+            assert_eq!(
+                (only.id.as_str(), only.kind.as_str()),
+                ("OL1W", "olid"),
+                "{body}"
+            );
+            assert_eq!(only.title.as_deref(), Some("A Book"));
+            assert_eq!(only.authors, ["A. Writer"]);
+            assert_eq!(
+                (
+                    only.year,
+                    only.container.as_deref(),
+                    only.language.as_deref(),
+                    only.pages,
+                    only.cover_id
+                ),
+                (None, None, None, None, None),
+                "{body}"
+            );
+        }
     }
 
     #[test]
@@ -593,15 +678,45 @@ mod tests {
     }
 
     #[test]
-    fn open_library_having_nothing_stands_when_google_books_is_down() {
+    fn google_books_down_after_open_library_had_nothing_is_a_failure() {
         let mut asked = Vec::new();
         let bodies = [
             ("openlibrary.org", Ok(NOTHING)),
             ("googleapis.com", Err(down())),
         ];
-        let found =
-            search_with("Nothing", None, 5, recorded(&mut asked, &bodies)).expect("an answer");
-        assert!(found.is_empty());
+        let failed = search_with("Nothing", None, 5, recorded(&mut asked, &bodies));
+        assert!(matches!(failed, Err(Error::Unreachable(_))), "{failed:?}");
+        assert_eq!(asked.len(), 2);
+    }
+
+    #[test]
+    fn google_books_refusing_for_its_quota_is_said_to_be_that() {
+        let mut asked = Vec::new();
+        let limited = refused(&google_url("Nothing", None, 5).expect("a url"), 429);
+        let bodies = [
+            ("openlibrary.org", Ok(NOTHING)),
+            ("googleapis.com", Err(limited.expect("a refusal"))),
+        ];
+        let failed = search_with("Nothing", None, 5, recorded(&mut asked, &bodies));
+        assert!(matches!(failed, Err(Error::Limited(_))), "{failed:?}");
+    }
+
+    #[test]
+    fn only_google_books_quota_statuses_are_refusals() {
+        let google = google_url("Anathem", None, 5).expect("a url");
+        for status in [403, 429] {
+            assert!(
+                matches!(refused(&google, status), Some(Error::Limited(_))),
+                "{status}"
+            );
+        }
+        for status in [400, 500, 503] {
+            assert!(refused(&google, status).is_none(), "{status}");
+        }
+        let open_library = open_library_url("Anathem", None, 5);
+        for status in [403, 429] {
+            assert!(refused(&open_library, status).is_none(), "{status}");
+        }
     }
 
     #[test]
