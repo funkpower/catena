@@ -86,7 +86,7 @@ is a failure — nobody replied, and the identifier may be perfectly good.
 |---|---|---|
 | `doi` | Crossref | It assigns most scholarly DOIs |
 | `arxiv` | the arXiv | Its own register of preprints |
-| `isbn` | OpenLibrary's edition record, then its index, then Google Books | Books, without a key |
+| `isbn` | OpenLibrary's index, then its edition record, then Google Books | Books, without a key |
 
 One register is enough for a DOI or a preprint: the body that assigns the
 identifier is the only one that has it. A book is different. An ISBN is
@@ -96,6 +96,14 @@ edition record names its authors by key rather than by name, and its index
 names them. So the registers are asked in turn and the first complete answer
 wins. An incomplete one is kept in case nothing better comes, and a register
 being down is a failure only when every register is.
+
+OpenLibrary's index answers about the work, not the edition: its publishers,
+languages, years and page counts are every edition's at once, and the first
+of each is usually another edition's. So for a book it gives only the title,
+the authors and the subjects, and the `container`, `language`, `year` and
+`pages` of a record come from the edition record for that ISBN, or from
+Google Books when the edition record does not say. A field neither gives is
+left out rather than filled from the work.
 
 Google Books is asked last because it answers anonymous callers only until a
 daily quota runs out, after which it replies `429` to everyone sharing the
