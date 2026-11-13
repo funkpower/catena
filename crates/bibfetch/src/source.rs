@@ -117,7 +117,7 @@ number_of_pages_median&limit=1",
 ///
 /// A DOI suffix may hold a slash, a question mark or a hash, and every one of
 /// those means something else in a URL.
-fn encode(text: &str) -> String {
+pub(crate) fn encode(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for byte in text.bytes() {
         match byte {
@@ -131,7 +131,7 @@ fn encode(text: &str) -> String {
 }
 
 /// A record with the fields nothing found fills in.
-fn blank(id: &str, kind: &str, source: Source) -> Record {
+pub(crate) fn blank(id: &str, kind: &str, source: Source) -> Record {
     let mut record = crate::missing(id, kind, source);
     record.found = true;
     record
@@ -320,7 +320,7 @@ struct SearchDoc {
 /// The index lists every heading every edition has ever been given, which on a
 /// well-known book is hundreds and on Hamlet is thousands. A shelf is filed
 /// from a handful, and the first are the broadest.
-const SUBJECT_LIMIT: usize = 12;
+pub(crate) const SUBJECT_LIMIT: usize = 12;
 
 /// A search that matched nothing answers with no documents rather than a
 /// status, so an empty reply is the absence and not a failure.
@@ -348,19 +348,22 @@ fn open_library_search(id: &str, kind: &str, body: &str) -> Result<Record, Error
 }
 
 #[derive(Deserialize)]
-struct GoogleReply {
+pub(crate) struct GoogleReply {
     #[serde(default)]
-    items: Vec<GoogleItem>,
+    pub(crate) items: Vec<GoogleItem>,
 }
 
 #[derive(Deserialize)]
-struct GoogleItem {
+pub(crate) struct GoogleItem {
+    /// Google's own key for the volume.
+    #[serde(default)]
+    pub(crate) id: Option<String>,
     #[serde(rename = "volumeInfo", default)]
-    volume_info: GoogleVolume,
+    pub(crate) volume_info: GoogleVolume,
 }
 
 #[derive(Deserialize, Default)]
-struct GoogleVolume {
+pub(crate) struct GoogleVolume {
     #[serde(default)]
     title: Option<String>,
     #[serde(default)]
@@ -379,6 +382,18 @@ struct GoogleVolume {
     language: Option<String>,
     #[serde(rename = "pageCount", default)]
     page_count: Option<u32>,
+    /// `[{"type": "ISBN_13", "identifier": "…"}]`, alongside library
+    /// shelfmarks typed `OTHER`.
+    #[serde(rename = "industryIdentifiers", default)]
+    pub(crate) identifiers: Vec<GoogleIdentifier>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct GoogleIdentifier {
+    #[serde(rename = "type", default)]
+    pub(crate) kind: String,
+    #[serde(default)]
+    pub(crate) identifier: String,
 }
 
 /// A search that matched nothing answers with no items rather than a status,
@@ -388,8 +403,11 @@ fn google_books(id: &str, kind: &str, body: &str) -> Result<Record, Error> {
     let Some(item) = reply.items.into_iter().next() else {
         return Ok(crate::missing(id, kind, Source::GoogleBooks));
     };
-    let volume = item.volume_info;
+    Ok(google_volume(id, kind, item.volume_info))
+}
 
+/// One Google Books volume as a record.
+pub(crate) fn google_volume(id: &str, kind: &str, volume: GoogleVolume) -> Record {
     let mut record = blank(id, kind, Source::GoogleBooks);
     record.title = match (volume.title, volume.subtitle) {
         (Some(title), Some(subtitle)) => Some(format!("{title}: {subtitle}")),
@@ -402,11 +420,11 @@ fn google_books(id: &str, kind: &str, body: &str) -> Result<Record, Error> {
     record.subjects = volume.categories;
     record.language = volume.language;
     record.pages = volume.page_count;
-    Ok(record)
+    record
 }
 
 /// The first four-digit year in a string.
-fn year_in(text: &str) -> Option<i64> {
+pub(crate) fn year_in(text: &str) -> Option<i64> {
     let bytes: Vec<char> = text.chars().collect();
     for window in bytes.windows(4) {
         if window.iter().all(char::is_ascii_digit) {

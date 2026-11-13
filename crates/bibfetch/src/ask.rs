@@ -89,10 +89,6 @@ pub fn lookup(
 }
 
 /// Ask a register, retrying a failure that might not be one.
-///
-/// Waits a second before the second attempt and two before the third: long
-/// enough for a register that is rate-limiting, short enough that one which
-/// is simply down does not hold up a pipeline.
 fn ask(
     agent: &ureq::Agent,
     source: Source,
@@ -100,39 +96,48 @@ fn ask(
     kind: &str,
     attempts: u32,
 ) -> Result<crate::Record, Error> {
-    let mut last = Error::Unreachable("no attempt was made".into());
+    match get(agent, &source.url(id), attempts)? {
+        Some(body) => source.read(id, kind, &body),
+        // A register that does not have it says so with a status, and that is
+        // an answer rather than a failure.
+        None => Ok(crate::missing(id, kind, source)),
+    }
+}
 
-    for attempt in 0..attempts.max(1) {
-        match fetch(agent, source, id, kind) {
-            Ok(record) => return Ok(record),
-            // A shape this cannot read will not read any better next time.
-            Err(e @ Error::Shape(_)) => return Err(e),
+/// The body at an address, or `None` when the register says it has no such
+/// thing; a failure is asked again.
+///
+/// Waits a second before the second attempt and two before the third: long
+/// enough for a register that is rate-limiting, short enough that one which
+/// is simply down does not hold up a pipeline. Reading what came back is left
+/// to the caller, because an answer this cannot read will not read any better
+/// next time.
+pub(crate) fn get(agent: &ureq::Agent, url: &str, attempts: u32) -> Result<Option<String>, Error> {
+    let attempts = attempts.max(1);
+    let mut last = Error::Unreachable("no attempt was made".into());
+    for attempt in 0..attempts {
+        match once(agent, url) {
+            Ok(answer) => return Ok(answer),
             Err(e) => last = e,
         }
-        std::thread::sleep(Duration::from_secs(1 << attempt));
+        if attempt + 1 < attempts {
+            std::thread::sleep(Duration::from_secs(1 << attempt.min(5)));
+        }
     }
     Err(last)
 }
 
-fn fetch(
-    agent: &ureq::Agent,
-    source: Source,
-    id: &str,
-    kind: &str,
-) -> Result<crate::Record, Error> {
-    let response = agent.get(source.url(id)).call();
-    let mut response = match response {
+fn once(agent: &ureq::Agent, url: &str) -> Result<Option<String>, Error> {
+    let mut response = match agent.get(url).call() {
         Ok(response) => response,
-        // A register that does not have it says so with a status, and that is
-        // an answer rather than a failure.
-        Err(ureq::Error::StatusCode(404)) => return Ok(crate::missing(id, kind, source)),
+        Err(ureq::Error::StatusCode(404)) => return Ok(None),
         Err(e) => return Err(Error::Unreachable(e.to_string())),
     };
-    let body = response
+    response
         .body_mut()
         .read_to_string()
-        .map_err(|e| Error::Unreachable(e.to_string()))?;
-    source.read(id, kind, &body)
+        .map(Some)
+        .map_err(|e| Error::Unreachable(e.to_string()))
 }
 
 /// Who is asking.

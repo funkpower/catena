@@ -12,9 +12,14 @@
 //! them: Crossref for a DOI, the arXiv for a preprint, OpenLibrary for a
 //! book. There is no register for an ISSN that answers without a key, so an
 //! ISSN is looked up as the journal of a work rather than on its own.
+//!
+//! A book with no identifier at all can still be looked for by its title,
+//! with [`search()`]: Open Library's index, then Google Books, each candidate
+//! a record of one edition, in the order the register gave them.
 
 pub mod ask;
 pub mod cover;
+pub mod search;
 pub mod source;
 
 use std::time::Duration;
@@ -23,6 +28,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub use cover::{Cover, CoverSize, cover};
+pub use search::search;
 pub use source::Source;
 
 /// How long to wait on a register before giving up.
