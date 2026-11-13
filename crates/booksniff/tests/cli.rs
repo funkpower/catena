@@ -65,6 +65,30 @@ fn several_files_come_back_as_several_records() {
 }
 
 #[test]
+fn the_formats_read_from_the_front_come_back_by_their_wire_names() {
+    let rtf = written("letter.rtf", &padded(br"{\rtf1\ansi"));
+    let lit = written("book.lit", &padded(b"ITOLITLS"));
+    let fb2 = written(
+        "mill.fb2",
+        &padded(b"<?xml version=\"1.0\"?>\n<FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\">"),
+    );
+    let out = run(&[
+        rtf.to_str().expect("utf-8 path"),
+        lit.to_str().expect("utf-8 path"),
+        fb2.to_str().expect("utf-8 path"),
+    ]);
+    assert_eq!(out.status.code(), Some(0));
+    let kinds: Vec<String> = String::from_utf8(out.stdout)
+        .expect("utf-8")
+        .lines()
+        .map(|line| {
+            serde_json::from_str::<serde_json::Value>(line).expect("valid JSON")["kind"].to_string()
+        })
+        .collect();
+    assert_eq!(kinds, ["\"rtf\"", "\"lit\"", "\"fb2\""]);
+}
+
+#[test]
 fn a_file_that_is_not_there_is_an_io_error_and_the_rest_still_run() {
     let path = written("kept.pdf", &padded(b"%PDF-1.7"));
     let out = run(&[

@@ -78,11 +78,11 @@ fn directory_start(source: &impl Bytes) -> Option<(usize, u64)> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     /// Build a zip holding `names`, each with empty stored content.
-    fn zip(names: &[&str]) -> Vec<u8> {
+    pub(crate) fn zip(names: &[&str]) -> Vec<u8> {
         let mut out: Vec<u8> = Vec::new();
         let mut offsets = Vec::new();
         for name in names {
