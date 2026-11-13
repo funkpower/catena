@@ -77,6 +77,12 @@ pub enum Kind {
     Azw3,
     /// Amazon MOBI.
     Mobi,
+    /// Microsoft Reader.
+    Lit,
+    /// FictionBook, the XML ebook format.
+    Fb2,
+    /// Rich Text Format.
+    Rtf,
     /// Plain text.
     Txt,
     /// HTML or XHTML.
@@ -85,6 +91,10 @@ pub enum Kind {
     Ole2,
     /// A zip archive whose only real content is a single PDF.
     ZipWrappedPdf,
+    /// A zip archive whose only real content is a single FictionBook.
+    ZipWrappedFb2,
+    /// A comic book archive: a zip of page images.
+    Cbz,
     /// Recognised as none of the above.
     Unknown,
 }
@@ -118,6 +128,11 @@ mod tests {
             (Kind::Ole2, "\"ole2\""),
             (Kind::Azw3, "\"azw3\""),
             (Kind::ZipWrappedPdf, "\"zip-wrapped-pdf\""),
+            (Kind::ZipWrappedFb2, "\"zip-wrapped-fb2\""),
+            (Kind::Fb2, "\"fb2\""),
+            (Kind::Lit, "\"lit\""),
+            (Kind::Rtf, "\"rtf\""),
+            (Kind::Cbz, "\"cbz\""),
             (Kind::Unknown, "\"unknown\""),
         ];
         for (kind, wire) in cases {

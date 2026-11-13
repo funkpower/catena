@@ -26,8 +26,8 @@ file too small to be a book, a name that says "sample".
   cover images that ended up in a folder of PDFs.
 
 A library accumulates files that lie: a DjVu named `.pdf`, a Word document
-named `.epub`, an EPUB saved as `.zip`, a single PDF that somebody zipped and
-renamed back to `.pdf`.
+named `.epub`, an RTF saved as `.doc`, an EPUB saved as `.zip`, a single PDF
+that somebody zipped and renamed back to `.pdf`.
 
 ## Install
 
@@ -89,7 +89,12 @@ one bad file does not stop a sweep.
 | `ole2` | The compound-file header every binary Word document starts with |
 | `epub` | A zip holding `mimetype` and `META-INF/container.xml` |
 | `zip-wrapped-pdf` | A zip whose only real member is one PDF |
+| `zip-wrapped-fb2` | A zip whose only real member is one FictionBook — the `.fb2.zip` most of them are passed around as |
+| `cbz` | A zip whose every real member is a page image: JPEG, PNG, GIF or WebP |
 | `azw3`, `mobi` | A Palm database tagged `BOOKMOBI`, told apart by the format version inside the first record |
+| `lit` | `ITOLITLS`, Microsoft Reader's signature |
+| `rtf` | `{\rtf` at the front, after any byte-order mark and blank space |
+| `fb2` | XML whose root element is `FictionBook`, found by stepping over the declaration, comments and doctype in the first four kilobytes |
 | `html` | Markup at the front, after any byte-order mark |
 | `txt` | Text that is none of the above |
 | `unknown` | Anything else, with a note saying what was seen |
@@ -97,6 +102,20 @@ one bad file does not stop a sweep.
 An archive holding several PDFs is a collection, not a wrapped book: choosing
 among them would be a guess, and naming one chapter as the whole work is worse
 than refusing.
+
+A zipped FictionBook is reported as wrapped rather than as `fb2`, the same way
+a zipped PDF is: a converter handed it as FictionBook is handed a zip, and the
+kind is there to stop exactly that.
+
+A comic is the pages and nothing else. Directories, the `ComicInfo.xml` a
+comic reader writes into the archive, and the desktop clutter every archive
+picks up are passed over; anything more — one PDF among the pages, a readme —
+and the zip is not a comic, and says what it holds instead. Only names are
+read, out of the archive's directory, so no member is ever unpacked.
+
+FictionBook is read as bytes rather than as text. A great many are written in
+windows-1251, which spells its markup in ASCII but is not UTF-8, and would
+otherwise be called binary.
 
 ## As a library
 

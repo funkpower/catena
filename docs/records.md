@@ -19,7 +19,7 @@ Part of [catena](../README.md).
 | Field | Meaning |
 |---|---|
 | `path` | Where the file was read from, as given |
-| `kind` | `pdf`, `epub`, `djvu`, `azw3`, `mobi`, `txt`, `html`, `ole2`, `zip-wrapped-pdf`, `unknown` |
+| `kind` | `pdf`, `epub`, `djvu`, `azw3`, `mobi`, `lit`, `fb2`, `rtf`, `txt`, `html`, `ole2`, `cbz`, `zip-wrapped-pdf`, `zip-wrapped-fb2`, `unknown` |
 | `declared_ext` | The extension the name claimed, lowercased, without the dot |
 | `bytes` | Size on disk |
 | `pages` | Page count, for paginated formats |

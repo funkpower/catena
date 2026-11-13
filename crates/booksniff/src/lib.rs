@@ -9,6 +9,7 @@
 //! The containers are unambiguous, so they are read rather than guessed at.
 
 pub mod bytes;
+pub mod fb2;
 pub mod mobi;
 pub mod zip;
 
@@ -22,9 +23,23 @@ const DJVU: &[u8] = b"AT&TFORM";
 const OLE2: &[u8] = &[0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
 /// A PDF announces its version in its first bytes.
 const PDF: &[u8] = b"%PDF-";
+/// Microsoft Reader's signature, ahead of everything else in the file.
+const LIT: &[u8] = b"ITOLITLS";
+/// The group every RTF document is, opened with the control word that names
+/// the format.
+const RTF: &[u8] = br"{\rtf";
+/// The UTF-8 byte-order mark.
+const BOM: &[u8] = b"\xef\xbb\xbf";
 
 /// Archive members that carry no content: resource forks and desktop clutter.
 const ARCHIVE_NOISE: &[&str] = &["__macosx/", ".ds_store", "thumbs.db"];
+
+/// What a comic book archive carries besides its pages: the catalogue entry
+/// comic readers write into it.
+const COMIC_NOISE: &[&str] = &["comicinfo.xml"];
+
+/// The extensions of the images a comic book archive is made of.
+const PAGE_IMAGES: &[&str] = &[".jpg", ".jpeg", ".png", ".gif", ".webp"];
 
 /// Substrings in a name that mark a file as a sample rather than a book.
 const SAMPLE_MARKERS: &[&str] = &["sample", "readme", "read me"];
@@ -32,7 +47,8 @@ const SAMPLE_MARKERS: &[&str] = &["sample", "readme", "read me"];
 /// Below this, a file is too small to be a book whatever it claims to be.
 const SMALLEST_BOOK: u64 = 4096;
 
-/// How much of the front is read to tell text from markup.
+/// How much of the front is read to tell RTF, FictionBook, markup and text
+/// apart.
 const TEXT_WINDOW: usize = 4096;
 
 /// Identify a file.
@@ -49,12 +65,17 @@ pub fn sniff(source: &impl Bytes, name: &str) -> Doc {
         Kind::Pdf
     } else if source.magic_at(0, OLE2) {
         Kind::Ole2
+    } else if source.magic_at(0, LIT) {
+        Kind::Lit
     } else if source.magic_at(0, zip::LOCAL_HEADER) {
         archive(source, &mut doc)
     } else if let Some(kind) = mobi::kind(source) {
         kind
     } else {
-        text(source, &mut doc)
+        match source.slice(0, TEXT_WINDOW) {
+            Ok(head) => front(&head, &mut doc),
+            Err(_) => Kind::Unknown,
+        }
     };
 
     if doc.kind == Kind::Unknown {
@@ -80,7 +101,8 @@ pub fn sniff(source: &impl Bytes, name: &str) -> Doc {
     doc
 }
 
-/// What is inside a zip: an EPUB, a wrapped PDF, or a collection of pages.
+/// What is inside a zip: an EPUB, a wrapped book, a comic, or a collection of
+/// pages.
 fn archive(source: &impl Bytes, doc: &mut Doc) -> Kind {
     let Some(names) = zip::members(source) else {
         doc.note("a zip whose directory could not be read");
@@ -98,6 +120,13 @@ fn archive(source: &impl Bytes, doc: &mut Doc) -> Kind {
     if let Some(pdf) = sole_pdf(&names) {
         doc.note(format!("a zip holding one PDF, {pdf:?}"));
         return Kind::ZipWrappedPdf;
+    }
+    if let Some(fb2) = sole_member(&names, ".fb2") {
+        doc.note(format!("a zip holding one FictionBook, {fb2:?}"));
+        return Kind::ZipWrappedFb2;
+    }
+    if is_comic(&names) {
+        return Kind::Cbz;
     }
     if lower
         .iter()
@@ -119,25 +148,67 @@ fn archive(source: &impl Bytes, doc: &mut Doc) -> Kind {
 /// a collection, and choosing among them would be a guess — better to say it
 /// is not a book than to name one chapter as the whole.
 pub fn sole_pdf(names: &[String]) -> Option<&str> {
-    let real: Vec<&String> = names
+    sole_member(names, ".pdf")
+}
+
+/// The one member an archive exists to carry, if it is the only real member
+/// and its name ends in `extension`.
+fn sole_member<'a>(names: &'a [String], extension: &str) -> Option<&'a str> {
+    match real_members(names).as_slice() {
+        [only] if only.to_lowercase().ends_with(extension) => Some(only.as_str()),
+        _ => None,
+    }
+}
+
+/// Whether an archive is the pages of a comic and nothing else.
+///
+/// Every real member has to be an image. One PDF or one text file among the
+/// pages makes it something else, and saying what would be a guess.
+fn is_comic(names: &[String]) -> bool {
+    let pages: Vec<String> = real_members(names)
+        .into_iter()
+        .map(|name| name.to_lowercase())
+        .filter(|name| {
+            let file = name.rsplit('/').next().unwrap_or(name);
+            !COMIC_NOISE.contains(&file)
+        })
+        .collect();
+    !pages.is_empty()
+        && pages
+            .iter()
+            .all(|name| PAGE_IMAGES.iter().any(|image| name.ends_with(image)))
+}
+
+/// The members that carry content: no directories, no desktop clutter.
+fn real_members(names: &[String]) -> Vec<&String> {
+    names
         .iter()
         .filter(|name| !name.ends_with('/'))
         .filter(|name| {
             let lower = name.to_lowercase();
             !ARCHIVE_NOISE.iter().any(|noise| lower.contains(noise))
         })
-        .collect();
-    match real.as_slice() {
-        [only] if only.to_lowercase().ends_with(".pdf") => Some(only.as_str()),
-        _ => None,
+        .collect()
+}
+
+/// What the front of a file says when it is not a container: RTF, a
+/// FictionBook, markup, text, or nothing this knows.
+fn front(head: &[u8], doc: &mut Doc) -> Kind {
+    // Both are recognised on bytes rather than text. RTF is seven-bit by
+    // design but not always in practice, and a FictionBook is as often
+    // windows-1251 as UTF-8.
+    let lead = head.strip_prefix(BOM).unwrap_or(head).trim_ascii_start();
+    if lead.starts_with(RTF) {
+        return Kind::Rtf;
     }
+    if fb2::is_fictionbook(head) {
+        return Kind::Fb2;
+    }
+    text(head, doc)
 }
 
 /// Text, markup, or nothing this knows.
-fn text(source: &impl Bytes, doc: &mut Doc) -> Kind {
-    let Ok(head) = source.slice(0, TEXT_WINDOW) else {
-        return Kind::Unknown;
-    };
+fn text(head: &[u8], doc: &mut Doc) -> Kind {
     if head.is_empty() {
         doc.note("the file is empty");
         return Kind::Unknown;
@@ -149,7 +220,7 @@ fn text(source: &impl Bytes, doc: &mut Doc) -> Kind {
     }
     // The window may have cut a character in half, which is not the same
     // thing as the file not being text.
-    let head = match std::str::from_utf8(&head) {
+    let head = match std::str::from_utf8(head) {
         Ok(text) => text,
         Err(e) if e.error_len().is_none() => {
             std::str::from_utf8(&head[..e.valid_up_to()]).expect("a valid prefix")
@@ -178,10 +249,15 @@ fn names_the_same_thing(extension: &str, kind: Kind) -> bool {
         Kind::Djvu => matches!(extension, "djvu" | "djv"),
         Kind::Azw3 => matches!(extension, "azw3" | "azw" | "kfx"),
         Kind::Mobi => matches!(extension, "mobi" | "prc" | "azw"),
+        Kind::Lit => extension == "lit",
+        Kind::Fb2 => extension == "fb2",
+        Kind::Rtf => extension == "rtf",
         Kind::Txt => matches!(extension, "txt" | "text" | "md" | "markdown"),
         Kind::Html => matches!(extension, "html" | "htm" | "xhtml" | "xml"),
         Kind::Ole2 => matches!(extension, "doc" | "xls" | "ppt"),
         Kind::ZipWrappedPdf => extension == "zip",
+        Kind::ZipWrappedFb2 => matches!(extension, "zip" | "fbz"),
+        Kind::Cbz => extension == "cbz",
         // Nothing was recognised, so there is nothing to disagree with.
         Kind::Unknown => true,
     }
@@ -194,10 +270,15 @@ fn spelling(kind: Kind) -> &'static str {
         Kind::Djvu => "DjVu",
         Kind::Azw3 => "AZW3",
         Kind::Mobi => "MOBI",
+        Kind::Lit => "Microsoft Reader",
+        Kind::Fb2 => "FictionBook",
+        Kind::Rtf => "RTF",
         Kind::Txt => "plain text",
         Kind::Html => "HTML",
         Kind::Ole2 => "an OLE2 document",
         Kind::ZipWrappedPdf => "a zip holding one PDF",
+        Kind::ZipWrappedFb2 => "a zip holding one FictionBook",
+        Kind::Cbz => "a comic book archive",
         Kind::Unknown => "nothing recognisable",
     }
 }
@@ -331,5 +412,165 @@ mod tests {
         let mut head = "é".repeat(TEXT_WINDOW).into_bytes();
         head.truncate(TEXT_WINDOW + 1);
         assert_eq!(sniff(&head.as_slice(), "a.txt").kind, Kind::Txt);
+    }
+
+    fn archive_of(names: &[&str], name: &str) -> Doc {
+        sniff(&zip::tests::zip(names).as_slice(), name)
+    }
+
+    #[test]
+    fn rtf_is_recognised_by_its_opening_group() {
+        assert_eq!(kind_of(br"{\rtf1\ansi\deff0 {\fonttbl", "a.rtf"), Kind::Rtf);
+        assert_eq!(
+            kind_of(b"\xef\xbb\xbf\r\n  {\\rtf1\\ansi", "a.rtf"),
+            Kind::Rtf
+        );
+        // Eight-bit text in the body does not stop it being RTF.
+        assert_eq!(kind_of(b"{\\rtf1 caf\xe9 \x00", "a.rtf"), Kind::Rtf);
+    }
+
+    #[test]
+    fn rtf_cut_short_of_its_control_word_is_not_rtf() {
+        assert_eq!(sniff(&br"{\rt".as_slice(), "a.rtf").kind, Kind::Txt);
+        assert_eq!(kind_of(br"{\rtx1", "a.rtf"), Kind::Txt);
+        assert_eq!(kind_of(br"text {\rtf1", "a.rtf"), Kind::Txt);
+    }
+
+    #[test]
+    fn rtf_named_as_a_word_document_is_remarked_on() {
+        let doc = sniff(&padded(br"{\rtf1\ansi").as_slice(), "letter.doc");
+        assert_eq!(doc.kind, Kind::Rtf);
+        assert!(
+            doc.notes
+                .iter()
+                .any(|note| note == "named .doc, but the bytes say RTF"),
+            "{:?}",
+            doc.notes
+        );
+    }
+
+    #[test]
+    fn microsoft_reader_is_recognised_by_its_signature() {
+        let doc = sniff(&padded(b"ITOLITLS\x01\x00\x00\x00").as_slice(), "book.lit");
+        assert_eq!(doc.kind, Kind::Lit);
+        assert!(doc.notes.is_empty(), "{:?}", doc.notes);
+        assert_eq!(kind_of(b"ITOLITL", "book.lit"), Kind::Txt);
+        assert_eq!(kind_of(b" ITOLITLS", "book.lit"), Kind::Txt);
+    }
+
+    #[test]
+    fn a_fictionbook_is_recognised_and_other_xml_is_not() {
+        let book = b"<?xml version=\"1.0\" encoding=\"windows-1251\"?>\n\
+            <FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\">\
+            <book-title>\xcc\xe5\xeb\xfc\xed\xe8\xf6\xe0</book-title>";
+        let doc = sniff(&padded(book).as_slice(), "mill.fb2");
+        assert_eq!(doc.kind, Kind::Fb2);
+        assert!(doc.notes.is_empty(), "{:?}", doc.notes);
+
+        let feed = b"<?xml version=\"1.0\"?>\n<rss version=\"2.0\"><channel>";
+        assert_eq!(kind_of(feed, "feed.xml"), Kind::Html);
+    }
+
+    #[test]
+    fn a_fictionbook_named_as_something_else_is_remarked_on() {
+        let doc = sniff(&padded(b"<FictionBook>").as_slice(), "mill.txt");
+        assert_eq!(doc.kind, Kind::Fb2);
+        assert!(
+            doc.notes.iter().any(|note| note.contains("FictionBook")),
+            "{:?}",
+            doc.notes
+        );
+    }
+
+    #[test]
+    fn a_zip_holding_one_fictionbook_is_a_wrapped_one() {
+        let doc = archive_of(&["__MACOSX/._mill.fb2", "mill.fb2"], "mill.fb2.zip");
+        assert_eq!(doc.kind, Kind::ZipWrappedFb2);
+        assert_eq!(doc.declared_ext.as_deref(), Some("zip"));
+        assert!(
+            doc.notes
+                .iter()
+                .any(|note| note.contains("one FictionBook")),
+            "{:?}",
+            doc.notes
+        );
+        assert!(!doc.notes.iter().any(|note| note.contains("named .")));
+
+        let two = archive_of(&["one.fb2", "two.fb2"], "pair.zip");
+        assert_eq!(two.kind, Kind::Unknown);
+    }
+
+    #[test]
+    fn a_zip_of_page_images_is_a_comic() {
+        let doc = archive_of(
+            &[
+                "Issue 1/",
+                "Issue 1/001.jpg",
+                "Issue 1/002.JPEG",
+                "Issue 1/003.png",
+                "Issue 1/004.gif",
+                "Issue 1/005.webp",
+                "ComicInfo.xml",
+                "__MACOSX/Issue 1/._001.jpg",
+                "Issue 1/Thumbs.db",
+                ".DS_Store",
+            ],
+            "issue-1.cbz",
+        );
+        assert_eq!(doc.kind, Kind::Cbz);
+        assert!(
+            !doc.notes.iter().any(|note| note.contains("named .")),
+            "{:?}",
+            doc.notes
+        );
+    }
+
+    #[test]
+    fn a_comic_saved_as_a_zip_is_remarked_on() {
+        let doc = archive_of(&["001.jpg", "002.jpg"], "issue-1.zip");
+        assert_eq!(doc.kind, Kind::Cbz);
+        assert!(
+            doc.notes.iter().any(|note| note.contains("comic")),
+            "{:?}",
+            doc.notes
+        );
+    }
+
+    #[test]
+    fn a_zip_with_anything_but_images_is_not_a_comic() {
+        let one_pdf = archive_of(&["001.jpg", "002.jpg", "extras.pdf"], "issue-1.cbz");
+        assert_eq!(one_pdf.kind, Kind::Unknown);
+        assert!(
+            one_pdf
+                .notes
+                .iter()
+                .any(|note| note.contains("none of them a book")),
+            "{:?}",
+            one_pdf.notes
+        );
+
+        let readme = archive_of(&["001.jpg", "readme.txt"], "issue-1.cbz");
+        assert_eq!(readme.kind, Kind::Unknown);
+
+        // A name that ends like an image without being one.
+        let lookalike = archive_of(&["001.jpg", "notes.jpg.txt"], "issue-1.cbz");
+        assert_eq!(lookalike.kind, Kind::Unknown);
+    }
+
+    #[test]
+    fn a_zip_with_no_pages_is_not_a_comic() {
+        let catalogue_only = archive_of(&["ComicInfo.xml", "pages/"], "issue-1.cbz");
+        assert_eq!(catalogue_only.kind, Kind::Unknown);
+
+        let empty = archive_of(&[], "issue-1.cbz");
+        assert_eq!(empty.kind, Kind::Unknown);
+    }
+
+    #[test]
+    fn a_truncated_comic_does_not_panic() {
+        let whole = zip::tests::zip(&["001.jpg", "002.png", "ComicInfo.xml"]);
+        for cut in 0..whole.len() {
+            let _ = sniff(&&whole[..cut], "issue-1.cbz");
+        }
     }
 }
