@@ -64,7 +64,7 @@ No network, no database, no configuration file, no state kept between runs.
 Five exceptions, each declared in `--help`:
 
 - [`emb`](../crates/emb/README.md) makes an HTTP call, which is the whole of what it does.
-- [`bibfetch`](../crates/bibfetch/README.md) asks a register about an identifier, likewise.
+- [`bibfetch`](../crates/bibfetch/README.md) asks a register about an identifier or a title, likewise.
 - [`pdftriage`](../crates/pdftriage/README.md) runs `pdftotext` and `pdfinfo`.
 - [`pdfgutter`](../crates/pdfgutter/README.md) runs `pdftoppm` to look at a page.
 - [`avplan`](../crates/avplan/README.md) runs `ffprobe` to read a file's streams, and
