@@ -112,10 +112,35 @@ an EXTH block that breaks off keeps the records before the break.
 
 ## Covers
 
-`Metadata::cover` is the cover image a Kindle book carries (EXTH 201, or the
-thumbnail, 202, when no cover is named), with its media type read off its
-first bytes. It is for library callers and is not part of the JSON record,
-which is a line of text.
+`Metadata::cover` is the cover image the file carries, with its media type
+read off its first bytes: JPEG, PNG, GIF, WebP or BMP. It is for library
+callers and is not part of the JSON record, which is a line of text.
+
+A Kindle book's cover is EXTH 201, or the thumbnail, 202, when no cover is
+named, and with neither the first image record.
+
+An EPUB's is the first of these that reaches an image:
+
+1. The manifest item whose `properties` include `cover-image` (EPUB 3).
+2. The item `<meta name="cover" content="…">` names (EPUB 2). Some
+   converters write the image's address there rather than its id, and that is
+   followed too.
+3. The guide's `<reference type="cover">`, a page, and the first `<img src>`
+   or SVG `<image href>` on it. A guide that points straight at an image is
+   taken at its word.
+4. Any image in the manifest whose id or address says `cover`.
+
+A route that names something unusable — not in the archive, not an image —
+leaves a note, and the next route is asked. Addresses are resolved against the
+document they are written in, with their fragment off and their
+percent-escapes undone, and one that climbs out of the archive or names a
+scheme (`http:`, `data:`) is not followed.
+
+What the bytes say beats what the manifest says: a JPEG listed as
+`image/png` comes back as `image/jpeg`, with a note. A cover larger than
+`bookmeta::MAX_COVER` (16 MiB) is left out with a note, in either format, and
+an EPUB's is never decompressed further than that, whatever size the archive
+claims for it.
 
 ## Asking a model
 
