@@ -30,7 +30,8 @@ Example:
 
     idnorm refs.txt | bibfetch | jq -r 'select(.found) | .title'
     idnorm --kind doi refs.txt | bibfetch --polite you@example.org
-    bibfetch cover 978-0-306-40615-7 -o cover.jpg"
+    bibfetch cover 978-0-306-40615-7 -o cover.jpg
+    bibfetch search --title 'The First World War' --author Howard"
 )]
 struct Args {
     #[command(subcommand)]
@@ -74,6 +75,26 @@ enum Command {
         #[arg(long, value_name = "ID")]
         cover_id: Option<u64>,
     },
+    /// Find the books a register has under a title, and an author.
+    ///
+    /// Prints one record per candidate edition, in the order the register
+    /// gave them: Open Library's index, or Google Books when that has
+    /// nothing. Which one is the book in hand is left to you.
+    ///
+    /// Exit codes: 0 at least one candidate, 1 none, 65 no title,
+    /// 69 no register could be reached, 74 the output could not be written.
+    Search {
+        /// The title, or as much of it as you have.
+        #[arg(long)]
+        title: String,
+        /// An author's name, or part of one.
+        #[arg(long)]
+        author: Option<String>,
+        /// The most candidates to print.
+        #[arg(long, default_value_t = 10, value_name = "COUNT",
+              value_parser = clap::value_parser!(u16).range(1..=bibfetch::search::MAX_LIMIT as i64))]
+        limit: u16,
+    },
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -96,14 +117,27 @@ fn main() -> ExitCode {
     }
     .agent();
 
-    if let Some(Command::Cover {
-        isbn,
-        output,
-        size,
-        cover_id,
-    }) = &args.command
-    {
-        return cover(&agent, args.attempts, isbn, output, *size, *cover_id);
+    match &args.command {
+        Some(Command::Cover {
+            isbn,
+            output,
+            size,
+            cover_id,
+        }) => return cover(&agent, args.attempts, isbn, output, *size, *cover_id),
+        Some(Command::Search {
+            title,
+            author,
+            limit,
+        }) => {
+            return search(
+                &agent,
+                args.attempts,
+                title,
+                author.as_deref(),
+                usize::from(*limit),
+            );
+        }
+        None => {}
     }
 
     let text = match catena_cli::read_text(args.path.as_deref()) {
@@ -192,6 +226,36 @@ fn cover(
             ExitCode::from(match why {
                 bibfetch::Error::Unreachable(_) => exit::UNAVAILABLE,
                 _ => exit::DATA,
+            })
+        }
+    }
+}
+
+/// Search by title and print the candidates.
+fn search(
+    agent: &ureq::Agent,
+    attempts: u32,
+    title: &str,
+    author: Option<&str>,
+    limit: usize,
+) -> ExitCode {
+    match bibfetch::search(agent, title, author, limit, attempts) {
+        Ok(found) => {
+            let wrote = catena_cli::stream("bibfetch", &found);
+            if format!("{wrote:?}") != format!("{:?}", ExitCode::from(exit::OK)) {
+                return wrote;
+            }
+            if found.is_empty() {
+                eprintln!("bibfetch: no register has {title:?}");
+                return ExitCode::from(exit::NO);
+            }
+            ExitCode::from(exit::OK)
+        }
+        Err(why) => {
+            eprintln!("bibfetch: {why}");
+            ExitCode::from(match why {
+                bibfetch::Error::Invalid(_) => exit::DATA,
+                _ => exit::UNAVAILABLE,
             })
         }
     }

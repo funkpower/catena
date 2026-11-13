@@ -34,7 +34,7 @@ Each tool installs by name, so you can take one without taking the rest.
 | [`vocabmerge`](crates/bibclean/README.md#vocabmerge--the-other-command) | The near-duplicate headings in a catalogue's vocabulary |
 | [`seriesof`](crates/seriesof/README.md) | The series a book belongs to, and which volume this is |
 | [`idnorm`](crates/idnorm/README.md) | DOIs, ISSNs, ISBNs and arXiv ids, read and checked |
-| [`bibfetch`](crates/bibfetch/README.md) | What a register says about an identifier |
+| [`bibfetch`](crates/bibfetch/README.md) | What a register says about an identifier, and which books it has under a title |
 | [`citefind`](crates/citefind/README.md) | The references in a bibliography or a page of notes |
 | [`mdscrub`](crates/mdscrub/README.md) | Converted markdown in, clean markdown out |
 | [`mdsplit`](crates/mdsplit/README.md) | One markdown file into the works inside it |
