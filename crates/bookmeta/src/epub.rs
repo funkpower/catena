@@ -167,7 +167,7 @@ fn identifiers(package: &str) -> Vec<(String, String)> {
             ("doi", value.to_string())
         } else if is_isbn(value) {
             ("isbn", digits_of(value))
-        } else if lower.len() == 36 && lower.matches('-').count() == 4 {
+        } else if is_uuid(&lower) {
             ("uuid", lower.clone())
         } else {
             ("other", value.to_string())
@@ -186,6 +186,11 @@ pub(crate) fn is_isbn(value: &str) -> bool {
         && value
             .chars()
             .all(|c| c.is_ascii_digit() || "- xX".contains(c))
+}
+
+/// Whether a value is shaped like a UUID: 36 characters with four hyphens.
+pub(crate) fn is_uuid(value: &str) -> bool {
+    value.len() == 36 && value.matches('-').count() == 4
 }
 
 /// The digits of an ISBN, with its check character, and nothing else.

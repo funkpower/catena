@@ -12,7 +12,7 @@
 //! an EXTH block that breaks off keeps the records before the break. Neither
 //! panics or reads past the end.
 
-use crate::epub::{digits_of, is_isbn};
+use crate::epub::{digits_of, is_isbn, is_uuid};
 use crate::{Cover, Metadata, Source};
 
 /// Where a Palm database says what it holds.
@@ -65,6 +65,7 @@ const PUBLISHED: u32 = 106;
 const ASIN: u32 = 113;
 const COVER_OFFSET: u32 = 201;
 const THUMB_OFFSET: u32 = 202;
+const KF8_BOUNDARY: u32 = 121;
 const UPDATED_TITLE: u32 = 503;
 const LANGUAGE: u32 = 524;
 
@@ -99,6 +100,7 @@ struct Exth {
     asin: Option<String>,
     cover: Option<u32>,
     thumb: Option<u32>,
+    kf8_boundary: Option<u32>,
     title: Option<String>,
     language: Option<String>,
 }
@@ -177,12 +179,24 @@ fn fill(meta: &mut Metadata, bytes: &[u8]) -> Result<(), String> {
             meta.identifiers.insert("other".into(), isbn);
         }
     }
-    if let Some(asin) = exth.asin {
-        meta.identifiers.insert("asin".into(), asin);
+    // EXTH 113 holds an ASIN when the book was made for Amazon, and calibre's
+    // own book UUID when it was converted without one.
+    if let Some(value) = exth.asin {
+        let lower = value.to_lowercase();
+        if is_uuid(&lower) {
+            meta.identifiers.insert("uuid".into(), lower);
+        } else if is_asin(&value) {
+            meta.identifiers.insert("asin".into(), value);
+        } else {
+            meta.identifiers.entry("other".into()).or_insert(value);
+        }
     }
 
+    let first_image = header.field(FIRST_IMAGE);
     if let Some(offset) = exth.cover.or(exth.thumb) {
-        meta.cover = cover(bytes, &records, header.field(FIRST_IMAGE), offset, meta);
+        meta.cover = cover(bytes, &records, first_image, offset, meta);
+    } else {
+        meta.cover = first_image_record(bytes, &records, first_image, exth.kf8_boundary);
     }
     Ok(())
 }
@@ -277,6 +291,7 @@ fn exth(
             LANGUAGE => set(&mut out.language, decode(data)),
             COVER_OFFSET => set(&mut out.cover, number(data)),
             THUMB_OFFSET => set(&mut out.thumb, number(data)),
+            KF8_BOUNDARY => set(&mut out.kf8_boundary, number(data)),
             _ => {}
         }
     }
@@ -324,6 +339,34 @@ fn cover(
         media_type: media_type.to_string(),
         bytes: data.to_vec(),
     })
+}
+
+/// The cover when the file names none: calibre takes the first image record.
+///
+/// The search runs from the first image record to the end of the MOBI 6
+/// records, the KF8 boundary when the file is a joint one, and skips records
+/// that are not an image.
+fn first_image_record(
+    bytes: &[u8],
+    records: &[usize],
+    first_image: Option<u32>,
+    boundary: Option<u32>,
+) -> Option<Cover> {
+    let first = first_image.filter(|&index| index != NONE)?;
+    let stop = boundary.map_or(records.len(), |at| (at as usize).min(records.len()));
+    (first as usize..stop).find_map(|index| {
+        let data = record(bytes, records, index)?;
+        let media_type = image_type(data).filter(|kind| *kind != "image/bmp")?;
+        Some(Cover {
+            media_type: media_type.to_string(),
+            bytes: data.to_vec(),
+        })
+    })
+}
+
+/// An ASIN is ten letters and digits; an ISBN-10 is one too.
+fn is_asin(value: &str) -> bool {
+    value.len() == 10 && value.chars().all(|c| c.is_ascii_alphanumeric())
 }
 
 /// What kind of image these bytes are, by their magic.
@@ -620,6 +663,57 @@ mod tests {
         };
         let cover = read("x.mobi", &book.bytes()).cover.expect("a cover");
         assert_eq!(cover.media_type, "image/png");
+    }
+
+    #[test]
+    fn with_no_cover_named_the_first_real_image_record_is_the_cover() {
+        let book = Book {
+            images: vec![
+                b"not an image".to_vec(),
+                JPEG.to_vec(),
+                b"GIF89a-later".to_vec(),
+            ],
+            ..Book::default()
+        };
+        let cover = read("x.mobi", &book.bytes()).cover.expect("a cover");
+        assert_eq!(cover.media_type, "image/jpeg");
+        assert_eq!(cover.bytes, JPEG);
+
+        let book = Book {
+            images: vec![b"not an image".to_vec()],
+            ..Book::default()
+        };
+        assert_eq!(read("x.mobi", &book.bytes()).cover, None);
+    }
+
+    #[test]
+    fn the_first_image_search_stops_at_the_kf8_boundary() {
+        let book = Book {
+            exth: exth(&[(121, &2u32.to_be_bytes())]),
+            images: vec![b"text".to_vec(), JPEG.to_vec()],
+            ..Book::default()
+        };
+        // Record 1 is not an image, and record 2 is past the boundary.
+        assert_eq!(read("x.mobi", &book.bytes()).cover, None);
+    }
+
+    #[test]
+    fn exth_113_is_an_asin_a_uuid_or_something_else() {
+        let id = |value: &[u8]| {
+            let book = Book {
+                exth: exth(&[(ASIN, value)]),
+                ..Book::default()
+            };
+            read("x.mobi", &book.bytes()).identifiers
+        };
+        assert_eq!(id(b"B01A7RJGIW")["asin"], "B01A7RJGIW");
+        assert_eq!(id(b"0306406152")["asin"], "0306406152");
+        let uuid = id(b"69AE65CA-B644-499F-A78C-139771C7140A");
+        assert_eq!(uuid["uuid"], "69ae65ca-b644-499f-a78c-139771c7140a");
+        assert_eq!(uuid.get("asin"), None);
+        let other = id(b"2AW6TL2JJEYYGXCOV3PWN6ZOYUORXAVX");
+        assert_eq!(other["other"], "2AW6TL2JJEYYGXCOV3PWN6ZOYUORXAVX");
+        assert_eq!(other.get("asin"), None);
     }
 
     #[test]
