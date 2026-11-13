@@ -106,10 +106,45 @@ pub struct Metadata {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cover {
     /// What kind of image it is, read off its first bytes: `image/jpeg`,
-    /// `image/png`, `image/gif` or `image/bmp`.
+    /// `image/png`, `image/gif`, `image/webp` or `image/bmp`.
     pub media_type: String,
-    /// The image itself.
+    /// The image itself, never more than [`MAX_COVER`] bytes.
     pub bytes: Vec<u8>,
+}
+
+/// How large a cover is worth keeping.
+///
+/// A real one is a few hundred kilobytes. An EPUB's cover has to be
+/// decompressed to be read, and this is as far as that goes: a larger one is
+/// left out with a note, in every format, so a hostile file cannot make a
+/// reader allocate whatever it likes.
+pub const MAX_COVER: usize = 16 * 1024 * 1024;
+
+/// A size, as a note says it.
+pub(crate) fn size(bytes: usize) -> String {
+    const MIB: usize = 1024 * 1024;
+    if bytes >= MIB && bytes % MIB == 0 {
+        format!("{} MiB", bytes / MIB)
+    } else {
+        format!("{bytes} bytes")
+    }
+}
+
+/// What kind of image these bytes are, by their magic.
+pub(crate) fn image_type(data: &[u8]) -> Option<&'static str> {
+    if data.starts_with(&[0xff, 0xd8, 0xff]) {
+        Some("image/jpeg")
+    } else if data.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some("image/png")
+    } else if data.starts_with(b"GIF87a") || data.starts_with(b"GIF89a") {
+        Some("image/gif")
+    } else if data.starts_with(b"RIFF") && data.get(8..12) == Some(b"WEBP") {
+        Some("image/webp")
+    } else if data.starts_with(b"BM") && data.len() > 14 {
+        Some("image/bmp")
+    } else {
+        None
+    }
 }
 
 fn version() -> u32 {

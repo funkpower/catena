@@ -13,7 +13,7 @@
 //! panics or reads past the end.
 
 use crate::epub::{digits_of, is_isbn, is_uuid};
-use crate::{Cover, Metadata, Source};
+use crate::{Cover, MAX_COVER, Metadata, Source, image_type};
 
 /// Where a Palm database says what it holds.
 const TYPE_AT: usize = 60;
@@ -332,6 +332,13 @@ fn cover(
         meta.note("the cover record is not an image");
         return None;
     };
+    if data.len() > MAX_COVER {
+        meta.note(format!(
+            "the cover record is larger than {}",
+            crate::size(MAX_COVER)
+        ));
+        return None;
+    }
     Some(Cover {
         media_type: media_type.to_string(),
         bytes: data.to_vec(),
@@ -347,6 +354,9 @@ fn cover(
 fn first_image_record(bytes: &[u8], records: &[usize], first_image: Option<u32>) -> Option<Cover> {
     let first = first_image.filter(|&index| index != NONE)?;
     let data = record(bytes, records, first as usize)?;
+    if data.len() > MAX_COVER {
+        return None;
+    }
     let media_type = image_type(data).filter(|kind| *kind != "image/bmp")?;
     Some(Cover {
         media_type: media_type.to_string(),
@@ -357,21 +367,6 @@ fn first_image_record(bytes: &[u8], records: &[usize], first_image: Option<u32>)
 /// An ASIN is ten letters and digits; an ISBN-10 is one too.
 fn is_asin(value: &str) -> bool {
     value.len() == 10 && value.chars().all(|c| c.is_ascii_alphanumeric())
-}
-
-/// What kind of image these bytes are, by their magic.
-fn image_type(data: &[u8]) -> Option<&'static str> {
-    if data.starts_with(&[0xff, 0xd8, 0xff]) {
-        Some("image/jpeg")
-    } else if data.starts_with(b"\x89PNG\r\n\x1a\n") {
-        Some("image/png")
-    } else if data.starts_with(b"GIF87a") || data.starts_with(b"GIF89a") {
-        Some("image/gif")
-    } else if data.starts_with(b"BM") && data.len() > 14 {
-        Some("image/bmp")
-    } else {
-        None
-    }
 }
 
 /// The Palm database's name, the last place a title can come from.
