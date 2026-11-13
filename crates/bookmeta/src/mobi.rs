@@ -65,7 +65,6 @@ const PUBLISHED: u32 = 106;
 const ASIN: u32 = 113;
 const COVER_OFFSET: u32 = 201;
 const THUMB_OFFSET: u32 = 202;
-const KF8_BOUNDARY: u32 = 121;
 const UPDATED_TITLE: u32 = 503;
 const LANGUAGE: u32 = 524;
 
@@ -100,7 +99,6 @@ struct Exth {
     asin: Option<String>,
     cover: Option<u32>,
     thumb: Option<u32>,
-    kf8_boundary: Option<u32>,
     title: Option<String>,
     language: Option<String>,
 }
@@ -196,7 +194,7 @@ fn fill(meta: &mut Metadata, bytes: &[u8]) -> Result<(), String> {
     if let Some(offset) = exth.cover.or(exth.thumb) {
         meta.cover = cover(bytes, &records, first_image, offset, meta);
     } else {
-        meta.cover = first_image_record(bytes, &records, first_image, exth.kf8_boundary);
+        meta.cover = first_image_record(bytes, &records, first_image);
     }
     Ok(())
 }
@@ -291,7 +289,6 @@ fn exth(
             LANGUAGE => set(&mut out.language, decode(data)),
             COVER_OFFSET => set(&mut out.cover, number(data)),
             THUMB_OFFSET => set(&mut out.thumb, number(data)),
-            KF8_BOUNDARY => set(&mut out.kf8_boundary, number(data)),
             _ => {}
         }
     }
@@ -341,26 +338,19 @@ fn cover(
     })
 }
 
-/// The cover when the file names none: calibre takes the first image record.
+/// The cover when the file names none: calibre takes the record at the first
+/// image index, and only that one.
 ///
-/// The search runs from the first image record to the end of the MOBI 6
-/// records, the KF8 boundary when the file is a joint one, and skips records
-/// that are not an image.
-fn first_image_record(
-    bytes: &[u8],
-    records: &[usize],
-    first_image: Option<u32>,
-    boundary: Option<u32>,
-) -> Option<Cover> {
+/// When that record is not a JPEG, PNG or GIF there is no cover. The search
+/// does not walk on to the next image, because a later record may be an inline
+/// illustration, and kindlegen puts a font or a RESC record first.
+fn first_image_record(bytes: &[u8], records: &[usize], first_image: Option<u32>) -> Option<Cover> {
     let first = first_image.filter(|&index| index != NONE)?;
-    let stop = boundary.map_or(records.len(), |at| (at as usize).min(records.len()));
-    (first as usize..stop).find_map(|index| {
-        let data = record(bytes, records, index)?;
-        let media_type = image_type(data).filter(|kind| *kind != "image/bmp")?;
-        Some(Cover {
-            media_type: media_type.to_string(),
-            bytes: data.to_vec(),
-        })
+    let data = record(bytes, records, first as usize)?;
+    let media_type = image_type(data).filter(|kind| *kind != "image/bmp")?;
+    Some(Cover {
+        media_type: media_type.to_string(),
+        bytes: data.to_vec(),
     })
 }
 
@@ -666,7 +656,17 @@ mod tests {
     }
 
     #[test]
-    fn with_no_cover_named_the_first_real_image_record_is_the_cover() {
+    fn with_no_cover_named_only_the_record_at_first_image_can_be_the_cover() {
+        let book = Book {
+            images: vec![JPEG.to_vec(), b"GIF89a-later".to_vec()],
+            ..Book::default()
+        };
+        let cover = read("x.mobi", &book.bytes()).cover.expect("a cover");
+        assert_eq!(cover.media_type, "image/jpeg");
+        assert_eq!(cover.bytes, JPEG);
+
+        // The record at first_image is not an image: no cover, even though a
+        // later record is one.
         let book = Book {
             images: vec![
                 b"not an image".to_vec(),
@@ -675,15 +675,35 @@ mod tests {
             ],
             ..Book::default()
         };
-        let cover = read("x.mobi", &book.bytes()).cover.expect("a cover");
-        assert_eq!(cover.media_type, "image/jpeg");
-        assert_eq!(cover.bytes, JPEG);
+        assert_eq!(read("x.mobi", &book.bytes()).cover, None);
 
         let book = Book {
             images: vec![b"not an image".to_vec()],
             ..Book::default()
         };
         assert_eq!(read("x.mobi", &book.bytes()).cover, None);
+    }
+
+    #[test]
+    fn a_font_at_first_image_is_not_skipped_past_to_an_inline_image() {
+        // No EXTH 201 or 202. The first resource record is a font, as in
+        // kindlegen output; calibre reads only that record and finds no cover.
+        let book = Book {
+            images: vec![b"FONT\0\0\0\x18".to_vec(), JPEG.to_vec()],
+            ..Book::default()
+        };
+        assert_eq!(read("x.mobi", &book.bytes()).cover, None);
+    }
+
+    #[test]
+    fn a_stale_kf8_boundary_below_first_image_does_not_hide_the_cover() {
+        let book = Book {
+            exth: exth(&[(121, &1u32.to_be_bytes())]),
+            first_image: 2,
+            images: vec![b"text".to_vec(), JPEG.to_vec()],
+            ..Book::default()
+        };
+        assert!(read("x.mobi", &book.bytes()).cover.is_some());
     }
 
     #[test]
