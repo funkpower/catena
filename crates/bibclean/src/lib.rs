@@ -136,6 +136,26 @@ pub fn clean(book: &Book) -> Cleaned {
         book.isbn.as_deref(),
     );
 
+    // Character references first: "&amp;" is a word to every rule after.
+    for field in ["title", "author"] {
+        let slot = if field == "title" {
+            &mut cleaned.title
+        } else {
+            &mut cleaned.author
+        };
+        if let Some(value) = slot.clone()
+            && let Some(fixed) = fix::decode_entities(&value)
+        {
+            changes.push(Change {
+                field: field.into(),
+                from: value,
+                to: fixed.clone(),
+                why: "html_entity".into(),
+            });
+            *slot = Some(fixed);
+        }
+    }
+
     // Mojibake before anything that reads the text: every other repair
     // matches on characters, and these are the wrong characters.
     for (field, why) in [("title", "mojibake_title"), ("author", "mojibake_author")] {
@@ -544,6 +564,18 @@ mod tests {
             let cleaned = clean(&book(title, "Someone Else"));
             assert_eq!(cleaned.book.title.as_deref(), Some(title), "{title}");
         }
+    }
+
+    #[test]
+    fn a_character_reference_is_decoded() {
+        let cleaned = clean(&book("Master &amp; Apprentice", "Claudia Gray"));
+        assert_eq!(cleaned.book.title.as_deref(), Some("Master & Apprentice"));
+        assert_eq!(whys(&cleaned), ["html_entity"]);
+        let cleaned = clean(&book("Don&#39;t Look &#x2014; Now", "Someone"));
+        assert_eq!(cleaned.book.title.as_deref(), Some("Don't Look — Now"));
+        // An ampersand that is not a reference stays.
+        let cleaned = clean(&book("Faith & Reason; & More", "Someone"));
+        assert!(!whys(&cleaned).contains(&"html_entity"));
     }
 
     #[test]

@@ -160,6 +160,7 @@ const WEIGHTS: &[(&str, u32)] = &[
     ("author_role_suffix", 2),
     ("edited_volume", 1),
     ("filename_title", 3),
+    ("html_entity", 2),
     ("junk_title", 3),
     ("lowercase_title", 2),
     ("missing_apostrophe", 2),
@@ -229,6 +230,10 @@ pub fn problems(title: Option<&str>, author: Option<&str>, isbn: Option<&str>) -
         .is_some_and(|at| at.start() == 0)
     {
         reasons.push("numeric_author");
+    }
+    if crate::fix::decode_entities(title).is_some() || crate::fix::decode_entities(author).is_some()
+    {
+        reasons.push("html_entity");
     }
     if textkit::mojibake::is_mojibake(title) {
         reasons.push("mojibake_title");
