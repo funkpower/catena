@@ -202,6 +202,9 @@ bibclean books.ndjson | jq -c 'select(.slug_proposal.tier | IN("placeholder-auth
 | `missing_apostrophe` | 2 | "Lossky s Argument" |
 | `possible_swap` | 2 | Title and author look to be the wrong way round |
 | `underscore_title` | 1 | Underscores standing in for spaces and colons |
+| `invalid_isbn` | 3 | A stored ISBN whose check digit disagrees |
+| `placeholder_isbn` | 3 | A run of one digit standing in for an ISBN: "000-0-000-00000-0" |
+| `isbn_with_label` | 3 | Ten digits beginning `13978`: the label of an ISBN-13 read as part of the number, cut short and given a fresh check digit |
 | `missing_isbn` | 0 | Reported, but not a reason to do anything |
 
 Each test is deliberately conservative. A real book called "The Document" or
