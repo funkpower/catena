@@ -10,6 +10,7 @@
 //! chunk ends and a chunk boundary that moves is a chunk that no longer
 //! matches what is already in an index.
 
+pub mod mojibake;
 pub mod number;
 pub mod pattern;
 pub mod segment;

@@ -24,6 +24,23 @@ static SPACE_RUN: LazyLock<Regex> =
 /// A run of letters, by Python's definition of a letter.
 static LETTERS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\p{L}+").expect("a valid pattern"));
 
+/// The name of the program a document was made in, put in front of the title
+/// by the program and carried into the catalogue by whatever read it.
+static PRODUCER_PREFIX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!(
+        r"(?i)^{SPACE}*microsoft{SPACE}+(?:office{SPACE}+)?(?:word|powerpoint|excel|publisher){SPACE}*[-–—:]{SPACE}*"
+    ))
+    .expect("a valid pattern")
+});
+
+/// A document's file extension on the end of its title.
+static DOCUMENT_EXTENSION: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!(
+        r"(?i)\.(?:pdf|epub|mobi|azw3?|txt|wpd|docx?|odt|rtf|tex|qxd|indd|pm\d|djvu){SPACE}*$"
+    ))
+    .expect("a valid pattern")
+});
+
 /// Words that stay lowercase inside a title.
 const SMALL_WORDS: &[&str] = &[
     "a", "an", "and", "as", "at", "but", "by", "for", "from", "in", "into", "nor", "of", "on",
@@ -110,6 +127,45 @@ pub fn clean_underscores(title: &str) -> String {
         .replace_all(&title, " ")
         .trim_matches(|c: char| textkit::is_space(c) || c == ':' || c == ',' || c == '-')
         .to_string()
+}
+
+/// A title without the name of the program that made the file.
+///
+/// "Microsoft Word - The Virgin.doc" is "The Virgin.doc"; the extension is a
+/// separate fault with its own repair. `None` when there is no such prefix,
+/// or when what is left would be no title at all ("Microsoft Word -
+/// Document2" is a placeholder either way, and a shorter placeholder is not a
+/// repair).
+pub fn strip_producer(title: &str) -> Option<String> {
+    let found = PRODUCER_PREFIX.find(title)?;
+    worth_keeping(title, &title[found.end()..])
+}
+
+/// A title without the file extension a filename left on it.
+///
+/// `None` when there is none, or when what is left is not a title: a bare
+/// number such as an ISBN used as the filename stays as it is, so the fault
+/// stays visible.
+pub fn strip_extension(title: &str) -> Option<String> {
+    let found = DOCUMENT_EXTENSION.find(title)?;
+    worth_keeping(title, &title[..found.start()])
+}
+
+/// A title without the placeholder author a "Title - Author" filename left on
+/// its end: "The Birth of Purgatory - Unknown" is "The Birth of Purgatory".
+pub fn strip_placeholder_suffix(title: &str) -> Option<String> {
+    let found = crate::reasons::PLACEHOLDER_SUFFIX.find(title)?;
+    worth_keeping(title, &title[..found.start()])
+}
+
+/// The stripped title, if it is a different title and still a title.
+fn worth_keeping(original: &str, stripped: &str) -> Option<String> {
+    let stripped = stripped
+        .trim_matches(|c: char| textkit::is_space(c) || c == '-' || c == ':' || c == ',')
+        .to_string();
+    let has_letters = stripped.chars().any(char::is_alphabetic);
+    (has_letters && stripped != original && !crate::reasons::is_placeholder_title(&stripped))
+        .then_some(stripped)
 }
 
 /// Capitalise the first letter and lowercase the rest.

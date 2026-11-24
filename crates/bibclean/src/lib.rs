@@ -135,6 +135,50 @@ pub fn clean(book: &Book) -> Cleaned {
         book.isbn.as_deref(),
     );
 
+    // Mojibake before anything that reads the text: every other repair
+    // matches on characters, and these are the wrong characters.
+    for (field, why) in [("title", "mojibake_title"), ("author", "mojibake_author")] {
+        let slot = if field == "title" {
+            &mut cleaned.title
+        } else {
+            &mut cleaned.author
+        };
+        if let Some(value) = slot.clone()
+            && let Some(fixed) = textkit::mojibake::repair(&value)
+        {
+            changes.push(Change {
+                field: field.into(),
+                from: value,
+                to: fixed.clone(),
+                why: why.into(),
+            });
+            *slot = Some(fixed);
+        }
+    }
+
+    // The wrappers a file puts around a title, outermost first: the program's
+    // name in front, then the extension, which a filename writes after the
+    // placeholder author ("Title - Unknown.pdf"), then that author.
+    type Strip = fn(&str) -> Option<String>;
+    let wrappers: [(Strip, &str); 3] = [
+        (fix::strip_producer, "junk_title"),
+        (fix::strip_extension, "filename_title"),
+        (fix::strip_placeholder_suffix, "placeholder_suffix"),
+    ];
+    for (strip, why) in wrappers {
+        if let Some(title) = cleaned.title.clone()
+            && let Some(fixed) = strip(&title)
+        {
+            changes.push(Change {
+                field: "title".into(),
+                from: title,
+                to: fixed.clone(),
+                why: why.into(),
+            });
+            cleaned.title = Some(fixed);
+        }
+    }
+
     // Underscores first: a title mangled by a filename may also be shouting,
     // and title-casing it before the underscores come out would case the
     // format suffix as though it were a word.
@@ -245,6 +289,90 @@ mod tests {
         assert!(cleaned.reasons.is_empty());
         assert!(cleaned.changes.is_empty());
         assert_eq!(cleaned.severity, 0);
+    }
+
+    fn whys(cleaned: &Cleaned) -> Vec<&str> {
+        cleaned
+            .changes
+            .iter()
+            .map(|change| change.why.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn a_word_processor_title_loses_its_wrappers() {
+        let cleaned = clean(&book(
+            "Microsoft Word - The Yoga of Hesychasm.doc",
+            "William Stoddart",
+        ));
+        assert_eq!(cleaned.book.title.as_deref(), Some("The Yoga of Hesychasm"));
+        assert_eq!(whys(&cleaned), ["junk_title", "filename_title"]);
+    }
+
+    #[test]
+    fn a_placeholder_author_on_the_end_of_a_title_comes_off() {
+        let cleaned = clean(&book("The Birth of Purgatory - Unknown", "Unknown"));
+        assert_eq!(
+            cleaned.book.title.as_deref(),
+            Some("The Birth of Purgatory")
+        );
+        assert_eq!(whys(&cleaned), ["placeholder_suffix"]);
+        // The author is still unknown, and still said to be.
+        assert!(
+            cleaned
+                .reasons
+                .iter()
+                .any(|reason| reason == "unknown_author")
+        );
+
+        let cleaned = clean(&book("Illuminati 666 - Unknown.pdf", "Unknown"));
+        assert_eq!(cleaned.book.title.as_deref(), Some("Illuminati 666"));
+        assert_eq!(whys(&cleaned), ["filename_title", "placeholder_suffix"]);
+    }
+
+    #[test]
+    fn a_misread_title_and_author_are_read_again() {
+        let cleaned = clean(&book("L'impÃ©rialisme amÃ©ricain", "Henri HausÃ©r"));
+        assert_eq!(
+            cleaned.book.title.as_deref(),
+            Some("L'impérialisme américain")
+        );
+        assert_eq!(cleaned.book.author.as_deref(), Some("Henri Hausér"));
+        assert_eq!(whys(&cleaned), ["mojibake_title", "mojibake_author"]);
+        assert!(
+            cleaned
+                .reasons
+                .iter()
+                .any(|reason| reason == "mojibake_title")
+        );
+    }
+
+    #[test]
+    fn a_wrapper_around_nothing_is_left_for_a_person() {
+        // What is inside the wrappers is no title either, so taking them off
+        // would only hide the fault.
+        for title in [
+            "Microsoft Word - Document2",
+            "0195152972.pdf",
+            "Untitled - Unknown",
+        ] {
+            let cleaned = clean(&book(title, "Someone"));
+            assert_eq!(cleaned.book.title.as_deref(), Some(title), "{title}");
+        }
+    }
+
+    #[test]
+    fn titles_that_only_look_wrapped_are_left_alone() {
+        for title in [
+            "Word and Object",
+            "Gödel, Escher, Bach - An Eternal Golden Braid",
+            "The Pdf Primer",
+            "Cafe Society",
+            "A Title Left Trailing -",
+        ] {
+            let cleaned = clean(&book(title, "Someone"));
+            assert_eq!(cleaned.book.title.as_deref(), Some(title), "{title}");
+        }
     }
 
     #[test]

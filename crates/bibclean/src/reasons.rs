@@ -44,7 +44,7 @@ static PATH_TITLE: LazyLock<Regex> =
 /// placeholder.
 static PLACEHOLDER_TITLE: LazyLock<Regex> = LazyLock::new(|| {
     pattern(
-        r"(?i)^\W*(?:some[\s_-]*title|no[\s_-]*title|untitled|unnamed|title|document|documento|test|sample|default|placeholder|tbd|todo|draft|temp|new[\s_-]*document|book\d*|file\d*|scan\d*|doc\d*|n/?a|null|none|x{3,}|unknown)\W*$",
+        r"(?i)^\W*(?:some[\s_-]*title|no[\s_-]*title|untitled|unnamed|title|document\d*|documento|test|sample|default|placeholder|tbd|todo|draft|temp|new[\s_-]*document|book\d*|file\d*|scan\d*|doc\d*|n/?a|null|none|x{3,}|unknown)\W*$",
     )
 });
 
@@ -57,6 +57,14 @@ static PLACEHOLDER_AUTHOR: LazyLock<Regex> = LazyLock::new(|| {
 /// An author field that opens with a bare three or four digit number is a
 /// publication year or a series index in the wrong column, never a person.
 /// Anchored, so a real name containing a number is untouched.
+/// A placeholder author left on the end of a title, the way a "Title - Author"
+/// filename writes a book whose author nobody knew.
+pub(crate) static PLACEHOLDER_SUFFIX: LazyLock<Regex> = LazyLock::new(|| {
+    pattern(&format!(
+        r"(?i){SPACE}+[-–—]{SPACE}+(?:unknown(?:{SPACE}+author)?|anonymous|n/?a){SPACE}*$"
+    ))
+});
+
 static NUMERIC_AUTHOR: LazyLock<Regex> =
     LazyLock::new(|| pattern(&format!(r"^{SPACE}*\d{{3,4}}{SPACE}*(?:$|[{SPACE}.\-–—])")));
 
@@ -148,9 +156,12 @@ const WEIGHTS: &[(&str, u32)] = &[
     ("junk_title", 3),
     ("lowercase_title", 2),
     ("missing_apostrophe", 2),
+    ("mojibake_author", 3),
+    ("mojibake_title", 3),
     ("numeric_author", 4),
     ("path_title", 4),
     ("placeholder_author", 4),
+    ("placeholder_suffix", 2),
     ("placeholder_title", 4),
     ("possible_swap", 2),
     ("publisher_as_author", 3),
@@ -198,6 +209,15 @@ pub fn problems(title: Option<&str>, author: Option<&str>, isbn: Option<&str>) -
         .is_some_and(|at| at.start() == 0)
     {
         reasons.push("numeric_author");
+    }
+    if textkit::mojibake::is_mojibake(title) {
+        reasons.push("mojibake_title");
+    }
+    if textkit::mojibake::is_mojibake(author) {
+        reasons.push("mojibake_author");
+    }
+    if PLACEHOLDER_SUFFIX.is_match(title) {
+        reasons.push("placeholder_suffix");
     }
     if title.contains('_') {
         reasons.push("underscore_title");
@@ -258,6 +278,11 @@ pub fn severity(reasons: &[String]) -> u32 {
 /// Whether anything here needs doing. A missing ISBN alone does not.
 pub fn worth_fixing(reasons: &[String]) -> bool {
     reasons.iter().any(|reason| reason != "missing_isbn")
+}
+
+/// Whether a title is a placeholder rather than a work's name.
+pub(crate) fn is_placeholder_title(title: &str) -> bool {
+    PLACEHOLDER_TITLE.is_match(title.trim_matches(textkit::is_space))
 }
 
 /// Whether the title field is a placeholder and the author field is holding
