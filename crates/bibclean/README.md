@@ -175,6 +175,9 @@ bibclean books.ndjson | jq -c 'select(.slug_proposal.tier | IN("placeholder-auth
 |---|---|---|
 | `placeholder_title` | 4 | The whole title is "Untitled", "Document", "N/A" |
 | `placeholder_author` | 4 | The same, in the author field |
+| `mojibake_title` | 3 | UTF-8 read as Windows-1252: "amÃ©ricain" |
+| `mojibake_author` | 3 | The same, in the author field |
+| `placeholder_suffix` | 2 | A placeholder author left on the end of the title: "… - Unknown" |
 | `path_title` | 4 | A file path sitting in the title |
 | `numeric_author` | 4 | An author field opening with a bare year or series number |
 | `unknown_author` | 3 | "Unknown", "Anonymous", empty |
@@ -201,6 +204,14 @@ an author field is wrong while "Oxford, Michael" is a person.
 | `underscore_title` | A trailing format name comes off, an underscore before a subtitle becomes a colon, the rest become spaces |
 | `allcaps_title` | Title-cased, keeping small words small, hyphenated parts cased on both sides, and accented first letters capitalised rather than skipped |
 | `missing_isbn` | Filled from the filename, if a checksum-valid ISBN is in it |
+| `mojibake_title`, `mojibake_author` | Read again as the UTF-8 it was, when every character makes the trip back |
+| `junk_title` | "Microsoft Word - " and the like come off the front |
+| `filename_title` | A document extension comes off the end |
+| `placeholder_suffix` | The "- Unknown" comes off the end |
+
+The last three are made only when what is left is still a title: "Microsoft
+Word - Document2" and "0195152972.pdf" stay as they are, flagged, because a
+shorter placeholder is not a repair.
 
 Everything else is named and left alone, because the fix needs a lookup and a
 wrong guess in a catalogue is harder to find than a missing value.

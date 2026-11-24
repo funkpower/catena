@@ -115,6 +115,24 @@ fires on one side and not the other:
 The boundary forms are lookarounds, so a pattern using them needs an engine
 that has them.
 
+## Mojibake
+
+UTF-8 text that something decoded as Windows-1252 on the way, put back:
+
+```rust
+assert_eq!(
+    textkit::mojibake::repair("L'impÃ©rialisme amÃ©ricain").as_deref(),
+    Some("L'impérialisme américain"),
+);
+assert_eq!(textkit::mojibake::repair("café"), None);
+```
+
+The repair turns each character back into the byte it was decoded from and
+reads the bytes as UTF-8. Real text almost never survives that trip — a
+genuine "café" becomes a lone `0xe9`, which is not UTF-8 — so a string that
+does was misread, and the answer is certain rather than guessed. Text misread
+twice is unwound twice; text that is only partly repairable is left alone.
+
 ## See also
 
 - [`corpus-core`](../corpus-core/README.md) — the records these help produce.
