@@ -184,6 +184,15 @@ pub fn cluster(kind: Kind, items: &[Item], rules: &Rules) -> Vec<Proposal> {
         out.extend(proposals_from_group(kind, &group, method));
         grouped.extend(group.iter().map(|item| item.id));
     }
+    if kind == Kind::Author {
+        let dropped: Vec<i64> = out.iter().map(|proposal| proposal.drop_id).collect();
+        let standing: Vec<Item> = items
+            .iter()
+            .filter(|item| !dropped.contains(&item.id))
+            .cloned()
+            .collect();
+        out.extend(fuller_form_proposals(&standing));
+    }
     if kind == Kind::Tag {
         out.extend(junk_deletes(items, &grouped, rules));
         out.extend(scheme_proposals(items, &out, &rules.scheme));
@@ -643,6 +652,158 @@ fn author_components(items: &[Item]) -> Vec<Vec<Item>> {
         .collect()
 }
 
+/// A name and the same name written out further: "G. W. F. Hegel" and
+/// "Georg Wilhelm Friedrich Hegel", "Murray Rothbard" and "Murray N.
+/// Rothbard".
+///
+/// The surname must agree, and so must the first given name, written out or
+/// as its initial. Every other given name of the shorter heading must appear
+/// in the longer one, in order, likewise. A heading that would fit two longer
+/// ones that do not fit each other ("David Smith" beside "David Livingstone
+/// Smith" and "David Woodruff Smith") could be either person, so the whole
+/// set is left alone.
+///
+/// Two people can share a first name and a surname, so these are proposals
+/// for a person to look at, never as trusted as a respelling: 0.8 when the
+/// shorter heading is two or more initials, 0.6 when it is a name.
+fn fuller_form_proposals(items: &[Item]) -> Vec<Proposal> {
+    let people: Vec<(Item, Vec<String>)> = items
+        .iter()
+        .filter(|item| crate::reasons::looks_like_person(&item.name))
+        .filter_map(|item| {
+            let tokens = author_tokens(&item.name);
+            let surname = tokens.last()?;
+            let given = &tokens[..tokens.len() - 1];
+            let sound = (2..=5).contains(&tokens.len())
+                && !given.contains(surname)
+                && tokens
+                    .iter()
+                    .all(|token| token.chars().all(char::is_alphabetic));
+            sound.then(|| (item.clone(), tokens))
+        })
+        .collect();
+
+    let mut by_surname: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (at, (_, tokens)) in people.iter().enumerate() {
+        by_surname
+            .entry(tokens.last().expect("two tokens or more"))
+            .or_default()
+            .push(at);
+    }
+    let mut surnames: Vec<&&str> = by_surname.keys().collect();
+    surnames.sort();
+
+    let mut out = Vec::new();
+    for surname in surnames {
+        let members = &by_surname[*surname];
+        let given = |at: usize| &people[at].1[..people[at].1.len() - 1];
+        // Components of the "fits" relation among the headings with this surname.
+        let mut seen: Vec<usize> = Vec::new();
+        for &start in members {
+            if seen.contains(&start) {
+                continue;
+            }
+            let mut component = vec![start];
+            let mut grow = 0;
+            while grow < component.len() {
+                let at = component[grow];
+                for &other in members {
+                    if !component.contains(&other)
+                        && (fits(given(at), given(other)) || fits(given(other), given(at)))
+                    {
+                        component.push(other);
+                    }
+                }
+                grow += 1;
+            }
+            seen.extend(&component);
+            if component.len() < 2 {
+                continue;
+            }
+            // The fullest headings: those no other heading writes out further.
+            let fullest: Vec<usize> = component
+                .iter()
+                .copied()
+                .filter(|&at| {
+                    !component.iter().any(|&other| {
+                        fits(given(at), given(other)) && !fits(given(other), given(at))
+                    })
+                })
+                .collect();
+            let one_person = fullest
+                .iter()
+                .all(|&a| fullest.iter().all(|&b| fits(given(a), given(b))));
+            if !one_person {
+                continue;
+            }
+            // The heading most of the works are under, unless it is faulty as
+            // a byline; a tie goes to the fuller name. Not pick_canonical:
+            // its preference for spaced initials would put fifty books by
+            // "Bertrand Russell" under the one catalogued as "B. Russell".
+            let keep = component
+                .iter()
+                .map(|&at| &people[at])
+                .max_by_key(|(item, tokens)| {
+                    (
+                        author_form(&item.name).min(0),
+                        item.count,
+                        tokens.iter().map(|t| t.chars().count()).sum::<usize>(),
+                    )
+                })
+                .map(|(item, _)| item.clone())
+                .expect("a component has two members or more");
+            for &at in &component {
+                let item = &people[at].0;
+                if item.name == keep.name {
+                    continue;
+                }
+                let keep_given = &author_tokens(&keep.name);
+                let keep_given = &keep_given[..keep_given.len() - 1];
+                let shorter = match fits(given(at), keep_given) {
+                    true => given(at),
+                    false => keep_given,
+                };
+                let initials = shorter.len() >= 2 && shorter.iter().all(|t| t.chars().count() == 1);
+                out.push(Proposal {
+                    kind: Kind::Author.name().to_string(),
+                    action: "merge".into(),
+                    keep: Some(keep.name.clone()),
+                    drop: item.name.clone(),
+                    keep_id: Some(keep.id),
+                    drop_id: item.id,
+                    keep_count: keep.count,
+                    drop_count: item.count,
+                    method: "fuller_form".to_string(),
+                    confidence: if initials { 0.8 } else { 0.6 },
+                    evidence: format!(
+                        "{} books as '{}' → '{}' ({}): the same name written out further",
+                        item.count, item.name, keep.name, keep.count
+                    ),
+                });
+            }
+        }
+    }
+    out
+}
+
+/// Whether the given names `short` are `long`'s, or initials of them, the
+/// first agreeing and the rest in order.
+fn fits(short: &[String], long: &[String]) -> bool {
+    fn one(short: &str, long: &str) -> bool {
+        short == long || (short.chars().count() == 1 && long.starts_with(short))
+    }
+    let (Some(first), Some(long_first)) = (short.first(), long.first()) else {
+        return false;
+    };
+    if !one(first, long_first) {
+        return false;
+    }
+    let mut rest = long[1..].iter();
+    short[1..]
+        .iter()
+        .all(|token| rest.by_ref().any(|candidate| one(token, candidate)))
+}
+
 /// Every bucket of a key, including the ones with a single member, in
 /// first-seen order.
 fn keyed_buckets(items: &[Item], key: impl Fn(&str) -> String) -> Vec<Vec<Item>> {
@@ -869,6 +1030,60 @@ mod tests {
         let proposals = cluster(Kind::Tag, &items, &Rules::default());
         assert_eq!(proposals.len(), 1);
         assert_eq!(proposals[0].action, "merge");
+    }
+
+    #[test]
+    fn a_name_written_out_further_is_one_heading() {
+        let items = [
+            item(1, "C. S. Lewis", 23),
+            item(2, "Clive Staples Lewis", 3),
+            item(3, "Murray Rothbard", 1),
+            item(4, "Murray N. Rothbard", 8),
+            item(5, "Murray Newton Rothbard", 2),
+            item(6, "Bertrand Russell", 52),
+            item(7, "B. Russell", 1),
+        ];
+        let proposals = cluster(Kind::Author, &items, &Rules::default());
+        let mut pairs: Vec<(&str, &str, f64)> = proposals
+            .iter()
+            .inspect(|p| assert_eq!(p.method, "fuller_form"))
+            .map(|p| (p.drop.as_str(), p.keep.as_deref().unwrap(), p.confidence))
+            .collect();
+        pairs.sort_by(|a, b| a.0.cmp(b.0));
+        // The heading most works are under is kept, however short; a pair of
+        // initials is more surely the same person than a bare first name.
+        assert_eq!(
+            pairs,
+            [
+                ("B. Russell", "Bertrand Russell", 0.6),
+                ("Clive Staples Lewis", "C. S. Lewis", 0.8),
+                ("Murray Newton Rothbard", "Murray N. Rothbard", 0.6),
+                ("Murray Rothbard", "Murray N. Rothbard", 0.6),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_name_that_could_be_two_people_is_left_alone() {
+        let items = [
+            item(1, "David Smith", 1),
+            item(2, "David Livingstone Smith", 2),
+            item(3, "David Woodruff Smith", 2),
+        ];
+        assert!(cluster(Kind::Author, &items, &Rules::default()).is_empty());
+    }
+
+    #[test]
+    fn a_different_first_name_or_a_doubled_surname_is_not_a_fuller_form() {
+        let items = [
+            item(1, "Peter W. Martens", 1),
+            item(2, "Paul M. Blowers Peter W Martens", 1),
+            item(3, "Bertrand Russell", 52),
+            item(4, "Bertrand Russell Russell", 1),
+            item(5, "Masud Khan", 1),
+            item(6, "M. Masud R. Khan", 1),
+        ];
+        assert!(cluster(Kind::Author, &items, &Rules::default()).is_empty());
     }
 
     #[test]
