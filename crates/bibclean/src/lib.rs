@@ -240,6 +240,18 @@ pub fn clean(book: &Book) -> Cleaned {
         cleaned.author = Some(byline);
     }
 
+    if let Some(title) = cleaned.title.clone()
+        && let Some(fixed) = fix::tidy_punctuation(&title)
+    {
+        changes.push(Change {
+            field: "title".into(),
+            from: title,
+            to: fixed.clone(),
+            why: "title_punctuation".into(),
+        });
+        cleaned.title = Some(fixed);
+    }
+
     // Underscores first: a title mangled by a filename may also be shouting,
     // and title-casing it before the underscores come out would case the
     // format suffix as though it were a word.
@@ -440,7 +452,6 @@ mod tests {
             "Gödel, Escher, Bach - An Eternal Golden Braid",
             "The Pdf Primer",
             "Cafe Society",
-            "A Title Left Trailing -",
         ] {
             let cleaned = clean(&book(title, "Someone"));
             assert_eq!(cleaned.book.title.as_deref(), Some(title), "{title}");
@@ -562,6 +573,47 @@ mod tests {
             "The Book of Lit",
         ] {
             let cleaned = clean(&book(title, "Someone Else"));
+            assert_eq!(cleaned.book.title.as_deref(), Some(title), "{title}");
+        }
+    }
+
+    #[test]
+    fn a_dangling_separator_is_punctuation_not_a_wrapper() {
+        let cleaned = clean(&book("A Title Left Trailing -", "Someone"));
+        assert_eq!(cleaned.book.title.as_deref(), Some("A Title Left Trailing"));
+        assert_eq!(whys(&cleaned), ["title_punctuation"]);
+    }
+
+    #[test]
+    fn a_titles_punctuation_is_set_as_printed() {
+        for (title, want) in [
+            (
+                "Sex Wars : Sexual Dissent and Political Culture",
+                "Sex Wars: Sexual Dissent and Political Culture",
+            ),
+            ("Jesuits, The", "The Jesuits"),
+            (
+                "Bible Made Impossible, The: Moving from Biblicism",
+                "The Bible Made Impossible: Moving from Biblicism",
+            ),
+            ("Wissenschaft Der Logik -", "Wissenschaft Der Logik"),
+            (
+                "Crusade for Pan-Europe. Autobiography of a man and a movement.",
+                "Crusade for Pan-Europe. Autobiography of a man and a movement",
+            ),
+            ("Passions of  Christ", "Passions of Christ"),
+        ] {
+            let cleaned = clean(&book(title, "Someone"));
+            assert_eq!(cleaned.book.title.as_deref(), Some(want), "{title}");
+        }
+        for title in [
+            "Martin Luther King Jr.",
+            "Wait...",
+            "Being and Time",
+            "Me, Myself and I",
+            "Hegel: The Phenomenology",
+        ] {
+            let cleaned = clean(&book(title, "Someone"));
             assert_eq!(cleaned.book.title.as_deref(), Some(title), "{title}");
         }
     }

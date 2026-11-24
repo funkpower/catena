@@ -190,6 +190,7 @@ bibclean books.ndjson | jq -c 'select(.slug_proposal.tier | IN("placeholder-auth
 | `author_is_title` | 4 | The title copied into the author field |
 | `author_role_suffix` | 2 | A catalogue heading's dates, role or fuller form in the author field: "Lossky, Vladimir, 1903-1958", "Vico, Giambattista (Author)" |
 | `author_list_commas` | 1 | Several authors joined with commas or semicolons rather than "&" |
+| `title_punctuation` | 1 | A space before a colon, double spaces, a dangling separator or full stop, "Jesuits, The" |
 | `numbered_title` | 1 | A set's number in front of the title: "01 - The Three Musketeers" |
 | `release_tags` | 1 | A release group's tags after the title: "(v4 0) (lit)", "(Scan, OCR)" |
 | `name_in_title` | 2 | The author's name in front of the title, filename fashion: "Wilfred R Bion-Cogitations-Karnac Books (1991)" |
@@ -221,6 +222,7 @@ an author field is wrong while "Oxford, Michael" is a person.
 | `filename_title` | A document extension comes off the end |
 | `placeholder_suffix` | The "- Unknown" comes off the end |
 | `author_role_suffix`, `author_list_commas` | The heading put as a byline: dates, roles and fuller forms off, each name given names first, the names joined with "&". A field that is only "Surname, Given" is left alone, since some catalogues keep that order on purpose; `bibclean::heading::as_byline` turns it round for a caller that wants bylines |
+| `title_punctuation` | Set as a title page sets it; a full stop after an initial or abbreviation stays |
 | `numbered_title`, `release_tags` | The number comes off the front, the tags off the end. A series named in front as well ("Known Space-038-…") is `seriesof`'s, which keeps the series |
 | `name_in_title` | The names come off the front, and the publisher, year and series off the end; the names are proposed as the author. Made only when the record has no real author, or already has the same one |
 

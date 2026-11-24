@@ -178,6 +178,7 @@ const WEIGHTS: &[(&str, u32)] = &[
     ("release_tags", 1),
     ("sentence_case_title", 1),
     ("title_in_author", 3),
+    ("title_punctuation", 1),
     ("underscore_title", 1),
     ("unknown_author", 3),
     ("url_title", 4),
@@ -209,6 +210,9 @@ pub fn problems(title: Option<&str>, author: Option<&str>, isbn: Option<&str>) -
     }
     if URL_TITLE.is_match(title) {
         reasons.push("url_title");
+    }
+    if crate::fix::tidy_punctuation(title).is_some() {
+        reasons.push("title_punctuation");
     }
     if crate::fix::strip_leading_number(title).is_some() {
         reasons.push("numbered_title");
