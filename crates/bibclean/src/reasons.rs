@@ -148,7 +148,9 @@ const PERSON_SUFFIXES: &[&str] = &["ed", "eds", "ii", "iii", "iv", "jr", "md", "
 
 /// What each fault is worth when the worst records are wanted first.
 const WEIGHTS: &[(&str, u32)] = &[
+    ("account_author", 3),
     ("allcaps_title", 2),
+    ("author_is_title", 4),
     ("author_last_first", 1),
     ("author_role_suffix", 2),
     ("edited_volume", 1),
@@ -248,6 +250,12 @@ pub fn problems(title: Option<&str>, author: Option<&str>, isbn: Option<&str>) -
     {
         reasons.push("possible_swap");
     }
+    if is_account_name(author) {
+        reasons.push("account_author");
+    }
+    if author_is_title(title, author) {
+        reasons.push("author_is_title");
+    }
     if title_in_author(Some(title), Some(author)) {
         reasons.push("title_in_author");
     }
@@ -278,6 +286,65 @@ pub fn severity(reasons: &[String]) -> u32 {
 /// Whether anything here needs doing. A missing ISBN alone does not.
 pub fn worth_fixing(reasons: &[String]) -> bool {
     reasons.iter().any(|reason| reason != "missing_isbn")
+}
+
+/// Whether the author field holds the title, copied there by whatever made
+/// the record: "Cultural Imperialism" by "Cultural Imperialism".
+///
+/// The author has to be the whole title, or the whole of the title before its
+/// subtitle or a bracketed aside, compared without case or punctuation. A
+/// person whose name merely opens the title ("Plato" for "Plato and the
+/// Republic") is not caught, because the name is not all of the title, and
+/// nor is a person named before the subtitle: "Isaac Newton: Philosophical
+/// Writings" is by Isaac Newton.
+pub fn author_is_title(title: &str, author: &str) -> bool {
+    let bare_author = author.split('(').next().unwrap_or("");
+    let folded = fold(bare_author);
+    if folded.is_empty() {
+        return false;
+    }
+    if folded == fold(title.split('(').next().unwrap_or("")) {
+        return true;
+    }
+    folded == fold(title.split([':', '(']).next().unwrap_or("")) && !looks_like_person(bare_author)
+}
+
+/// Whether the author field is the login of whoever made the file:
+/// "mymarasigan", "HP_Administrator", "SaravanakumarCS", "user42".
+///
+/// One word, and a shape no published name has: all lowercase, an underscore,
+/// digits among letters, or capitals run on after lowercase. A capitalised
+/// single name ("Plato", "Voltaire") is a name and is left alone.
+pub fn is_account_name(author: &str) -> bool {
+    let author = author.trim_matches(textkit::is_space);
+    if author.chars().count() < 4 || author.chars().any(textkit::is_space) {
+        return false;
+    }
+    if !author.chars().any(char::is_alphabetic) {
+        return false;
+    }
+    let lowercase = author
+        .chars()
+        .all(|c| c.is_lowercase() || c.is_ascii_digit() || c == '.');
+    let underscored = author.contains('_');
+    let digits = author.chars().any(|c| c.is_ascii_digit());
+    let run_on_capitals = author
+        .chars()
+        .collect::<Vec<_>>()
+        .windows(3)
+        .any(|w| w[0].is_lowercase() && w[1].is_uppercase() && w[2].is_uppercase());
+    lowercase || underscored || digits || run_on_capitals
+}
+
+/// Lowercase words, punctuation dropped.
+fn fold(text: &str) -> String {
+    text.chars()
+        .map(|c| if c.is_alphanumeric() { c } else { ' ' })
+        .collect::<String>()
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Whether a title is a placeholder rather than a work's name.
@@ -382,6 +449,95 @@ fn is_publisher(author: &str) -> bool {
     PUBLISHER_AUTHORS
         .binary_search(&normalise(author).as_str())
         .is_ok()
+}
+
+#[cfg(test)]
+mod account_name_tests {
+    use super::*;
+
+    #[test]
+    fn a_login_is_named() {
+        for author in [
+            "mymarasigan",
+            "HP_Administrator",
+            "SaravanakumarCS",
+            "user42",
+            "pubassist",
+            "vitzliputzli",
+        ] {
+            assert!(is_account_name(author), "{author}");
+        }
+    }
+
+    #[test]
+    fn a_name_is_not() {
+        for author in [
+            "Plato",
+            "Voltaire",
+            "Hannah Arendt",
+            "bell hooks",
+            "McLuhan",
+            "DeLillo",
+            "Joe",
+            "",
+            "Anonymous",
+        ] {
+            assert!(!is_account_name(author), "{author}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod author_is_title_tests {
+    use super::*;
+
+    #[test]
+    fn a_title_in_the_author_field_is_named() {
+        for (title, author) in [
+            ("Cultural Imperialism", "Cultural Imperialism"),
+            ("Consciousness Reconsidered", "Consciousness Reconsidered"),
+            ("The Brain", "The Brain (1979)"),
+            (
+                "A Slim Book About Narrow Content",
+                "A Slim Book About Narrow Content (Contem",
+            ),
+            (
+                "Neural Correlates of Consciousness: Empirical and Conceptual Questions",
+                "Neural Correlates Of Consciousness",
+            ),
+            ("Reed", "Reed"),
+        ] {
+            assert!(author_is_title(title, author), "{title} / {author}");
+            assert!(
+                problems(Some(title), Some(author), None).contains(&"author_is_title".to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn a_person_who_shares_words_with_the_title_is_not() {
+        for (title, author) in [
+            ("Plato and the Republic", "Plato"),
+            ("Kant: A Very Short Introduction", "Roger Scruton"),
+            ("Hegel and Aristotle", "Alfredo Ferrarin"),
+            ("Aristotle", "Jonathan Barnes"),
+            ("Isaac Newton: Philosophical Writings", "Isaac Newton"),
+            (
+                "Margaret Cavendish: Observations Upon Experimental Philosophy",
+                "Margaret Cavendish",
+            ),
+            // Two capitalised words read as a name, so before a subtitle they
+            // are given the benefit of the doubt even when they are a title.
+            (
+                "Cultural Imperialism: A Critical Introduction",
+                "Cultural Imperialism",
+            ),
+            ("", "Someone"),
+            ("Untitled", ""),
+        ] {
+            assert!(!author_is_title(title, author), "{title} / {author}");
+        }
+    }
 }
 
 #[cfg(test)]

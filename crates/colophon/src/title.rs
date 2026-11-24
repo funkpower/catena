@@ -58,6 +58,39 @@ static CATALOGUE_ENTRY: LazyLock<Regex> = LazyLock::new(|| {
 static DEDICATION: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)^\s*(to|for|in memory of)\s+\S.*,\s*$").expect("a valid pattern")
 });
+/// Front matter that is about the book rather than the book: the cover's
+/// credit, a dedication set without its comma, the list of the author's other
+/// books, the page of praise, a library's stamp, a scanner's watermark.
+static ABOUT_THE_BOOK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r"(?i)^\s*(?:",
+        r"(?:cover|jacket)\s+(?:design|art|artwork|illustration|photograph|photo|image|painting)s?\b",
+        r"|(?:interior|book|text)\s+design(?:ed)?\s+by\b",
+        r"|(?:to|for)\s+(?:my|our)\s+\S+(?:\s+\S+){0,3}\s*[,.]?\s*$",
+        r"|also\s+by\b|by\s+the\s+same\s+author\b|other\s+(?:books|titles|works)\s+by\b",
+        r"|praise\s+for\b",
+        r"|(?:brought\s+to\s+you|digiti[sz]ed|scanned)\s+by\b|brought\s+to\s+you\s*$",
+        r")",
+    ))
+    .expect("a valid pattern")
+});
+/// "BOOK ONE", "Part II", "Book 3": the page opens a part of the book, and
+/// the name set under it is the part's, not the book's.
+static PART_OPENER: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)^\W*(?:book|part)\s+(?:one|two|three|four|five|six|seven|eight|nine|ten|first|second|third|[ivxlc]+|\d{1,2})\W*$")
+        .expect("a valid pattern")
+});
+/// A library's ownership stamp: "Trent University Library".
+static LIBRARY_STAMP: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\b(?:university|college|seminary)\b.*\blibrar(?:y|ies)\s*$")
+        .expect("a valid pattern")
+});
+/// The slug a layout program prints at the foot of a proof page: the file's
+/// name, or the date and time it was output.
+static LAYOUT_SLUG: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\.(?:qxd|qxp|indd|pmd)\b|\b\d{1,2}/\d{1,2}/\d{2,4}\s+\d{1,2}:\d{2}\s*[ap]m\b")
+        .expect("a valid pattern")
+});
 static COPYRIGHT_NOTICE: LazyLock<Regex> = LazyLock::new(|| {
     // The year need not follow the symbol directly: "(c) Alfredo Ferrarin
     // 2004" puts the holder between them, and was read as a title.
@@ -184,7 +217,9 @@ fn strip_folio(norm: &str) -> &str {
 /// edition's own list of volumes.
 fn is_furniture(line: &str) -> bool {
     let t = line.trim();
-    if t.starts_with('[') || t.starts_with('\\') {
+    // A line that opens on the copyright sign is a credit or a notice even
+    // when it carries no year: "© Vladimir Pcholkin / FPG International".
+    if t.starts_with('[') || t.starts_with('\\') || t.starts_with('\u{a9}') {
         return true;
     }
     // A converter that left its markup in. Nothing printed on a title page is
@@ -224,7 +259,18 @@ fn is_furniture(line: &str) -> bool {
             return true;
         }
     }
-    if DEDICATION.is_match(t) {
+    if DEDICATION.is_match(t)
+        || ABOUT_THE_BOOK.is_match(t)
+        || LIBRARY_STAMP.is_match(t)
+        || LAYOUT_SLUG.is_match(t)
+    {
+        return true;
+    }
+    // A trademark sign on the end marks a brand: "A Forthright Edition™",
+    // printed beside the title, never inside one. A converter that dropped
+    // the superscript leaves the letters run on: "EditionTM".
+    let run_on_mark = t.ends_with("TM") && t.chars().rev().nth(2).is_some_and(char::is_lowercase);
+    if t.ends_with('™') || run_on_mark {
         return true;
     }
     let lower = t.to_lowercase();
@@ -304,6 +350,14 @@ fn could_be_a_person(line: &str) -> bool {
     if tokens.len() > 4 {
         return false;
     }
+    // "A Bradford Book", "A Scientific American Book": the imprint's own
+    // line, set where a byline would be.
+    let lowered = line.to_lowercase();
+    if (lowered.starts_with("a ") || lowered.starts_with("an "))
+        && (lowered.ends_with(" book") || lowered.ends_with(" books"))
+    {
+        return false;
+    }
     !tokens.iter().any(|token| {
         let word = token.trim_end_matches('.').to_lowercase();
         word.len() > 4 && NOT_A_NAME.iter().any(|end| word.ends_with(end))
@@ -369,6 +423,11 @@ pub fn read(lines: &[String]) -> Option<TitlePage> {
                 }
                 continue;
             }
+        }
+        // Above everything else on the page, a part marker means the page
+        // opens a part of the book, and what follows is the part's name.
+        if block.is_empty() && PART_OPENER.is_match(line) {
+            return None;
         }
         if is_structural(line) || is_furniture(line) || BARE_DATE.is_match(line) {
             if block.is_empty() {
@@ -467,6 +526,25 @@ mod furniture_tests {
             "Vol. 11. HENRY JAMES, JR.",
             "All rights reserved",
             "First published 1971",
+            "Cover design by David Ferris (www.davidferrisdesign.com).",
+            "Cover art",
+            "Jacket photograph © Getty Images",
+            "Book design by Jane Doe",
+            "To my family",
+            "For my parents",
+            "Also by Fyodor Dostoyevsky",
+            "By the same author",
+            "Other books by Anne Rice",
+            "Praise for *The Singularity Is Near",
+            "Hond_FM.qxd 7/12/04 12:48 PM Page iii",
+            "M956 LEVENTIS PRE M/UP.qxd   3/10/07   1:42 PM   Page i",
+            "Trent University Library",
+            "The University of Chicago Libraries",
+            "brought to you",
+            "Digitized by Google",
+            "A Forthright EditionTM",
+            "A Forthright Edition\u{2122}",
+            "\u{a9} Vladimir Pcholkin / FPG International",
         ] {
             assert!(
                 is_structural(line) || is_furniture(line),
@@ -486,6 +564,15 @@ mod furniture_tests {
             "Contents of Consciousness",
             "August 1914",
             "Copyright and Its Discontents",
+            "Book Design",
+            "Cover Story",
+            "To Kill a Mockingbird",
+            "For Whom the Bell Tolls",
+            "In Praise of Folly",
+            "The Library of Babel",
+            "University Libraries in Transition",
+            "The Public Library",
+            "Atomic Habits",
         ] {
             assert!(
                 !(is_structural(line) || is_furniture(line)),
@@ -502,6 +589,52 @@ mod furniture_tests {
         // A title that happens to be roman numerals throughout is not a folio
         // with nothing left; it keeps whatever it had.
         assert_eq!(strip_folio("i"), "i");
+    }
+}
+
+#[cfg(test)]
+mod part_tests {
+    use super::*;
+
+    fn lines(text: &[&str]) -> Vec<String> {
+        text.iter().map(|line| (*line).to_string()).collect()
+    }
+
+    #[test]
+    fn a_part_opener_is_not_the_title_page() {
+        assert!(read(&lines(&["BOOK ONE", "The Stitch Service"])).is_none());
+        assert!(read(&lines(&["Part II", "The War Years"])).is_none());
+    }
+
+    #[test]
+    fn a_title_that_begins_with_book_is_still_a_title() {
+        let page =
+            read(&lines(&["The Book of Disquiet", "Fernando Pessoa"])).expect("a title page");
+        assert_eq!(page.title.as_deref(), Some("The Book of Disquiet"));
+        let page = read(&lines(&["Book One of the Trilogy", "Someone Else"]));
+        assert!(page.is_some());
+        let page =
+            read(&lines(&["The Great Ideas of Psychology", "Part I"])).expect("a title page");
+        assert_eq!(page.title.as_deref(), Some("The Great Ideas of Psychology"));
+    }
+}
+
+#[cfg(test)]
+mod person_tests {
+    use super::*;
+
+    #[test]
+    fn an_imprint_line_is_not_a_person() {
+        for line in ["A SCIENTIFIC Book", "A Bradford Book", "An Owl Book"] {
+            assert!(!could_be_a_person(line), "{line}");
+        }
+    }
+
+    #[test]
+    fn initials_are_still_a_person() {
+        for line in ["A. J. Ayer", "A.J. Ayer", "Anne Carson"] {
+            assert!(could_be_a_person(line), "{line}");
+        }
     }
 }
 

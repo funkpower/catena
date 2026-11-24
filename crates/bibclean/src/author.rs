@@ -21,7 +21,7 @@ fn pattern(source: &str) -> Regex {
 /// person. Without them the looser heuristics propose the imprint.
 static NOT_A_PERSON: LazyLock<Boundaried> = LazyLock::new(|| {
     Boundaried::new(&format!(
-        r"(?i){WORD_START}(press|edition|introduction|university|volume|reprint|copyright|published|printed|rights|reserved|library|congress|isbn|inc|ltd|company|regents|trustees|foundation|institute|society|association|board|council|committee|department|ministry|editors?|trust|publishing|publishers|books|publications|sons|llc|gmbh|verlag|all|limited){WORD_END}"
+        r"(?i){WORD_START}(press|edition|introduction|university|volume|reprint|copyright|published|printed|rights|reserved|library|congress|isbn|inc|ltd|company|regents|trustees|foundation|institute|society|association|board|council|committee|department|ministry|editors?|trust|publishing|publishers|books|publications|sons|llc|gmbh|verlag|all|limited|house|media|editions|éditions|center|centre|seminary|classics|wiley|gruyter|brill|siebeck|seuil|gallimard|payot|routledge|springer|elsevier|macmillan|penguin|blackwell|norton|knopf|doubleday|vintage|bantam|harpercollins|nv|bv){WORD_END}"
     ))
     .expect("a valid pattern")
 });
@@ -55,10 +55,19 @@ static ISBN: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 /// The strongest thing a book says about who wrote it.
+///
+/// The word "Copyright" is often left off: "© 2004 by Stanley Hauerwas".
 static COPYRIGHT: LazyLock<Regex> = LazyLock::new(|| {
     pattern(&format!(
-        r"(?i)Copyright{SPACE}*(?:©|\(c\))?{SPACE}*\d{{4}}{SPACE}+by{SPACE}+(.{{2,90}})"
+        r"(?i)(?:Copyright{SPACE}*(?:©|\(c\))?|©|\(c\)){SPACE}*\d{{4}}{SPACE}+by{SPACE}+(.{{2,90}})"
     ))
+});
+
+/// What a notice can be for besides the work itself.
+static SUBSIDIARY: LazyLock<Regex> = LazyLock::new(|| {
+    pattern(
+        r"(?i)\b(?:translat\w*|introduction|notes|foreword|afterword|preface|editorial|selection|compilation|illustrations?|cover|map|maps|abridg\w*|chronology)\b",
+    )
 });
 
 /// The cataloguing block a national library prints on the copyright page.
@@ -177,7 +186,15 @@ pub fn from_front_matter(text: &str) -> Vec<Suggestion> {
     let mut out = Vec::new();
 
     // Strongest: the book saying who holds its copyright.
-    if let Some(found) = COPYRIGHT.captures(text)
+    // A notice for a translation, an introduction or the notes names whoever
+    // wrote those, not the book: "Translation copyright © 2014 by Oliver
+    // Ready" is in front of Dostoevsky.
+    let for_the_work = COPYRIGHT.captures_iter(text).find(|found| {
+        let at = found.get(0).map_or(0, |whole| whole.start());
+        let line_start = text[..at].rfind('\n').map_or(0, |n| n + 1);
+        !SUBSIDIARY.is_match(&text[line_start..at])
+    });
+    if let Some(found) = for_the_work
         && let Some(name) = clean(&name_prefix(&found[1]))
         && name.split_whitespace().count() >= 2
     {
@@ -270,6 +287,16 @@ pub fn name_prefix(text: &str) -> String {
         if tokens.len() >= 5 {
             break;
         }
+    }
+    // A particle belongs to the surname after it. Left on the end, it means
+    // the run stopped at a firm's name: "Walter de" from "Walter de Gruyter".
+    while tokens.last().is_some_and(|last| {
+        [
+            "de", "van", "von", "der", "den", "du", "da", "di", "la", "le",
+        ]
+        .contains(last)
+    }) {
+        tokens.pop();
     }
     tokens.join(" ")
 }
@@ -396,6 +423,38 @@ mod tests {
         assert_eq!(found[0].author, "James H. Billington");
         assert_eq!(found[0].method, "front_matter_copyright");
         assert_eq!(found[0].confidence, 0.9);
+    }
+
+    #[test]
+    fn a_notice_without_the_word_copyright_names_the_author() {
+        let text = "\u{a9} 2004 by Stanley Hauerwas and Samuel Wells\n350 Main Street";
+        let found = from_front_matter(text);
+        assert_eq!(found[0].method, "front_matter_copyright");
+        assert!(
+            found[0].author.starts_with("Stanley Hauerwas"),
+            "{}",
+            found[0].author
+        );
+    }
+
+    #[test]
+    fn a_publisher_holding_the_copyright_is_not_an_author() {
+        for text in [
+            "Copyright \u{a9} 1990 by John Wiley & Sons",
+            "\u{a9} 2004 by Random House, Inc.",
+            "Copyright \u{a9} 2011 by Walter de Gruyter",
+            "Copyright \u{a9} 2014 by Arktos Media Ltd.",
+        ] {
+            assert!(from_front_matter(text).is_empty(), "{text}");
+        }
+    }
+
+    #[test]
+    fn a_translators_notice_is_passed_over() {
+        let text = "Translation copyright \u{a9} 2014 by Oliver Ready\nIntroduction copyright \u{a9} 2014 by Someone Else";
+        assert!(from_front_matter(text).is_empty());
+        let text = "Translation copyright \u{a9} 2014 by Oliver Ready\nCopyright \u{a9} 1999 by James H. Billington";
+        assert_eq!(from_front_matter(text)[0].author, "James H. Billington");
     }
 
     #[test]
