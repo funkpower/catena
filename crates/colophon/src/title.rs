@@ -312,12 +312,51 @@ fn is_furniture(line: &str) -> bool {
     false
 }
 
+/// The people a byline names, each held to the shape of a person's name:
+/// a title page sets a series name or a line of the title in the same
+/// capitals as its author ("MARESFIELD LIBRARY", "A BASIC THEORY OF").
 fn people(who: &str) -> Vec<String> {
     who.split(&[';', '&'][..])
         .flat_map(|part| part.split(" and "))
         .map(|name| name.trim().trim_end_matches(['.', ',']).trim().to_string())
         .filter(|name| name.len() >= 3 && name.split_whitespace().count() <= 5)
+        .filter_map(|name| bibclean::author::clean(&name))
+        .filter(|name| crate::cip::reads_as_a_name(name))
+        .filter(|name| name.split_whitespace().count() >= 2 || is_known_mononym(name))
         .collect()
+}
+
+/// A single name is a person only where it is one of the handful that go by
+/// one: anything else alone on a byline line is a word of the title.
+fn is_known_mononym(name: &str) -> bool {
+    const MONONYMS: &[&str] = &[
+        "Aeschylus",
+        "Aristotle",
+        "Augustine",
+        "Cicero",
+        "Dante",
+        "Epictetus",
+        "Euripides",
+        "Herodotus",
+        "Hesiod",
+        "Homer",
+        "Josephus",
+        "Livy",
+        "Lucretius",
+        "Ovid",
+        "Plato",
+        "Plotinus",
+        "Plutarch",
+        "Proclus",
+        "Seneca",
+        "Sophocles",
+        "Tacitus",
+        "Thucydides",
+        "Virgil",
+        "Voltaire",
+        "Xenophon",
+    ];
+    MONONYMS.contains(&name)
 }
 
 /// Words a line ends on when the typesetter broke a title across it.
