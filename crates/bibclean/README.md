@@ -180,6 +180,7 @@ bibclean books.ndjson | jq -c 'select(.slug_proposal.tier | IN("placeholder-auth
 | `mojibake_title` | 3 | UTF-8 read as Windows-1252: "amÃ©ricain" |
 | `mojibake_author` | 3 | The same, in the author field |
 | `placeholder_suffix` | 2 | A placeholder author left on the end of the title: "… - Unknown" |
+| `url_title` | 4 | A web address saved as the title |
 | `path_title` | 4 | A file path sitting in the title |
 | `numeric_author` | 4 | An author field opening with a bare year or series number |
 | `unknown_author` | 3 | "Unknown", "Anonymous", empty |

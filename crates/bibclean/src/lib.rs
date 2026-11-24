@@ -218,8 +218,13 @@ pub fn clean(book: &Book) -> Cleaned {
     // Underscores first: a title mangled by a filename may also be shouting,
     // and title-casing it before the underscores come out would case the
     // format suffix as though it were a word.
+    // Not in an address or a path, where the underscores are the name and
+    // taking them out leaves something that is neither title nor address.
     if let Some(title) = cleaned.title.clone()
         && reasons.iter().any(|reason| reason == "underscore_title")
+        && !reasons
+            .iter()
+            .any(|reason| reason == "url_title" || reason == "path_title")
     {
         let fixed = fix::clean_underscores(&title);
         if fixed != title {
@@ -479,6 +484,22 @@ mod tests {
             cleaned.book.title.as_deref(),
             Some("Donald Meltzer-Sexual States of Mind")
         );
+    }
+
+    #[test]
+    fn an_address_is_named_and_left_alone() {
+        for title in [
+            "http://www.voxfux.com/features/stranger_than_fiction.htm",
+            "file://D:\\Books\\white_paper",
+            "www.example.org/some_page",
+        ] {
+            let cleaned = clean(&book(title, "Someone"));
+            assert_eq!(cleaned.book.title.as_deref(), Some(title), "{title}");
+            assert!(
+                cleaned.reasons.iter().any(|reason| reason == "url_title"),
+                "{title}"
+            );
+        }
     }
 
     #[test]

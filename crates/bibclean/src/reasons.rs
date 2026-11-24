@@ -34,6 +34,10 @@ static JUNK_TITLE: LazyLock<Boundaried> = LazyLock::new(|| {
 
 /// A path sitting in the title field. Distinct from a filename, which is a
 /// bare name ending in an extension.
+/// A web address saved as the title: "http://www.voxfux.com/features/…".
+static URL_TITLE: LazyLock<Regex> =
+    LazyLock::new(|| pattern(r"(?i)^\W*(?:https?://|file://|www\.)\S"));
+
 static PATH_TITLE: LazyLock<Regex> =
     LazyLock::new(|| pattern(r"(^[A-Za-z]:[\\/])|(\\\\[^\\]+\\)|(^/(?:home|users|mnt|tmp|var)/)"));
 
@@ -173,6 +177,7 @@ const WEIGHTS: &[(&str, u32)] = &[
     ("title_in_author", 3),
     ("underscore_title", 1),
     ("unknown_author", 3),
+    ("url_title", 4),
 ];
 
 /// Everything wrong with a record, named.
@@ -198,6 +203,9 @@ pub fn problems(title: Option<&str>, author: Option<&str>, isbn: Option<&str>) -
     }
     if PATH_TITLE.is_match(title) {
         reasons.push("path_title");
+    }
+    if URL_TITLE.is_match(title) {
+        reasons.push("url_title");
     }
     if FILENAME_TITLE.is_match(title) {
         reasons.push("filename_title");
