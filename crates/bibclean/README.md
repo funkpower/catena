@@ -186,6 +186,8 @@ bibclean books.ndjson | jq -c 'select(.slug_proposal.tier | IN("placeholder-auth
 | `filename_title` | 3 | A bare filename, extension and all |
 | `junk_title` | 3 | The name of the tool that made the file, not the work |
 | `author_is_title` | 4 | The title copied into the author field |
+| `author_role_suffix` | 2 | A catalogue heading's dates, role or fuller form in the author field: "Lossky, Vladimir, 1903-1958", "Vico, Giambattista (Author)" |
+| `author_list_commas` | 1 | Several authors joined with commas or semicolons rather than "&" |
 | `name_in_title` | 2 | The author's name in front of the title, filename fashion: "Wilfred R Bion-Cogitations-Karnac Books (1991)" |
 | `account_author` | 3 | The login of whoever made the file: "mymarasigan", "HP_Administrator" |
 | `publisher_as_author` | 3 | An imprint in the author field |
@@ -213,6 +215,7 @@ an author field is wrong while "Oxford, Michael" is a person.
 | `junk_title` | "Microsoft Word - " and the like come off the front |
 | `filename_title` | A document extension comes off the end |
 | `placeholder_suffix` | The "- Unknown" comes off the end |
+| `author_role_suffix`, `author_list_commas` | The heading put as a byline: dates, roles and fuller forms off, each name given names first, the names joined with "&". A field that is only "Surname, Given" is left alone, since some catalogues keep that order on purpose; `bibclean::heading::as_byline` turns it round for a caller that wants bylines |
 | `name_in_title` | The names come off the front, and the publisher, year and series off the end; the names are proposed as the author. Made only when the record has no real author, or already has the same one |
 
 The last three are made only when what is left is still a title: "Microsoft

@@ -21,7 +21,7 @@ fn pattern(source: &str) -> Regex {
 /// person. Without them the looser heuristics propose the imprint.
 static NOT_A_PERSON: LazyLock<Boundaried> = LazyLock::new(|| {
     Boundaried::new(&format!(
-        r"(?i){WORD_START}(press|edition|introduction|university|volume|reprint|copyright|published|printed|rights|reserved|library|congress|isbn|inc|ltd|company|regents|trustees|foundation|institute|society|association|board|council|committee|department|ministry|editors?|trust|publishing|publishers|books|publications|sons|llc|gmbh|verlag|all|limited|house|media|editions|éditions|center|centre|seminary|classics|wiley|gruyter|brill|siebeck|seuil|gallimard|payot|routledge|springer|elsevier|macmillan|penguin|blackwell|norton|knopf|doubleday|vintage|bantam|harpercollins|nv|bv|microsoft|adobe|acrobat){WORD_END}"
+        r"(?i){WORD_START}(press|edition|introduction|university|volume|reprint|copyright|published|printed|rights|reserved|library|congress|isbn|inc|ltd|company|regents|trustees|foundation|institute|society|association|board|council|committee|department|ministry|editors?|trust|publishing|publishers?|books|publications|sons|llc|gmbh|verlag|all|limited|house|media|editions|éditions|center|centre|seminary|classics|wiley|gruyter|brill|siebeck|seuil|gallimard|payot|routledge|springer|elsevier|macmillan|penguin|blackwell|norton|knopf|doubleday|vintage|bantam|harpercollins|nv|bv|microsoft|adobe|acrobat){WORD_END}"
     ))
     .expect("a valid pattern")
 });
@@ -148,8 +148,6 @@ static TITLE_CAMEL: LazyLock<Regex> = LazyLock::new(|| pattern(r"^([A-Z][a-z]+[A
 static CAMEL_PARTS: LazyLock<Regex> = LazyLock::new(|| pattern(r"[A-Z][a-z]+"));
 
 /// Roman numerals that are a suffix on a name rather than shouting.
-const ROMAN_SUFFIXES: &[&str] = &["II", "III", "IV", "V", "VI"];
-
 /// Characters trimmed from the ends of a candidate.
 const EDGES: &[char] = &[' ', '.', ',', ';', ':', '—', '-', '\t', '\n'];
 
@@ -409,6 +407,13 @@ pub fn normalise(raw: &str) -> Option<String> {
 }
 
 /// Fix shouting and bare initials within one name.
+/// "RR", "JC", "JRR": initials run together, which casing as a word would
+/// turn into "Rr". Two capitals, or three with no vowel among them.
+fn looks_like_initials(core: &str) -> bool {
+    let n = core.chars().count();
+    n == 2 || n == 3 && !core.chars().any(|c| "AEIOUY".contains(c))
+}
+
 fn normalise_tokens(segment: &str) -> String {
     segment
         .split_whitespace()
@@ -419,7 +424,9 @@ fn normalise_tokens(segment: &str) -> String {
                 && core.chars().all(|c| !c.is_lowercase())
                 && core.chars().any(char::is_uppercase)
                 && core.chars().count() > 1
-                && !ROMAN_SUFFIXES.contains(&core);
+                // A regnal or generational number: "Leo XIII", "Henry VIII".
+                && !core.chars().all(|c| "IVXLC".contains(c))
+                && !looks_like_initials(core);
             if shouting {
                 let mut fixed = capitalise(core);
                 if token.ends_with('.') {

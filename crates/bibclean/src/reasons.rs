@@ -152,6 +152,7 @@ const WEIGHTS: &[(&str, u32)] = &[
     ("allcaps_title", 2),
     ("author_is_title", 4),
     ("author_last_first", 1),
+    ("author_list_commas", 1),
     ("author_role_suffix", 2),
     ("edited_volume", 1),
     ("filename_title", 3),
@@ -262,6 +263,14 @@ pub fn problems(title: Option<&str>, author: Option<&str>, isbn: Option<&str>) -
     }
     if is_account_name(author) {
         reasons.push("account_author");
+    }
+    // A heading turned round and nothing else is a choice some catalogues
+    // make; dates, roles and comma-joined lists are what a byline never has.
+    if !author_is_missing(title, author)
+        && let Some((_, faults)) = crate::heading::as_byline(author)
+        && faults != ["author_last_first"]
+    {
+        reasons.extend(faults);
     }
     if author_is_title(title, author) {
         reasons.push("author_is_title");

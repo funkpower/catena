@@ -15,6 +15,7 @@ pub mod abstracts;
 pub mod author;
 mod entities4;
 pub mod fix;
+pub mod heading;
 pub mod isbn;
 pub mod matching;
 pub mod reasons;
@@ -193,6 +194,25 @@ pub fn clean(book: &Book) -> Cleaned {
             why: "name_in_title".into(),
         });
         cleaned.title = Some(fixed);
+    }
+
+    // A catalogue heading in the author field, put as a byline: the names
+    // are the same, only their order and the card's dates and roles change.
+    if reasons.iter().any(|reason| {
+        matches!(
+            reason.as_str(),
+            "author_last_first" | "author_role_suffix" | "author_list_commas"
+        )
+    }) && let Some(author) = cleaned.author.clone()
+        && let Some((byline, faults)) = heading::as_byline(&author)
+    {
+        changes.push(Change {
+            field: "author".into(),
+            from: author,
+            to: byline.clone(),
+            why: faults[0].into(),
+        });
+        cleaned.author = Some(byline);
     }
 
     // Underscores first: a title mangled by a filename may also be shouting,
