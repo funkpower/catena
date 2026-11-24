@@ -74,6 +74,12 @@ static ABOUT_THE_BOOK: LazyLock<Regex> = LazyLock::new(|| {
     ))
     .expect("a valid pattern")
 });
+/// "BOOK ONE", "Part II", "Book 3": the page opens a part of the book, and
+/// the name set under it is the part's, not the book's.
+static PART_OPENER: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)^\W*(?:book|part)\s+(?:one|two|three|four|five|six|seven|eight|nine|ten|first|second|third|[ivxlc]+|\d{1,2})\W*$")
+        .expect("a valid pattern")
+});
 /// A library's ownership stamp: "Trent University Library".
 static LIBRARY_STAMP: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(?:university|college|seminary)\b.*\blibrar(?:y|ies)\s*$")
@@ -344,6 +350,14 @@ fn could_be_a_person(line: &str) -> bool {
     if tokens.len() > 4 {
         return false;
     }
+    // "A Bradford Book", "A Scientific American Book": the imprint's own
+    // line, set where a byline would be.
+    let lowered = line.to_lowercase();
+    if (lowered.starts_with("a ") || lowered.starts_with("an "))
+        && (lowered.ends_with(" book") || lowered.ends_with(" books"))
+    {
+        return false;
+    }
     !tokens.iter().any(|token| {
         let word = token.trim_end_matches('.').to_lowercase();
         word.len() > 4 && NOT_A_NAME.iter().any(|end| word.ends_with(end))
@@ -409,6 +423,11 @@ pub fn read(lines: &[String]) -> Option<TitlePage> {
                 }
                 continue;
             }
+        }
+        // Above everything else on the page, a part marker means the page
+        // opens a part of the book, and what follows is the part's name.
+        if block.is_empty() && PART_OPENER.is_match(line) {
+            return None;
         }
         if is_structural(line) || is_furniture(line) || BARE_DATE.is_match(line) {
             if block.is_empty() {
@@ -570,6 +589,52 @@ mod furniture_tests {
         // A title that happens to be roman numerals throughout is not a folio
         // with nothing left; it keeps whatever it had.
         assert_eq!(strip_folio("i"), "i");
+    }
+}
+
+#[cfg(test)]
+mod part_tests {
+    use super::*;
+
+    fn lines(text: &[&str]) -> Vec<String> {
+        text.iter().map(|line| (*line).to_string()).collect()
+    }
+
+    #[test]
+    fn a_part_opener_is_not_the_title_page() {
+        assert!(read(&lines(&["BOOK ONE", "The Stitch Service"])).is_none());
+        assert!(read(&lines(&["Part II", "The War Years"])).is_none());
+    }
+
+    #[test]
+    fn a_title_that_begins_with_book_is_still_a_title() {
+        let page =
+            read(&lines(&["The Book of Disquiet", "Fernando Pessoa"])).expect("a title page");
+        assert_eq!(page.title.as_deref(), Some("The Book of Disquiet"));
+        let page = read(&lines(&["Book One of the Trilogy", "Someone Else"]));
+        assert!(page.is_some());
+        let page =
+            read(&lines(&["The Great Ideas of Psychology", "Part I"])).expect("a title page");
+        assert_eq!(page.title.as_deref(), Some("The Great Ideas of Psychology"));
+    }
+}
+
+#[cfg(test)]
+mod person_tests {
+    use super::*;
+
+    #[test]
+    fn an_imprint_line_is_not_a_person() {
+        for line in ["A SCIENTIFIC Book", "A Bradford Book", "An Owl Book"] {
+            assert!(!could_be_a_person(line), "{line}");
+        }
+    }
+
+    #[test]
+    fn initials_are_still_a_person() {
+        for line in ["A. J. Ayer", "A.J. Ayer", "Anne Carson"] {
+            assert!(could_be_a_person(line), "{line}");
+        }
     }
 }
 
