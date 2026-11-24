@@ -21,7 +21,7 @@ fn pattern(source: &str) -> Regex {
 /// person. Without them the looser heuristics propose the imprint.
 static NOT_A_PERSON: LazyLock<Boundaried> = LazyLock::new(|| {
     Boundaried::new(&format!(
-        r"(?i){WORD_START}(press|edition|introduction|university|volume|reprint|copyright|published|printed|rights|reserved|library|congress|isbn|inc|ltd|company|regents|trustees|foundation|institute|society|association|board|council|committee|department|ministry|editors?|trust|publishing|publishers|books|publications|sons|llc|gmbh|verlag|all|limited|house|media|editions|éditions|center|centre|seminary|classics|wiley|gruyter|brill|siebeck|seuil|gallimard|payot|routledge|springer|elsevier|macmillan|penguin|blackwell|norton|knopf|doubleday|vintage|bantam|harpercollins|nv|bv){WORD_END}"
+        r"(?i){WORD_START}(press|edition|introduction|university|volume|reprint|copyright|published|printed|rights|reserved|library|congress|isbn|inc|ltd|company|regents|trustees|foundation|institute|society|association|board|council|committee|department|ministry|editors?|trust|publishing|publishers?|books|publications|sons|llc|gmbh|verlag|all|limited|house|media|editions|éditions|center|centre|seminary|classics|wiley|gruyter|brill|siebeck|seuil|gallimard|payot|routledge|springer|elsevier|macmillan|penguin|blackwell|norton|knopf|doubleday|vintage|bantam|harpercollins|nv|bv|microsoft|adobe|acrobat){WORD_END}"
     ))
     .expect("a valid pattern")
 });
@@ -90,13 +90,64 @@ static TITLE_BY: LazyLock<Boundaried> = LazyLock::new(|| {
 });
 
 /// A title that opens with the author's name run together.
+/// "Wilfred R Bion-Cogitations-Karnac Books (1991)": a filename that put the
+/// author in front of the title with a hyphen, as shadow libraries name
+/// their downloads. An optional series in brackets may come first, and the
+/// names may be several, joined by commas or "and", marked "(Eds)".
+static NAME_PREFIX: LazyLock<Regex> = LazyLock::new(|| {
+    let name = r"[A-Z][\p{L}.'’]*(?:\s+[A-Z][\p{L}.'’]*){1,4}";
+    pattern(&format!(
+        r"^(?:\([^)]{{2,80}}\){SPACE}*)?(?P<names>{name}(?:{SPACE}*(?:,|\band\b|&){SPACE}*{name})*)(?:{SPACE}*\((?:Eds?|eds?)\.?{SPACE}*\))?{SPACE}*-{SPACE}*(?P<rest>\S.*)$"
+    ))
+});
+
+/// The names a title opens with, and the title after them.
+///
+/// `None` unless every name reads as a person, so "Evidence-Based Technical
+/// Analysis" and "Anglo-Saxon England" are left alone.
+pub fn name_prefix_of_title(title: &str) -> Option<(Vec<String>, String)> {
+    let found = NAME_PREFIX.captures(title.trim_matches(textkit::is_space))?;
+    // "Socio-technical", "Non-Reductive": a hyphen inside a word, not after a
+    // name. A title after a name starts with a capital; a number there is a
+    // series counting its volumes ("Known Space-038-The Soft Weapon").
+    if !found["rest"].chars().next().is_some_and(char::is_uppercase) {
+        return None;
+    }
+    // "Can Physicalism Be Non-Reductive?", "Alfred Willener The Action-Image":
+    // the words that make a run of capitals a sentence rather than a name.
+    const NOT_IN_A_NAME: &[&str] = &[
+        "a", "an", "are", "be", "can", "for", "how", "in", "is", "non", "of", "on", "the", "to",
+        "towards", "what", "why", "with",
+    ];
+    if found["names"]
+        .split_whitespace()
+        .any(|word| NOT_IN_A_NAME.contains(&word.to_lowercase().as_str()))
+    {
+        return None;
+    }
+    let names: Vec<String> = AUTHOR_SEPARATOR
+        .split(&found["names"].replace(" and ", " & ").replace(',', " &"))
+        .map(|name| name.trim_matches(textkit::is_space).to_string())
+        .filter(|name| !name.is_empty())
+        .collect();
+    if names.is_empty() {
+        return None;
+    }
+    let mut people = Vec::new();
+    for name in &names {
+        if NOT_A_PERSON.is_match(name).unwrap_or(true) {
+            return None;
+        }
+        people.push(normalise(name)?);
+    }
+    Some((people, found["rest"].to_string()))
+}
+
 static TITLE_CAMEL: LazyLock<Regex> = LazyLock::new(|| pattern(r"^([A-Z][a-z]+[A-Z][a-z]+)[-\s]"));
 
 static CAMEL_PARTS: LazyLock<Regex> = LazyLock::new(|| pattern(r"[A-Z][a-z]+"));
 
 /// Roman numerals that are a suffix on a name rather than shouting.
-const ROMAN_SUFFIXES: &[&str] = &["II", "III", "IV", "V", "VI"];
-
 /// Characters trimmed from the ends of a candidate.
 const EDGES: &[char] = &[' ', '.', ',', ';', ':', '—', '-', '\t', '\n'];
 
@@ -249,6 +300,16 @@ pub fn from_title(title: &str) -> Vec<Suggestion> {
         });
     }
 
+    if let Some((names, _)) = name_prefix_of_title(title) {
+        out.push(Suggestion {
+            author: names.join(" & "),
+            method: "title_prefix".into(),
+            confidence: 0.75,
+            evidence: title.chars().take(120).collect(),
+            isbn: None,
+        });
+    }
+
     if let Some(found) = TITLE_CAMEL.captures(title)
         && let Some(split) = split_camel(&found[1])
     {
@@ -346,6 +407,13 @@ pub fn normalise(raw: &str) -> Option<String> {
 }
 
 /// Fix shouting and bare initials within one name.
+/// "RR", "JC", "JRR": initials run together, which casing as a word would
+/// turn into "Rr". Two capitals, or three with no vowel among them.
+fn looks_like_initials(core: &str) -> bool {
+    let n = core.chars().count();
+    n == 2 || n == 3 && !core.chars().any(|c| "AEIOUY".contains(c))
+}
+
 fn normalise_tokens(segment: &str) -> String {
     segment
         .split_whitespace()
@@ -356,7 +424,9 @@ fn normalise_tokens(segment: &str) -> String {
                 && core.chars().all(|c| !c.is_lowercase())
                 && core.chars().any(char::is_uppercase)
                 && core.chars().count() > 1
-                && !ROMAN_SUFFIXES.contains(&core);
+                // A regnal or generational number: "Leo XIII", "Henry VIII".
+                && !core.chars().all(|c| "IVXLC".contains(c))
+                && !looks_like_initials(core);
             if shouting {
                 let mut fixed = capitalise(core);
                 if token.ends_with('.') {

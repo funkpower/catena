@@ -34,6 +34,10 @@ static JUNK_TITLE: LazyLock<Boundaried> = LazyLock::new(|| {
 
 /// A path sitting in the title field. Distinct from a filename, which is a
 /// bare name ending in an extension.
+/// A web address saved as the title: "http://www.voxfux.com/features/…".
+static URL_TITLE: LazyLock<Regex> =
+    LazyLock::new(|| pattern(r"(?i)^\W*(?:https?://|file://|www\.)\S"));
+
 static PATH_TITLE: LazyLock<Regex> =
     LazyLock::new(|| pattern(r"(^[A-Za-z]:[\\/])|(\\\\[^\\]+\\)|(^/(?:home|users|mnt|tmp|var)/)"));
 
@@ -152,6 +156,7 @@ const WEIGHTS: &[(&str, u32)] = &[
     ("allcaps_title", 2),
     ("author_is_title", 4),
     ("author_last_first", 1),
+    ("author_list_commas", 1),
     ("author_role_suffix", 2),
     ("edited_volume", 1),
     ("filename_title", 3),
@@ -160,6 +165,7 @@ const WEIGHTS: &[(&str, u32)] = &[
     ("missing_apostrophe", 2),
     ("mojibake_author", 3),
     ("mojibake_title", 3),
+    ("name_in_title", 2),
     ("numeric_author", 4),
     ("path_title", 4),
     ("placeholder_author", 4),
@@ -171,6 +177,7 @@ const WEIGHTS: &[(&str, u32)] = &[
     ("title_in_author", 3),
     ("underscore_title", 1),
     ("unknown_author", 3),
+    ("url_title", 4),
 ];
 
 /// Everything wrong with a record, named.
@@ -196,6 +203,9 @@ pub fn problems(title: Option<&str>, author: Option<&str>, isbn: Option<&str>) -
     }
     if PATH_TITLE.is_match(title) {
         reasons.push("path_title");
+    }
+    if URL_TITLE.is_match(title) {
+        reasons.push("url_title");
     }
     if FILENAME_TITLE.is_match(title) {
         reasons.push("filename_title");
@@ -250,8 +260,25 @@ pub fn problems(title: Option<&str>, author: Option<&str>, isbn: Option<&str>) -
     {
         reasons.push("possible_swap");
     }
+    // Named only where it can be acted on: the record has no real author to
+    // set against the prefix, or the prefix is the author it already has.
+    // "Known Space-038-The Soft Weapon" by Larry Niven is a series and a
+    // number, and is none of this fault's business.
+    if let Some((names, _)) = crate::author::name_prefix_of_title(title)
+        && (author_is_missing(title, author) || same_people(&names, author))
+    {
+        reasons.push("name_in_title");
+    }
     if is_account_name(author) {
         reasons.push("account_author");
+    }
+    // A heading turned round and nothing else is a choice some catalogues
+    // make; dates, roles and comma-joined lists are what a byline never has.
+    if !author_is_missing(title, author)
+        && let Some((_, faults)) = crate::heading::as_byline(author)
+        && faults != ["author_last_first"]
+    {
+        reasons.extend(faults);
     }
     if author_is_title(title, author) {
         reasons.push("author_is_title");
@@ -334,6 +361,36 @@ pub fn is_account_name(author: &str) -> bool {
         .windows(3)
         .any(|w| w[0].is_lowercase() && w[1].is_uppercase() && w[2].is_uppercase());
     lowercase || underscored || digits || run_on_capitals
+}
+
+/// Whether the author field has no real author in it.
+pub(crate) fn author_is_missing(title: &str, author: &str) -> bool {
+    UNKNOWN_AUTHORS
+        .binary_search(&author.to_lowercase().as_str())
+        .is_ok()
+        || PLACEHOLDER_AUTHOR.is_match(author)
+        || is_account_name(author)
+        || author_is_title(title, author)
+}
+
+/// Whether an author field names exactly these people, ignoring case and
+/// punctuation.
+pub(crate) fn same_people(names: &[String], author: &str) -> bool {
+    let fold = |s: &str| -> String {
+        s.chars()
+            .filter(|c| c.is_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect()
+    };
+    let mut ours: Vec<String> = names.iter().map(|name| fold(name)).collect();
+    let mut theirs: Vec<String> = author
+        .split('&')
+        .map(fold)
+        .filter(|s| !s.is_empty())
+        .collect();
+    ours.sort();
+    theirs.sort();
+    !ours.is_empty() && ours == theirs
 }
 
 /// Lowercase words, punctuation dropped.
