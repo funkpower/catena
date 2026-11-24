@@ -80,6 +80,15 @@ static PART_OPENER: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)^\W*(?:book|part)\s+(?:one|two|three|four|five|six|seven|eight|nine|ten|first|second|third|[ivxlc]+|\d{1,2})\W*$")
         .expect("a valid pattern")
 });
+/// "For Tom, Burney, and Bruce", "TO JILL PREWETT AND", "For Anna P., of
+/// course.": a dedication, set alone on its page, that names somebody and
+/// then runs on or stops short.
+static DEDICATION_TO_SOMEONE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"^(?i:to|for)\s+\p{Lu}[\p{L}.'’-]*(?:\s+\p{Lu}[\p{L}.'’-]*)?(?:,|\s+(?i:and)\s*$|\.\s*$)",
+    )
+    .expect("a valid pattern")
+});
 /// A library's ownership stamp: "Trent University Library".
 static LIBRARY_STAMP: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b(?:university|college|seminary)\b.*\blibrar(?:y|ies)\s*$")
@@ -169,7 +178,7 @@ static STRUCTURAL: &[&str] = &[
     "translator's note",
 ];
 
-fn is_structural(line: &str) -> bool {
+pub(crate) fn is_structural(line: &str) -> bool {
     let norm: String = line
         .chars()
         .filter(|c| c.is_alphanumeric() || c.is_whitespace())
@@ -215,7 +224,7 @@ fn strip_folio(norm: &str) -> &str {
 /// a copyright notice, a translator's credit, a part heading in brackets, a
 /// span of HTML a converter left behind, and a volume entry from a collected
 /// edition's own list of volumes.
-fn is_furniture(line: &str) -> bool {
+pub(crate) fn is_furniture(line: &str) -> bool {
     let t = line.trim();
     // A line that opens on the copyright sign is a credit or a notice even
     // when it carries no year: "© Vladimir Pcholkin / FPG International".
@@ -259,6 +268,32 @@ fn is_furniture(line: &str) -> bool {
             return true;
         }
     }
+    // The headings of the pages before the text, and its first chapter.
+    let heading = t.to_lowercase();
+    if [
+        "endorsements",
+        "about the author",
+        "about the authors",
+        "author's preface",
+        "author’s preface",
+        "note on orthography",
+        "note on the text",
+        "note on the translation",
+        "chapter one",
+        "chapter 1",
+        "dedicated to",
+        "cover",
+        "front cover",
+        "back cover",
+    ]
+    .contains(&heading.trim_end_matches(['.', ':']))
+        || heading.starts_with("books by ")
+        || heading.starts_with("also available")
+        || heading.starts_with("dedicated to ")
+        || DEDICATION_TO_SOMEONE.is_match(t)
+    {
+        return true;
+    }
     if DEDICATION.is_match(t)
         || ABOUT_THE_BOOK.is_match(t)
         || LIBRARY_STAMP.is_match(t)
@@ -274,8 +309,38 @@ fn is_furniture(line: &str) -> bool {
         return true;
     }
     let lower = t.to_lowercase();
+    // What the pages around a title page carry about the edition, the
+    // scan, the shop and the reviews, none of which is ever the title.
     for phrase in [
+        "has asserted",
+        "moral right of the author",
         "moral rights of the author",
+        "library of congress control number",
+        "this ebook was prepared",
+        "ebook edition",
+        "e-book edition",
+        "kindle edition",
+        " printing:",
+        "printing, ",
+        "revised and expanded edition",
+        "registered office",
+        "visit us online",
+        "visit us at",
+        "reviewers have said",
+        "praise for",
+        "a division of",
+        "p.o. box",
+        "po box",
+        "award winner",
+        "reproduction of a library book",
+        "digitized by",
+        "was digitized",
+        "with funding from",
+        "kahle/austin",
+        "trademarks of",
+        "all rights reserved",
+        "no part of this book",
+        "isbn",
         "no part of this publication",
         "british library cataloguing",
         "library of congress cataloging",
@@ -590,6 +655,29 @@ mod furniture_tests {
             "A Forthright EditionTM",
             "A Forthright Edition\u{2122}",
             "\u{a9} Vladimir Pcholkin / FPG International",
+            "For Tom, Burney, and Bruce",
+            "TO JILL PREWETT AND",
+            "For Anna P., of course.",
+            "To Michel Callon, this outcome of a seven-year discussion",
+            "ENDORSEMENTS",
+            "About the Authors",
+            "Books by Arthur C. Clarke",
+            "Author's Preface",
+            "CHAPTER ONE",
+            "J.K. Rowling has asserted her moral rights",
+            "Library of Congress Control Number: 2007932082",
+            "This eBook was prepared by Matthew Stapleton.",
+            "E-book edition created 2011",
+            "Third printing: August 2010",
+            "Revised and Expanded Edition 2022",
+            "Hugo Award Winner, Locus Poll Award Nominee",
+            "This is a reproduction of a library book that was digitized",
+            "in 2023 with funding from Kahle/Austin Foundation",
+            "Humanix Books, P.O. Box 20989, West Palm Beach, FL 33416",
+            "AVON BOOKS: A division of",
+            "Or visit us online at",
+            "What Reviewers Have Said About",
+            "ISBN: 0-89555-315-5",
         ] {
             assert!(
                 is_structural(line) || is_furniture(line),
@@ -618,6 +706,10 @@ mod furniture_tests {
             "University Libraries in Transition",
             "The Public Library",
             "Atomic Habits",
+            "To the Lighthouse",
+            "For the Love of God",
+            "To Have and Have Not",
+            "The Cover-Up",
         ] {
             assert!(
                 !(is_structural(line) || is_furniture(line)),
