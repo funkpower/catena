@@ -259,6 +259,41 @@ pub fn decode_entities(text: &str) -> Option<String> {
     (decoded != text).then(|| decoded.into_owned())
 }
 
+/// A title's punctuation set the way a title page sets it: no space before
+/// a colon ("Sex Wars : Sexual Dissent" is a catalogue's), one space between
+/// words, no dangling separator or full stop at the end, and an article put
+/// back in front ("Jesuits, The" is a filing form).
+pub fn tidy_punctuation(title: &str) -> Option<String> {
+    static BEFORE_COLON: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(&format!(r"{SPACE}+:{SPACE}*")).expect("a valid pattern"));
+    static INVERTED_ARTICLE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(&format!(
+            r"^(?P<head>[^:,]+),{SPACE}*(?P<article>The|A|An)(?P<tail>{SPACE}*:.*)?$"
+        ))
+        .expect("a valid pattern")
+    });
+    let mut out = BEFORE_COLON.replace_all(title, ": ").into_owned();
+    out = SPACE_RUN.replace_all(&out, " ").into_owned();
+    let trimmed = out.trim_matches(textkit::is_space);
+    // A full stop ends a title only when it ends an initial or an
+    // abbreviation: "Crusade for Pan-Europe. Autobiography of a man." loses
+    // it, "Martin Luther King Jr." keeps it.
+    let last_word = trimmed.split_whitespace().last().unwrap_or("");
+    let keep_stop =
+        last_word.trim_end_matches('.').chars().count() <= 3 || trimmed.ends_with("...");
+    let mut cleaned = trimmed
+        .trim_end_matches([',', ';', ':', '-', '–', '—', ' '])
+        .to_string();
+    if cleaned.ends_with('.') && !keep_stop {
+        cleaned.pop();
+    }
+    if let Some(found) = INVERTED_ARTICLE.captures(&cleaned) {
+        let tail = found.name("tail").map_or("", |t| t.as_str()).trim_start();
+        cleaned = format!("{} {}{}", &found["article"], found["head"].trim(), tail);
+    }
+    worth_keeping(title, &cleaned).filter(|fixed| fixed != title)
+}
+
 /// The stripped title, if it is a different title and still a title.
 fn worth_keeping(original: &str, stripped: &str) -> Option<String> {
     let stripped = stripped
