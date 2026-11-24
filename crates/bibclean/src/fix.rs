@@ -158,6 +158,32 @@ pub fn strip_placeholder_suffix(title: &str) -> Option<String> {
     worth_keeping(title, &title[..found.start()])
 }
 
+/// What a shadow-library filename leaves after the title: "-Karnac Books
+/// (1991)", the series in brackets, whole or cut off, a stub of a publisher.
+static FILENAME_TAIL: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!(
+        r"(?i)(?:{SPACE}*-{SPACE}*[^-]{{2,60}}\((?:1[5-9]|20)\d{{2}}\)|{SPACE}*\([^)]*|{SPACE}*\([^)]*\b(?:series|library|classics)\)|{SPACE}+-{SPACE}*\S{{0,3}}){SPACE}*$"
+    ))
+    .expect("a valid pattern")
+});
+
+/// A title without the author's name a filename put in front of it, and
+/// without the publisher and year it put after:
+/// "Wilfred R Bion-Cogitations-Karnac Books (1991)" is "Cogitations".
+pub fn strip_name_prefix(title: &str) -> Option<String> {
+    let (_, rest) = crate::author::name_prefix_of_title(title)?;
+    let mut rest = rest;
+    // A tail can hide another: "(Maresfield Library)-Karnac (1984)".
+    for _ in 0..3 {
+        let shorter = FILENAME_TAIL.replace(&rest, "").to_string();
+        if shorter == rest || !shorter.chars().any(char::is_alphabetic) {
+            break;
+        }
+        rest = shorter;
+    }
+    worth_keeping(title, &rest)
+}
+
 /// The stripped title, if it is a different title and still a title.
 fn worth_keeping(original: &str, stripped: &str) -> Option<String> {
     let stripped = stripped

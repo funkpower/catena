@@ -179,6 +179,22 @@ pub fn clean(book: &Book) -> Cleaned {
         }
     }
 
+    // The author's name in front of the title, filename fashion. Taken off
+    // only when the record has no real author to show for it, or already has
+    // the same one: otherwise the prefix may be all that names the book.
+    if let Some(title) = cleaned.title.clone()
+        && reasons.iter().any(|reason| reason == "name_in_title")
+        && let Some(fixed) = fix::strip_name_prefix(&title)
+    {
+        changes.push(Change {
+            field: "title".into(),
+            from: title,
+            to: fixed.clone(),
+            why: "name_in_title".into(),
+        });
+        cleaned.title = Some(fixed);
+    }
+
     // Underscores first: a title mangled by a filename may also be shouting,
     // and title-casing it before the underscores come out would case the
     // format suffix as though it were a word.
@@ -379,6 +395,70 @@ mod tests {
             let cleaned = clean(&book(title, "Someone"));
             assert_eq!(cleaned.book.title.as_deref(), Some(title), "{title}");
         }
+    }
+
+    #[test]
+    fn a_filename_title_gives_up_its_author() {
+        for (title, want_title, want_author) in [
+            (
+                "Wilfred R Bion-Cogitations-Karnac Books (1991)",
+                "Cogitations",
+                "Wilfred R. Bion",
+            ),
+            (
+                "(Harris Meltzer Trust Series) Donald Meltzer-The Psycho-Analytical Process -Karnac Books (2008)",
+                "The Psycho-Analytical Process",
+                "Donald Meltzer",
+            ),
+            (
+                "Wilfred R Bion-Transformations (Maresfield Library)-Karnac (1984)",
+                "Transformations",
+                "Wilfred R. Bion",
+            ),
+            (
+                "David Campbell, Tim Coldicott-Systemic Work With Organizations A New Model (Syst",
+                "Systemic Work With Organizations A New Model",
+                "David Campbell & Tim Coldicott",
+            ),
+            (
+                "Judy Cooper - ASSESSMENT IN PSYCHOTHERAPY",
+                "Assessment in Psychotherapy",
+                "Judy Cooper",
+            ),
+        ] {
+            let cleaned = clean(&book(title, "Unknown"));
+            assert_eq!(cleaned.book.title.as_deref(), Some(want_title), "{title}");
+            let proposal = cleaned.author_proposal.expect("an author");
+            assert_eq!(proposal.author, want_author, "{title}");
+            assert_eq!(proposal.method, "title_prefix");
+        }
+    }
+
+    #[test]
+    fn a_title_that_only_looks_prefixed_is_left_alone() {
+        for title in [
+            "Evidence-Based Technical Analysis",
+            "Anglo-Saxon England",
+            "The Cambridge Companion to Plotinus",
+            "Jean-Paul Sartre",
+            "Can Physicalism Be Non-Reductive?",
+            "Towards Non-Being: The Logic and Metaphysics of Intentionality",
+            "Known Space-038-The Soft Weapon",
+            "Phiip G Herbst Socio-technical Design Strategies",
+            "Alfred Willener The Action-Image of Society",
+        ] {
+            let cleaned = clean(&book(title, "Unknown"));
+            assert_eq!(cleaned.book.title.as_deref(), Some(title), "{title}");
+        }
+        // A real author keeps the prefix as the record has it.
+        let cleaned = clean(&book(
+            "Donald Meltzer-Sexual States of Mind",
+            "Someone Else",
+        ));
+        assert_eq!(
+            cleaned.book.title.as_deref(),
+            Some("Donald Meltzer-Sexual States of Mind")
+        );
     }
 
     #[test]

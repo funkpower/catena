@@ -160,6 +160,7 @@ const WEIGHTS: &[(&str, u32)] = &[
     ("missing_apostrophe", 2),
     ("mojibake_author", 3),
     ("mojibake_title", 3),
+    ("name_in_title", 2),
     ("numeric_author", 4),
     ("path_title", 4),
     ("placeholder_author", 4),
@@ -250,6 +251,15 @@ pub fn problems(title: Option<&str>, author: Option<&str>, isbn: Option<&str>) -
     {
         reasons.push("possible_swap");
     }
+    // Named only where it can be acted on: the record has no real author to
+    // set against the prefix, or the prefix is the author it already has.
+    // "Known Space-038-The Soft Weapon" by Larry Niven is a series and a
+    // number, and is none of this fault's business.
+    if let Some((names, _)) = crate::author::name_prefix_of_title(title)
+        && (author_is_missing(title, author) || same_people(&names, author))
+    {
+        reasons.push("name_in_title");
+    }
     if is_account_name(author) {
         reasons.push("account_author");
     }
@@ -334,6 +344,36 @@ pub fn is_account_name(author: &str) -> bool {
         .windows(3)
         .any(|w| w[0].is_lowercase() && w[1].is_uppercase() && w[2].is_uppercase());
     lowercase || underscored || digits || run_on_capitals
+}
+
+/// Whether the author field has no real author in it.
+pub(crate) fn author_is_missing(title: &str, author: &str) -> bool {
+    UNKNOWN_AUTHORS
+        .binary_search(&author.to_lowercase().as_str())
+        .is_ok()
+        || PLACEHOLDER_AUTHOR.is_match(author)
+        || is_account_name(author)
+        || author_is_title(title, author)
+}
+
+/// Whether an author field names exactly these people, ignoring case and
+/// punctuation.
+pub(crate) fn same_people(names: &[String], author: &str) -> bool {
+    let fold = |s: &str| -> String {
+        s.chars()
+            .filter(|c| c.is_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect()
+    };
+    let mut ours: Vec<String> = names.iter().map(|name| fold(name)).collect();
+    let mut theirs: Vec<String> = author
+        .split('&')
+        .map(fold)
+        .filter(|s| !s.is_empty())
+        .collect();
+    ours.sort();
+    theirs.sort();
+    !ours.is_empty() && ours == theirs
 }
 
 /// Lowercase words, punctuation dropped.

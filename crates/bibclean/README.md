@@ -116,6 +116,7 @@ Four signals, cheapest and most trustworthy first:
 | `front_matter_copyright` | 0.9 | "Copyright © 1966 by …" |
 | `front_matter_loc` | 0.8 | The cataloguing block's main entry, written surname first |
 | `title_by` | 0.7 | "… by Author Name" at the end of the title |
+| `title_prefix` | 0.75 | Names in front of the title, filename fashion |
 | `title_camel` | 0.5 | A run-together name at the front of the title |
 
 An ISBN found on the same page rides along with the name, because the two are
@@ -185,6 +186,7 @@ bibclean books.ndjson | jq -c 'select(.slug_proposal.tier | IN("placeholder-auth
 | `filename_title` | 3 | A bare filename, extension and all |
 | `junk_title` | 3 | The name of the tool that made the file, not the work |
 | `author_is_title` | 4 | The title copied into the author field |
+| `name_in_title` | 2 | The author's name in front of the title, filename fashion: "Wilfred R Bion-Cogitations-Karnac Books (1991)" |
 | `account_author` | 3 | The login of whoever made the file: "mymarasigan", "HP_Administrator" |
 | `publisher_as_author` | 3 | An imprint in the author field |
 | `title_in_author` | 3 | The title is a placeholder and the real title is in the author field |
@@ -211,6 +213,7 @@ an author field is wrong while "Oxford, Michael" is a person.
 | `junk_title` | "Microsoft Word - " and the like come off the front |
 | `filename_title` | A document extension comes off the end |
 | `placeholder_suffix` | The "- Unknown" comes off the end |
+| `name_in_title` | The names come off the front, and the publisher, year and series off the end; the names are proposed as the author. Made only when the record has no real author, or already has the same one |
 
 The last three are made only when what is left is still a title: "Microsoft
 Word - Document2" and "0195152972.pdf" stay as they are, flagged, because a
