@@ -153,6 +153,7 @@ const PERSON_SUFFIXES: &[&str] = &["ed", "eds", "ii", "iii", "iv", "jr", "md", "
 /// What each fault is worth when the worst records are wanted first.
 const WEIGHTS: &[(&str, u32)] = &[
     ("account_author", 3),
+    ("allcaps_author", 2),
     ("allcaps_title", 2),
     ("author_is_title", 4),
     ("author_last_first", 1),

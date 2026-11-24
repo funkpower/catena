@@ -169,6 +169,13 @@ pub fn as_byline(author: &str) -> Option<(String, Vec<&'static str>)> {
     {
         return None;
     }
+    // Shouting, put in the case a title page prints names in: "STEVEN BOX".
+    if faults.is_empty()
+        && original.chars().any(char::is_alphabetic)
+        && !original.chars().any(char::is_lowercase)
+    {
+        faults.push("allcaps_author");
+    }
     // Only the separator changed: "Patrick Laude, Barry McDonald".
     if faults.is_empty() {
         faults.push("author_list_commas");
@@ -300,6 +307,18 @@ mod tests {
 
     fn byline(author: &str) -> Option<String> {
         as_byline(author).map(|(name, _)| name)
+    }
+
+    #[test]
+    fn a_name_in_capitals_is_named_as_shouting() {
+        assert_eq!(
+            as_byline("STEVEN BOX"),
+            Some(("Steven Box".to_string(), vec!["allcaps_author"]))
+        );
+        assert_eq!(
+            as_byline("Patrick Laude, Barry McDonald").map(|(_, faults)| faults),
+            Some(vec!["author_list_commas"])
+        );
     }
 
     #[test]
