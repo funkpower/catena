@@ -95,32 +95,136 @@ fn tidy(s: &str) -> String {
         .to_string()
 }
 
+/// Where a statement of responsibility stops naming people: the physical
+/// description ("p. cm.") and the identifiers a cataloguing block runs on to.
+static STATEMENT_END: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\b(?:p\.\s?cm\b|pages\s+cm\b|cm\.|ISSN\b|ISBN\b)").expect("a valid pattern")
+});
+
+/// A role written before the names it applies to, and whose names they are.
+const LEADING_ROLES: &[(&str, Role)] = &[
+    ("edited and translated by ", Role::Editor),
+    ("edited with an introduction by ", Role::Editor),
+    ("edited by ", Role::Editor),
+    ("selected and edited by ", Role::Editor),
+    ("compiled by ", Role::Editor),
+    ("general editor ", Role::Editor),
+    ("translated by ", Role::Skip),
+    ("translated from ", Role::Skip),
+    ("translated with ", Role::Skip),
+    ("with ", Role::Skip),
+    ("foreword by ", Role::Skip),
+    ("introduction by ", Role::Skip),
+    ("illustrated by ", Role::Skip),
+    ("notes by ", Role::Skip),
+    ("by ", Role::Author),
+];
+
+/// A role written after a name: "Irving B. Weiner, editor-in-chief".
+const TRAILING_ROLES: &[&str] = &[
+    "editor-in-chief",
+    "general editor",
+    "editors",
+    "editor",
+    "eds.",
+    "eds",
+    "ed.",
+];
+
+#[derive(Clone, Copy, PartialEq)]
+enum Role {
+    Author,
+    Editor,
+    Skip,
+}
+
 /// Split a statement of responsibility into who wrote and who edited.
+///
+/// Every name is held to the shape of a person's name, so the role words,
+/// fragments and page counts a cataloguing block is full of ("edited by" on
+/// a line of its own, "translated from the French", "p. cm") are dropped
+/// rather than read as people.
 fn people(statement: &str) -> (Vec<String>, Vec<String>) {
+    let statement = match STATEMENT_END.find(statement) {
+        Some(found) => &statement[..found.start()],
+        None => statement,
+    };
     let mut authors = Vec::new();
     let mut editors = Vec::new();
     for part in statement.split(';') {
+        // "[edited by] Konrad H. Kinzl": the role in the brackets a
+        // cataloguer adds when the book did not state it.
+        let part = part.trim().replacen('[', "", 1).replacen(']', "", 1);
         let part = part.trim();
         let lower = part.to_lowercase();
-        let (target, rest) = if let Some(rest) = lower.strip_prefix("edited by ") {
-            (&mut editors, &part[part.len() - rest.len()..])
-        } else if lower.starts_with("translated by ")
-            || lower.starts_with("with ")
-            || lower.starts_with("foreword by ")
-            || lower.starts_with("introduction by ")
-        {
+        let (mut role, mut rest) = (Role::Author, part);
+        for (prefix, given) in LEADING_ROLES {
+            if lower.starts_with(prefix) {
+                role = *given;
+                rest = &part[prefix.len()..];
+                break;
+            }
+        }
+        if role == Role::Skip {
             continue;
-        } else {
-            (&mut authors, part)
-        };
+        }
+        // "Alan Carr.— 2nd ed": the edition statement that follows the names.
+        let rest = EDITION_TAIL.replace(rest, "");
         for name in rest.split(" and ").flat_map(|n| n.split(',')) {
-            let name = tidy(name);
-            if name.len() >= 3 && name.split_whitespace().count() <= 5 {
-                target.push(name);
+            let mut name = tidy(name);
+            let mut this_role = role;
+            let lowered = name.to_lowercase();
+            if let Some(suffix) = TRAILING_ROLES.iter().find(|r| lowered.ends_with(*r)) {
+                name = tidy(&name[..name.len() - suffix.len()]);
+                this_role = Role::Editor;
+            }
+            // A role alone on its part names whoever came before it.
+            if name.is_empty() && this_role == Role::Editor {
+                if let Some(last) = authors.pop() {
+                    editors.push(last);
+                }
+                continue;
+            }
+            if name.split_whitespace().count() > 5 {
+                continue;
+            }
+            let Some(person) = bibclean::author::clean(&name) else {
+                continue;
+            };
+            if !reads_as_a_name(&person) {
+                continue;
+            }
+            if person.split_whitespace().count() < 2 {
+                continue;
+            }
+            match this_role {
+                Role::Editor => editors.push(person),
+                _ => authors.push(person),
             }
         }
     }
     (authors, editors)
+}
+
+/// Whether a candidate reads as a name rather than a line of a title: no
+/// little words ("Paths TO"), and no word left in capitals beside words that
+/// are not ("WISDOM’S Journey").
+pub(crate) fn reads_as_a_name(name: &str) -> bool {
+    const LITTLE: &[&str] = &[
+        "a", "an", "and", "for", "in", "of", "on", "the", "to", "with",
+    ];
+    let words: Vec<&str> = name.split_whitespace().collect();
+    if words
+        .iter()
+        .any(|w| LITTLE.contains(&w.to_lowercase().as_str()))
+    {
+        return false;
+    }
+    let shouting = |w: &&str| {
+        let letters: Vec<char> = w.chars().filter(|c| c.is_alphabetic()).collect();
+        letters.len() > 3 && letters.iter().all(|c| c.is_uppercase())
+    };
+    !(words.iter().any(shouting) && !words.iter().all(shouting))
 }
 
 fn filed_to_reading(line: &str) -> Option<String> {
@@ -271,4 +375,60 @@ pub fn read(front: &str) -> Option<Cip> {
     cip.isbns.sort();
     cip.isbns.dedup();
     if cip.is_empty() { None } else { Some(cip) }
+}
+
+#[cfg(test)]
+mod people_tests {
+    use super::people;
+
+    #[test]
+    fn role_words_are_not_people() {
+        for statement in [
+            "edited by",
+            "translated from the French",
+            "selected and",
+            "index",
+            "ISSN 0920-",
+        ] {
+            assert_eq!(people(statement), (vec![], vec![]), "{statement}");
+        }
+    }
+
+    #[test]
+    fn the_names_are_read_and_the_roles_kept() {
+        assert_eq!(
+            people("Greg Palast. p. cm"),
+            (vec!["Greg Palast".to_string()], vec![])
+        );
+        assert_eq!(
+            people("Alan Carr.— 2nd ed"),
+            (vec!["Alan Carr".to_string()], vec![])
+        );
+        assert_eq!(
+            people("[edited by] Konrad H. Kinzl"),
+            (vec![], vec!["Konrad H. Kinzl".to_string()])
+        );
+        assert_eq!(people("Paths TO"), (vec![], vec![]));
+        assert_eq!(
+            people("Irving B. Weiner, editor-in-chief"),
+            (vec![], vec!["Irving B. Weiner".to_string()])
+        );
+        assert_eq!(
+            people("edited by Stanley Hauerwas and Samuel Wells"),
+            (
+                vec![],
+                vec!["Stanley Hauerwas".to_string(), "Samuel Wells".to_string()]
+            )
+        );
+        assert_eq!(
+            people("by David W. Fischer and Alan E. Bessette ; foreword by Gary Lincoff"),
+            (
+                vec![
+                    "David W. Fischer".to_string(),
+                    "Alan E. Bessette".to_string()
+                ],
+                vec![]
+            )
+        );
+    }
 }
