@@ -66,6 +66,7 @@ impl corpus_core::Record for Verdict {
 /// Read a text's language.
 pub fn detect(path: &str, text: &str) -> Verdict {
     let sample: String = text.chars().take(SAMPLE_CHARS).collect();
+    let sample = prose(&sample);
     let (script, share) = script::detect(&sample);
 
     let mut verdict = Verdict {
@@ -135,6 +136,36 @@ pub fn detect(path: &str, text: &str) -> Verdict {
     verdict
 }
 
+/// The text without the markup that is no language: HTML comments such as
+/// page markers, and the targets of markdown links and images, whose file
+/// names and hashes read as words.
+fn prose(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    loop {
+        let comment = rest.find("<!--");
+        let target = rest.find("](");
+        let (at, open, close) = match (comment, target) {
+            (Some(c), Some(t)) if t < c => (t, 2, ")"),
+            (Some(c), _) => (c, 4, "-->"),
+            (None, Some(t)) => (t, 2, ")"),
+            (None, None) => break,
+        };
+        out.push_str(&rest[..at]);
+        out.push(' ');
+        let after = &rest[at + open..];
+        match after.find(close) {
+            Some(end) => rest = &after[end + close.len()..],
+            None => {
+                rest = "";
+                break;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 /// The one language a script is used for, where there is only one.
 fn sole_language(script: Script) -> Option<(&'static str, &'static str, &'static str)> {
     Some(match script {
@@ -178,6 +209,20 @@ mod tests {
         assert_eq!(found.bibliographic.as_deref(), Some("eng"));
         assert_eq!(found.script, "Latin");
         assert!(found.confidence > 0.0);
+    }
+
+    #[test]
+    fn page_markers_and_image_hashes_are_not_read() {
+        assert_eq!(
+            prose("one <!-- Page 7 --> two ![](asset:a1d79e0b75ad8de2) three [x](y.html) four"),
+            "one   two ![  three [x  four"
+        );
+        let hashes = "<!-- Page 7 --> ![](asset:a1d79e0b75ad8de2a5f800b2d0a8d0c9a7bac1b27df2371a4489adc4a8b631ee) ".repeat(40);
+        let found = detect(
+            "x.md",
+            &format!("{hashes} The Wall: Growing Up Behind the Iron Curtain"),
+        );
+        assert_ne!(found.language.as_deref(), Some("la"));
     }
 
     #[test]
