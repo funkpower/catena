@@ -161,6 +161,8 @@ const WEIGHTS: &[(&str, u32)] = &[
     ("edited_volume", 1),
     ("filename_title", 3),
     ("html_entity", 2),
+    ("invalid_isbn", 3),
+    ("isbn_with_label", 3),
     ("junk_title", 3),
     ("lowercase_title", 2),
     ("missing_apostrophe", 2),
@@ -171,6 +173,7 @@ const WEIGHTS: &[(&str, u32)] = &[
     ("numeric_author", 4),
     ("path_title", 4),
     ("placeholder_author", 4),
+    ("placeholder_isbn", 3),
     ("placeholder_suffix", 2),
     ("placeholder_title", 4),
     ("possible_swap", 2),
@@ -303,12 +306,11 @@ pub fn problems(title: Option<&str>, author: Option<&str>, isbn: Option<&str>) -
     if title_in_author(Some(title), Some(author)) {
         reasons.push("title_in_author");
     }
-    if isbn
-        .unwrap_or("")
-        .trim_matches(textkit::is_space)
-        .is_empty()
-    {
+    let isbn = isbn.unwrap_or("").trim_matches(textkit::is_space);
+    if isbn.is_empty() {
         reasons.push("missing_isbn");
+    } else if let Some(fault) = crate::isbn::fault(isbn) {
+        reasons.push(fault);
     }
 
     reasons.into_iter().map(str::to_string).collect()

@@ -8,7 +8,7 @@ use textkit::pattern::SPACE;
 /// An ISBN announced as one, in running text or a catalogue field.
 static ANNOUNCED: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(&format!(
-        r"(?i)ISBN[-{SPACE}:]*((?:97[89][{SPACE}-]?)?(?:[0-9][{SPACE}-]?){{9}}[0-9Xx])"
+        r"(?i)ISBN(?:[-{SPACE}]?1[03]\b)?[-{SPACE}:]*((?:97[89][{SPACE}-]?)?(?:[0-9][{SPACE}-]?){{9}}[0-9Xx])"
     ))
     .expect("a valid pattern")
 });
@@ -70,11 +70,39 @@ pub fn digits(text: &str) -> String {
         .collect()
 }
 
-/// An ISBN announced in a piece of text, if it is the right length.
+/// The first ISBN announced in a piece of text whose check digit agrees.
+///
+/// The form's own label is not part of the number: "ISBN-13 978-0-521-65706-8"
+/// is 9780521657068, never the ten digits 1397805216 that start it.
 pub fn from_text(text: &str) -> Option<String> {
-    let found = ANNOUNCED.captures(text)?;
-    let digits = digits(&found[1]);
-    matches!(digits.len(), 10 | 13).then_some(digits)
+    ANNOUNCED
+        .captures_iter(text)
+        .map(|found| digits(&found[1]))
+        .find(|digits| matches!(digits.len(), 10 | 13) && valid(digits))
+}
+
+/// What is wrong with a stored ISBN, if anything.
+///
+/// `invalid_isbn` when the check digit disagrees; `placeholder_isbn` for a
+/// run of one digit, which a publisher's template prints before the number
+/// is assigned; `isbn_with_label` for ten digits that begin `13978` or
+/// `13979`, the label of an ISBN-13 read as part of the number, cut short to
+/// ten and given a fresh check digit.
+pub fn fault(text: &str) -> Option<&'static str> {
+    let digits = digits(text);
+    if digits.is_empty() {
+        return None;
+    }
+    if digits.chars().all(|c| c == digits.as_bytes()[0] as char) {
+        return Some("placeholder_isbn");
+    }
+    if !valid(&digits) {
+        return Some("invalid_isbn");
+    }
+    if digits.len() == 10 && (digits.starts_with("13978") || digits.starts_with("13979")) {
+        return Some("isbn_with_label");
+    }
+    None
 }
 
 /// A checksum-valid ISBN embedded in a filename.
@@ -121,6 +149,40 @@ mod tests {
             Some("0198237901".to_string())
         );
         assert_eq!(from_text("no identifier here"), None);
+    }
+
+    #[test]
+    fn the_label_of_an_isbn_13_is_not_part_of_it() {
+        assert_eq!(
+            from_text("ISBN-13 978-0-521-65706-8 paperback"),
+            Some("9780521657068".to_string())
+        );
+        assert_eq!(
+            from_text("ISBN 13: 9780521657068"),
+            Some("9780521657068".to_string())
+        );
+        assert_eq!(
+            from_text("ISBN-10: 0-521-52888-7 (pbk.)"),
+            Some("0521528887".to_string())
+        );
+    }
+
+    #[test]
+    fn a_number_with_a_wrong_check_digit_gives_way_to_the_next() {
+        assert_eq!(
+            from_text("ISBN 0-19-823790-2 ISBN 0-19-823790-1"),
+            Some("0198237901".to_string())
+        );
+    }
+
+    #[test]
+    fn a_stored_isbn_that_cannot_be_right_is_named() {
+        assert_eq!(fault("9780198237907"), None);
+        assert_eq!(fault("0198237902"), Some("invalid_isbn"));
+        assert_eq!(fault("0000000000000"), Some("placeholder_isbn"));
+        assert_eq!(fault("000-0-000-00000-0"), Some("placeholder_isbn"));
+        assert_eq!(fault("1397805218"), Some("isbn_with_label"));
+        assert_eq!(fault(""), None);
     }
 
     #[test]
