@@ -98,6 +98,17 @@ with its thirty commonest function words. The score is the share of a text's
 words found in each list, and the lists are the same length so the scores
 compare.
 
+**Markup is not language.** HTML comments such as page markers, and the
+targets of markdown links and images, are left out before anything is
+counted: an image named by a hash reads as a run of two-letter words.
+
+**Letter-spaced type is read by its whole words.** A scan of type set
+letter-spaced comes out of OCR as "w i t h" and "n o t". Single letters are
+not words of any language, but "a", "e", "o" and "y" are among the commonest
+words of several, so when more than a quarter of the words are single letters
+they are left out. If what remains is mostly one- and two-letter fragments, as
+text decoded with the wrong font table is, there is no answer.
+
 **A close call is no answer.** The winner must be a quarter ahead of the
 runner-up. `de` is among the commonest words of four languages at once, and on
 its own settles none of them — so a text that short comes back with the script

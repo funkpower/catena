@@ -215,7 +215,26 @@ pub const MARGIN: f64 = 1.25;
 /// commonest. It is comparable across languages because each list is the same
 /// length.
 pub fn score(text: &str, script: Script) -> Vec<(&'static Language, f64)> {
-    let words = tokens(text);
+    let mut words = tokens(text);
+    // Scanned type set letter-spaced comes out of OCR as "w i t h" and
+    // "n o t": the letters are not words of any language, but "a", "e", "o"
+    // and "y" are among the commonest words of several, which hands the text
+    // to whichever has most of them. Ordinary prose is a few percent single
+    // letters; past a quarter they are spacing and are left out.
+    let singles = words
+        .iter()
+        .filter(|word| word.chars().count() == 1)
+        .count();
+    if singles * 4 > words.len() {
+        words.retain(|word| word.chars().count() > 1);
+        // Most of what is left of real prose has three letters or more;
+        // text decoded with the wrong font table leaves mostly pairs like
+        // "gf" and "hg", which are no language however they score.
+        let long = words.iter().filter(|word| word.chars().count() > 2).count();
+        if long * 2 < words.len() {
+            words.clear();
+        }
+    }
     if words.is_empty() {
         return Vec::new();
     }
@@ -292,6 +311,24 @@ mod tests {
         ] {
             assert_eq!(best(text, Script::Latin), Some(code), "{text}");
         }
+    }
+
+    #[test]
+    fn letter_spaced_scanning_is_read_by_its_whole_words() {
+        let text = "charges. Smith said the young man's family was grateful to h i m \
+            for guidance he gave. Smith always managed to get o u t o f bad situations. \
+            But he could n o t stop his body clock. I felt m o r e at ease after the crises w i t h \
+            work passed, and Smith continued working. I t d i d n o t occur to me that he had \
+            come to therapy to die. He seemed to be battling f o r life. T o me, Smith seemed";
+        assert_eq!(best(text, Script::Latin), Some("en"));
+    }
+
+    #[test]
+    fn a_wrongly_decoded_font_is_no_language() {
+        let text = "9G::99$>9$4?FH>6$H3:999$3$ 9H:>>:@>6 >6@30?>6$F9B$3@9$64$H34G:@9 3W:@$;64$0>@5$9@36$ \
+            3:99$;64$0>@5$9@36$;H59>9$6$ 3XG>3;6@$@$;6>@3$:6@3:@3 4>FG$64$W>6@$H37F;$9F gf hg ab fa ff ge ea \
+            ABCDEBFGHFAIJKFLEMNCEOFPJQMEKREFASFPHKKFTMSOFJKBFUVMCWDXYVEMFZXNNCDD page ba aa cb";
+        assert_eq!(best(text, Script::Latin), None);
     }
 
     #[test]
