@@ -372,6 +372,18 @@ count against a heading, and spaced initials count for one.
 A respelling is trusted further than an inversion: `strict_norm` at 0.95,
 `last_first` at 0.9, a publisher family at 0.8, a junk subject at 0.92.
 
+Authors left standing after that are matched once more, as fuller forms of
+one another (`fuller_form`): "G. W. F. Hegel" and "Georg Wilhelm Friedrich
+Hegel", "Murray Rothbard" and "Murray N. Rothbard". The surname and the first
+given name must agree, written out or as an initial, and every other given
+name of the shorter heading must appear in the longer one in order. A heading
+that fits two longer ones which do not fit each other — "David Smith" beside
+"David Livingstone Smith" and "David Woodruff Smith" — could be either person,
+and the set is left alone. The heading kept is the one most works are under,
+so fifty books by "Bertrand Russell" do not move to "B. Russell". Two people
+can share a first name and a surname, so these are for a person to check:
+0.8 when the shorter heading is two or more initials, 0.6 when it is a name.
+
 ## Abstracts that arrived inside out
 
 Some catalogues publish an abstract as an inverted index — each word mapped to
