@@ -18,13 +18,19 @@
 //! numbered, so filing one under a numbered series makes every one of them
 //! display as volume one, asserting an order the data does not have. Those
 //! get a series and no number.
+//!
+//! A **numbered title** — "Known Space-038-The Soft Weapon" — is a position
+//! written the way a filename writes it, series and number in front. It
+//! gives the series, the number, and the title with both taken off.
 
+pub mod numbered;
 pub mod publisher;
 pub mod volume;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+pub use numbered::parse_numbered;
 pub use publisher::publisher_series;
 pub use volume::{parse_volume, roman_or_int};
 
@@ -60,6 +66,9 @@ pub enum Method {
     Volume,
     /// Publisher shorthand in a parenthetical: membership, not position.
     Publisher,
+    /// A series and a number written in front of the title, filename
+    /// fashion: a position, and the title without them.
+    Numbered,
 }
 
 fn version() -> u32 {
@@ -74,9 +83,25 @@ impl corpus_core::Record for Proposal {
 
 /// What a title and author say about the series, if anything.
 ///
-/// The volume marker is looked for first: it carries a number, and a number
-/// is worth more than membership.
+/// A numbered title is looked for first, then a volume marker: both carry a
+/// number, and a number is worth more than membership.
 pub fn series_of(title: &str, author: Option<&str>) -> Option<Proposal> {
+    // A numbered title first: "Known Space-017-The Ethics of Madness (Part
+    // 1)" is the seventeenth of Known Space, and the "Part 1" after it is the
+    // story's own business, not a series called "Known Space-017-The Ethics
+    // of Madness".
+    if let Some((series, volume, rest)) = parse_numbered(title) {
+        return Some(Proposal {
+            v: corpus_core::V,
+            title: title.to_string(),
+            author: author.map(str::to_string),
+            series,
+            volume: Some(volume),
+            proposed_title: Some(rest),
+            method: Method::Numbered,
+        });
+    }
+
     if let Some((series, volume)) = parse_volume(title) {
         return Some(Proposal {
             v: corpus_core::V,
@@ -130,6 +155,19 @@ mod tests {
         let found = series_of("Aquinas (Companion) Vol 2", Some("Cambridge")).expect("a series");
         assert_eq!(found.method, Method::Volume);
         assert_eq!(found.volume, Some(2));
+    }
+
+    #[test]
+    fn a_numbered_title_wins_over_a_part_inside_it() {
+        let found =
+            series_of("Known Space-017-The Ethics of Madness (Part 1)", None).expect("a series");
+        assert_eq!(found.series, "Known Space");
+        assert_eq!(found.volume, Some(17));
+        assert_eq!(found.method, Method::Numbered);
+        assert_eq!(
+            found.proposed_title.as_deref(),
+            Some("The Ethics of Madness (Part 1)")
+        );
     }
 
     #[test]

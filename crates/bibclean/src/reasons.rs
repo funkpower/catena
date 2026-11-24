@@ -166,6 +166,7 @@ const WEIGHTS: &[(&str, u32)] = &[
     ("mojibake_author", 3),
     ("mojibake_title", 3),
     ("name_in_title", 2),
+    ("numbered_title", 1),
     ("numeric_author", 4),
     ("path_title", 4),
     ("placeholder_author", 4),
@@ -173,6 +174,7 @@ const WEIGHTS: &[(&str, u32)] = &[
     ("placeholder_title", 4),
     ("possible_swap", 2),
     ("publisher_as_author", 3),
+    ("release_tags", 1),
     ("sentence_case_title", 1),
     ("title_in_author", 3),
     ("underscore_title", 1),
@@ -206,6 +208,12 @@ pub fn problems(title: Option<&str>, author: Option<&str>, isbn: Option<&str>) -
     }
     if URL_TITLE.is_match(title) {
         reasons.push("url_title");
+    }
+    if crate::fix::strip_leading_number(title).is_some() {
+        reasons.push("numbered_title");
+    }
+    if crate::fix::strip_release_tags(title).is_some() {
+        reasons.push("release_tags");
     }
     if FILENAME_TITLE.is_match(title) {
         reasons.push("filename_title");

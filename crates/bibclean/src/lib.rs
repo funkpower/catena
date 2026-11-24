@@ -161,10 +161,15 @@ pub fn clean(book: &Book) -> Cleaned {
     // name in front, then the extension, which a filename writes after the
     // placeholder author ("Title - Unknown.pdf"), then that author.
     type Strip = fn(&str) -> Option<String>;
-    let wrappers: [(Strip, &str); 3] = [
+    fn strip_number(title: &str) -> Option<String> {
+        fix::strip_leading_number(title).map(|(_, rest)| rest)
+    }
+    let wrappers: [(Strip, &str); 5] = [
         (fix::strip_producer, "junk_title"),
         (fix::strip_extension, "filename_title"),
         (fix::strip_placeholder_suffix, "placeholder_suffix"),
+        (fix::strip_release_tags, "release_tags"),
+        (strip_number, "numbered_title"),
     ];
     for (strip, why) in wrappers {
         if let Some(title) = cleaned.title.clone()
@@ -499,6 +504,45 @@ mod tests {
                 cleaned.reasons.iter().any(|reason| reason == "url_title"),
                 "{title}"
             );
+        }
+    }
+
+    #[test]
+    fn a_counted_title_and_release_tags_come_off() {
+        for (title, want, why) in [
+            (
+                "01 - The Three Musketeers",
+                "The Three Musketeers",
+                "numbered_title",
+            ),
+            (
+                "06 - The Man in the Iron Mask",
+                "The Man in the Iron Mask",
+                "numbered_title",
+            ),
+            (
+                "A Clash of Kings (BD) (v4 0) (lit)",
+                "A Clash of Kings",
+                "release_tags",
+            ),
+            (
+                "Orpheus and the Roots of Platonism (no OCR)",
+                "Orpheus and the Roots of Platonism",
+                "release_tags",
+            ),
+        ] {
+            let cleaned = clean(&book(title, "Someone Else"));
+            assert_eq!(cleaned.book.title.as_deref(), Some(want), "{title}");
+            assert!(whys(&cleaned).contains(&why), "{title}");
+        }
+        for title in [
+            "911 - Decent into Tyranny",
+            "2003 - Uprising! The Hungarian Revolution of 1956",
+            "1984",
+            "The Book of Lit",
+        ] {
+            let cleaned = clean(&book(title, "Someone Else"));
+            assert_eq!(cleaned.book.title.as_deref(), Some(title), "{title}");
         }
     }
 
