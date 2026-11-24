@@ -320,6 +320,12 @@ fn people(who: &str) -> Vec<String> {
         .flat_map(|part| part.split(" and "))
         .map(|name| name.trim().trim_end_matches(['.', ',']).trim().to_string())
         .filter(|name| name.len() >= 3 && name.split_whitespace().count() <= 5)
+        // "A Novel", "A History": an article opens a line of the title, and
+        // would otherwise be read as the initial A.
+        .filter(|name| {
+            let first = name.split_whitespace().next().unwrap_or("");
+            !["a", "an", "the"].contains(&first.to_lowercase().as_str())
+        })
         .filter_map(|name| bibclean::author::clean(&name))
         .filter(|name| crate::cip::reads_as_a_name(name))
         .filter(|name| name.split_whitespace().count() >= 2 || is_known_mononym(name))
@@ -667,6 +673,13 @@ mod person_tests {
         for line in ["A SCIENTIFIC Book", "A Bradford Book", "An Owl Book"] {
             assert!(!could_be_a_person(line), "{line}");
         }
+    }
+
+    #[test]
+    fn a_line_opening_on_an_article_names_nobody() {
+        assert!(people("A Novel").is_empty());
+        assert!(people("A Psychoanalytic View").is_empty());
+        assert_eq!(people("A. J. Ayer"), ["A. J. Ayer"]);
     }
 
     #[test]
