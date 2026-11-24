@@ -198,6 +198,7 @@ bibclean books.ndjson | jq -c 'select(.slug_proposal.tier | IN("placeholder-auth
 | `publisher_as_author` | 3 | An imprint in the author field |
 | `title_in_author` | 3 | The title is a placeholder and the real title is in the author field |
 | `allcaps_title` | 2 | Shouting |
+| `allcaps_author` | 2 | The same, in the author field: "STEVEN BOX" |
 | `lowercase_title` | 2 | A filename stub: "heidegger areopagite" |
 | `missing_apostrophe` | 2 | "Lossky s Argument" |
 | `possible_swap` | 2 | Title and author look to be the wrong way round |
@@ -224,7 +225,7 @@ an author field is wrong while "Oxford, Michael" is a person.
 | `junk_title` | "Microsoft Word - " and the like come off the front |
 | `filename_title` | A document extension comes off the end |
 | `placeholder_suffix` | The "- Unknown" comes off the end |
-| `author_role_suffix`, `author_list_commas` | The heading put as a byline: dates, roles and fuller forms off, each name given names first, the names joined with "&". A field that is only "Surname, Given" is left alone, since some catalogues keep that order on purpose; `bibclean::heading::as_byline` turns it round for a caller that wants bylines |
+| `author_role_suffix`, `author_list_commas`, `allcaps_author` | The heading put as a byline: dates, roles and fuller forms off, each name given names first, the names joined with "&". A field that is only "Surname, Given" is left alone, since some catalogues keep that order on purpose; `bibclean::heading::as_byline` turns it round for a caller that wants bylines |
 | `title_punctuation` | Set as a title page sets it; a full stop after an initial or abbreviation stays |
 | `numbered_title`, `release_tags` | The number comes off the front, the tags off the end. A series named in front as well ("Known Space-038-…") is `seriesof`'s, which keeps the series |
 | `name_in_title` | The names come off the front, and the publisher, year and series off the end; the names are proposed as the author. Made only when the record has no real author, or already has the same one |
