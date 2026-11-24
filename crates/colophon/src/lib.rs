@@ -232,7 +232,10 @@ fn longest_printing<'a>(pages: &'a [page::Page], title: &str) -> Option<&'a str>
         .flat_map(|p| p.lines.iter())
         .filter(|line| {
             let candidate = squash(line);
-            candidate.starts_with(&wanted) && candidate.len() > wanted.len()
+            candidate.starts_with(&wanted)
+                && candidate.len() > wanted.len()
+                && !title::is_furniture(line)
+                && !title::is_structural(line)
         })
         .min_by_key(|line| line.len())
         .map(String::as_str)
