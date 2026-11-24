@@ -177,6 +177,7 @@ bibclean books.ndjson | jq -c 'select(.slug_proposal.tier | IN("placeholder-auth
 |---|---|---|
 | `placeholder_title` | 4 | The whole title is "Untitled", "Document", "N/A" |
 | `placeholder_author` | 4 | The same, in the author field |
+| `html_entity` | 2 | An HTML character reference in the title or author: "Master &amp; Apprentice" |
 | `mojibake_title` | 3 | UTF-8 read as Windows-1252: "amÃ©ricain" |
 | `mojibake_author` | 3 | The same, in the author field |
 | `placeholder_suffix` | 2 | A placeholder author left on the end of the title: "… - Unknown" |
@@ -214,6 +215,7 @@ an author field is wrong while "Oxford, Michael" is a person.
 | `underscore_title` | A trailing format name comes off, an underscore before a subtitle becomes a colon, the rest become spaces |
 | `allcaps_title` | Title-cased, keeping small words small, hyphenated parts cased on both sides, and accented first letters capitalised rather than skipped |
 | `missing_isbn` | Filled from the filename, if a checksum-valid ISBN is in it |
+| `html_entity` | Decoded: the named references a catalogue meets, and every numeric one |
 | `mojibake_title`, `mojibake_author` | Read again as the UTF-8 it was, when every character makes the trip back |
 | `junk_title` | "Microsoft Word - " and the like come off the front |
 | `filename_title` | A document extension comes off the end |

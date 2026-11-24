@@ -220,6 +220,45 @@ pub fn strip_release_tags(title: &str) -> Option<String> {
     worth_keeping(title, &title[..found.start()])
 }
 
+/// HTML character references a web page left in a field: "Master &amp;
+/// Apprentice". The named ones a catalogue meets, and every numeric one.
+pub fn decode_entities(text: &str) -> Option<String> {
+    static ENTITY: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([a-zA-Z]{2,8}));")
+            .expect("a valid pattern")
+    });
+    if !ENTITY.is_match(text) {
+        return None;
+    }
+    let decoded = ENTITY.replace_all(text, |caps: &regex::Captures| {
+        let found = if let Some(n) = caps.get(1) {
+            n.as_str().parse::<u32>().ok().and_then(char::from_u32)
+        } else if let Some(h) = caps.get(2) {
+            u32::from_str_radix(h.as_str(), 16)
+                .ok()
+                .and_then(char::from_u32)
+        } else {
+            match &caps[3] {
+                "amp" => Some('&'),
+                "lt" => Some('<'),
+                "gt" => Some('>'),
+                "quot" => Some('"'),
+                "apos" => Some('\''),
+                "nbsp" => Some(' '),
+                "ndash" => Some('–'),
+                "mdash" => Some('—'),
+                "rsquo" => Some('’'),
+                "lsquo" => Some('‘'),
+                "rdquo" => Some('”'),
+                "ldquo" => Some('“'),
+                _ => None,
+            }
+        };
+        found.map_or_else(|| caps[0].to_string(), |c| c.to_string())
+    });
+    (decoded != text).then(|| decoded.into_owned())
+}
+
 /// The stripped title, if it is a different title and still a title.
 fn worth_keeping(original: &str, stripped: &str) -> Option<String> {
     let stripped = stripped
