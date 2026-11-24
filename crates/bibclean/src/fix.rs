@@ -184,6 +184,42 @@ pub fn strip_name_prefix(title: &str) -> Option<String> {
     worth_keeping(title, &rest)
 }
 
+/// "01 - The Three Musketeers": a number in front of the title, where a
+/// filename counted the volumes of a set without naming it.
+static LEADING_NUMBER: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!(
+        r"^{SPACE}*(\d{{1,3}}){SPACE}*[-–—.]{SPACE}+(\p{{Lu}}.*)$"
+    ))
+    .expect("a valid pattern")
+});
+
+/// The tags a release group puts after a title: "(v4 0)", "(lit)", "(BD)".
+static RELEASE_TAGS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!(
+        r"(?i)(?:{SPACE}*\((?:v{SPACE}?\d+(?:[ ._]\d+)*|lit|html?|rtf|txt|pdb|bd|retail|scan(?:,{SPACE}*ocr)?|no{SPACE}ocr|ocr)\))+{SPACE}*$"
+    ))
+    .expect("a valid pattern")
+});
+
+/// The number a set put in front of the title, and the title without it.
+///
+/// Only a small number: "911 - Decent into Tyranny" is a date, not volume
+/// nine hundred and eleven, and a year in front ("2003 - …") is the year.
+pub fn strip_leading_number(title: &str) -> Option<(u32, String)> {
+    let found = LEADING_NUMBER.captures(title)?;
+    let number: u32 = found[1].parse().ok()?;
+    if number > 200 {
+        return None;
+    }
+    worth_keeping(title, &found[2]).map(|rest| (number, rest))
+}
+
+/// A title without the tags a release group put after it.
+pub fn strip_release_tags(title: &str) -> Option<String> {
+    let found = RELEASE_TAGS.find(title)?;
+    worth_keeping(title, &title[..found.start()])
+}
+
 /// The stripped title, if it is a different title and still a title.
 fn worth_keeping(original: &str, stripped: &str) -> Option<String> {
     let stripped = stripped
