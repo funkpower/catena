@@ -154,6 +154,45 @@ impl Printed {
     }
 }
 
+/// "Volume II", "vol. 2", "Part Three": the number of the volume a text names.
+fn volume_of(text: &str) -> Option<u32> {
+    static VOLUME: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(
+            r"(?i)\b(?:vol(?:ume)?|part|book|tome|band)\.?\s*([0-9]{1,2}|[ivxlc]{1,6}|one|two|three|four|five|six|seven|eight|nine|ten)\b",
+        )
+        .expect("a valid pattern")
+    });
+    let word = VOLUME.captures(text)?.get(1)?.as_str().to_lowercase();
+    if let Ok(n) = word.parse() {
+        return Some(n);
+    }
+    let words = [
+        "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    ];
+    if let Some(at) = words.iter().position(|w| *w == word) {
+        return u32::try_from(at + 1).ok();
+    }
+    let mut total = 0u32;
+    let mut last = 0u32;
+    for c in word.chars().rev() {
+        let value = match c {
+            'i' => 1,
+            'v' => 5,
+            'x' => 10,
+            'l' => 50,
+            'c' => 100,
+            _ => return None,
+        };
+        if value < last {
+            total = total.checked_sub(value)?;
+        } else {
+            total += value;
+            last = value;
+        }
+    }
+    (total > 0).then_some(total)
+}
+
 /// Which page holds the title, given where the copyright page is.
 ///
 /// The title page is the last page before the copyright page that is a page
@@ -325,13 +364,44 @@ pub fn read(text: &str, budget: usize) -> Printed {
 
     let imprint_text = copyright.map_or(front.as_str(), |i| pages[i].text.as_str());
     let stated = imprint::read(imprint_text);
-    for isbn in stated.isbns {
-        if !out.isbns.contains(&isbn) {
-            out.isbns.push(isbn);
+    // ISBNs are ranked over the whole front matter, not the one page taken
+    // for the copyright page: a page listing the series' other titles is
+    // full of ISBNs and is taken for it, and on that page alone every ISBN
+    // is printed once.
+    let ranked = imprint::read(&front);
+    for isbn in &ranked.isbns {
+        if !out.isbns.contains(isbn) {
+            out.isbns.push(isbn.clone());
             out.read_from
                 .entry("isbns".into())
                 .or_insert(Source::CopyrightPage);
         }
+    }
+    // The page's own ranking, most often printed first, wins over the
+    // cataloguing block's, which is only sorted.
+    out.isbns.sort_by_key(|isbn| {
+        ranked
+            .isbns
+            .iter()
+            .position(|seen| seen == isbn)
+            .unwrap_or(usize::MAX)
+    });
+    // A set prints every volume's ISBN in every volume. The one whose note
+    // names this book's volume is this book's.
+    let heading = format!(
+        "{} {}",
+        out.title.as_deref().unwrap_or(""),
+        out.subtitle.as_deref().unwrap_or("")
+    );
+    if let Some(volume) = volume_of(&heading)
+        && let Some((isbn, _)) = ranked
+            .notes
+            .iter()
+            .find(|(_, note)| volume_of(note) == Some(volume))
+        && let Some(at) = out.isbns.iter().position(|held| held == isbn)
+    {
+        let isbn = out.isbns.remove(at);
+        out.isbns.insert(0, isbn);
     }
     if let Some(publisher) = stated.publisher {
         out.publisher = Some(publisher);
@@ -359,4 +429,21 @@ pub fn read(text: &str, budget: usize) -> Printed {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod volume_tests {
+    use super::volume_of;
+
+    #[test]
+    fn volume_numbers_are_read() {
+        assert_eq!(
+            volume_of("On Difficulties in the Church Fathers: The Ambigua, Volume II"),
+            Some(2)
+        );
+        assert_eq!(volume_of("vol. 2, doml 29: alk. paper"), Some(2));
+        assert_eq!(volume_of("Part Three"), Some(3));
+        assert_eq!(volume_of("Book XIV"), Some(14));
+        assert_eq!(volume_of("The Book of Disquiet"), None);
+    }
 }
