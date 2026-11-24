@@ -286,31 +286,22 @@ pub fn pick_canonical(kind: Kind, group: &[Item]) -> Item {
         .expect("a group is never empty")
 }
 
-fn score(kind: Kind, item: &Item) -> (i64, usize) {
+fn score(kind: Kind, item: &Item) -> (i64, i64, usize) {
     let name = &item.name;
+    // An author group is one person under several spellings, so the best
+    // spelling should win however few books carry it: the commonest spelling
+    // in a catalogue built from downloads is often the worst one, and keeping
+    // it spreads it over every book in the group.
+    if kind == Kind::Author {
+        return (author_form(name), item.count, name.chars().count());
+    }
     let mut score = item.count * 10;
 
     if is_shouting(name) && name.contains(' ') {
         score -= 6;
     }
     match kind {
-        Kind::Author => {
-            if name.contains(',') || name.contains('|') {
-                score -= 8;
-            }
-            if name
-                .trim_end_matches(textkit::is_space)
-                .ends_with([';', '|', ','])
-            {
-                score -= 10;
-            }
-            if INITIALS_TOGETHER.is_match(name) {
-                score -= 1;
-            }
-            if INITIALS_SPACED.is_match(name) {
-                score += 3;
-            }
-        }
+        Kind::Author => {}
         Kind::Publisher => {
             if LEGAL_SUFFIX.is_match(name).unwrap_or(false) {
                 score -= 4;
@@ -328,7 +319,56 @@ fn score(kind: Kind, item: &Item) -> (i64, usize) {
             }
         }
     }
-    (score, name.chars().count())
+    (score, 0, name.chars().count())
+}
+
+/// How well an author heading is written, independent of how many books
+/// carry it. Faults that make it wrong as a byline cost far more than the
+/// preferences that only make it better.
+fn author_form(name: &str) -> i64 {
+    let mut form = 0;
+    let trimmed = name.trim_end_matches(textkit::is_space);
+    // Turned round, unless what follows the comma is part of the name:
+    // "Copleston, S.J." is a byline; "Copleston, Frederick" is a card.
+    if let Some((_, after)) = trimmed.split_once(',')
+        && !crate::heading::is_suffix(after)
+    {
+        form -= 100;
+    }
+    if name.contains('|') || trimmed.ends_with([';', '|', ',']) {
+        form -= 100;
+    }
+    if name.contains('(') || name.contains(')') {
+        form -= 100;
+    }
+    if is_shouting(name) && name.contains(' ') {
+        form -= 100;
+    }
+    // A suffix in front: "S.J. Frederick Copleston".
+    if name
+        .split_whitespace()
+        .next()
+        .is_some_and(crate::heading::is_suffix)
+    {
+        form -= 100;
+    }
+    // A full stop on a whole word, or one standing alone: "Plato.",
+    // "Fyodor. Dostoyevsky", "Wouter J. . Hanegraaff".
+    if name.split_whitespace().any(|word| {
+        word == "."
+            || (word.ends_with('.')
+                && word.trim_end_matches('.').chars().count() > 1
+                && !crate::heading::is_suffix(word))
+    }) {
+        form -= 10;
+    }
+    if INITIALS_TOGETHER.is_match(name) {
+        form -= 2;
+    }
+    if INITIALS_SPACED.is_match(name) {
+        form += 2;
+    }
+    form
 }
 
 /// Whether a heading is in capitals throughout, by Python's reading: at least
@@ -711,6 +751,21 @@ mod tests {
             proposals.iter().all(|p| p.method == "last_first"),
             "{proposals:#?}"
         );
+    }
+
+    #[test]
+    fn a_broken_spelling_loses_to_a_byline_however_common() {
+        for (bad, good) in [
+            ("Saint Thomas (aquinas)", "Saint Thomas Aquinas"),
+            ("S.J. Frederick Copleston", "Frederick Copleston, S.J."),
+            ("Fyodor. Dostoyevsky", "Fyodor Dostoyevsky"),
+            ("G.W.F. Hegel", "G. W. F. Hegel"),
+        ] {
+            let items = [item(1, bad, 9), item(2, good, 1)];
+            let proposals = cluster(Kind::Author, &items, &Rules::default());
+            assert_eq!(proposals.len(), 1, "{bad}");
+            assert_eq!(proposals[0].keep.as_deref(), Some(good), "{bad}");
+        }
     }
 
     #[test]

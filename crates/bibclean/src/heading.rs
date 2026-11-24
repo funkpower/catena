@@ -282,7 +282,7 @@ fn ends_in_initial(text: &str) -> bool {
         .is_some_and(|last| last.trim_end_matches('.').chars().count() == 1)
 }
 
-fn is_suffix(text: &str) -> bool {
+pub(crate) fn is_suffix(text: &str) -> bool {
     // "Md/phd": degrees run together.
     text.split('/').all(|part| {
         SUFFIXES.contains(
