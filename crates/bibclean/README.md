@@ -99,9 +99,9 @@ through this and back into whatever it came from.
 ## Recovering a missing author
 
 A book says who wrote it on its own copyright page. Hand in the opening pages
-as `front_matter` and a record whose author is missing, a placeholder, or the title copied into the
-field gets a name proposed,
-with the evidence and how far it is worth trusting:
+as `front_matter` and a record whose author is missing, a placeholder, a login,
+or the title copied into the field gets a name proposed, with the evidence and
+how far it is worth trusting:
 
 ```
 $ bibclean authors.ndjson
@@ -185,6 +185,7 @@ bibclean books.ndjson | jq -c 'select(.slug_proposal.tier | IN("placeholder-auth
 | `filename_title` | 3 | A bare filename, extension and all |
 | `junk_title` | 3 | The name of the tool that made the file, not the work |
 | `author_is_title` | 4 | The title copied into the author field |
+| `account_author` | 3 | The login of whoever made the file: "mymarasigan", "HP_Administrator" |
 | `publisher_as_author` | 3 | An imprint in the author field |
 | `title_in_author` | 3 | The title is a placeholder and the real title is in the author field |
 | `allcaps_title` | 2 | Shouting |

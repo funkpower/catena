@@ -238,7 +238,7 @@ pub fn clean(book: &Book) -> Cleaned {
     };
 
     // Only for a record that has no real author to overwrite: none, a
-    // placeholder, or the title copied into the field. A name recovered from
+    // placeholder, the title copied into the field, or a login. A name recovered from
     // the text is evidence, not an improvement on one somebody entered.
     let author_proposal = reasons
         .iter()
@@ -246,6 +246,7 @@ pub fn clean(book: &Book) -> Cleaned {
             reason == "unknown_author"
                 || reason == "placeholder_author"
                 || reason == "author_is_title"
+                || reason == "account_author"
         })
         .then(|| {
             author::best(

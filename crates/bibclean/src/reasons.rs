@@ -148,6 +148,7 @@ const PERSON_SUFFIXES: &[&str] = &["ed", "eds", "ii", "iii", "iv", "jr", "md", "
 
 /// What each fault is worth when the worst records are wanted first.
 const WEIGHTS: &[(&str, u32)] = &[
+    ("account_author", 3),
     ("allcaps_title", 2),
     ("author_is_title", 4),
     ("author_last_first", 1),
@@ -249,6 +250,9 @@ pub fn problems(title: Option<&str>, author: Option<&str>, isbn: Option<&str>) -
     {
         reasons.push("possible_swap");
     }
+    if is_account_name(author) {
+        reasons.push("account_author");
+    }
     if author_is_title(title, author) {
         reasons.push("author_is_title");
     }
@@ -303,6 +307,33 @@ pub fn author_is_title(title: &str, author: &str) -> bool {
         return true;
     }
     folded == fold(title.split([':', '(']).next().unwrap_or("")) && !looks_like_person(bare_author)
+}
+
+/// Whether the author field is the login of whoever made the file:
+/// "mymarasigan", "HP_Administrator", "SaravanakumarCS", "user42".
+///
+/// One word, and a shape no published name has: all lowercase, an underscore,
+/// digits among letters, or capitals run on after lowercase. A capitalised
+/// single name ("Plato", "Voltaire") is a name and is left alone.
+pub fn is_account_name(author: &str) -> bool {
+    let author = author.trim_matches(textkit::is_space);
+    if author.chars().count() < 4 || author.chars().any(textkit::is_space) {
+        return false;
+    }
+    if !author.chars().any(char::is_alphabetic) {
+        return false;
+    }
+    let lowercase = author
+        .chars()
+        .all(|c| c.is_lowercase() || c.is_ascii_digit() || c == '.');
+    let underscored = author.contains('_');
+    let digits = author.chars().any(|c| c.is_ascii_digit());
+    let run_on_capitals = author
+        .chars()
+        .collect::<Vec<_>>()
+        .windows(3)
+        .any(|w| w[0].is_lowercase() && w[1].is_uppercase() && w[2].is_uppercase());
+    lowercase || underscored || digits || run_on_capitals
 }
 
 /// Lowercase words, punctuation dropped.
@@ -418,6 +449,42 @@ fn is_publisher(author: &str) -> bool {
     PUBLISHER_AUTHORS
         .binary_search(&normalise(author).as_str())
         .is_ok()
+}
+
+#[cfg(test)]
+mod account_name_tests {
+    use super::*;
+
+    #[test]
+    fn a_login_is_named() {
+        for author in [
+            "mymarasigan",
+            "HP_Administrator",
+            "SaravanakumarCS",
+            "user42",
+            "pubassist",
+            "vitzliputzli",
+        ] {
+            assert!(is_account_name(author), "{author}");
+        }
+    }
+
+    #[test]
+    fn a_name_is_not() {
+        for author in [
+            "Plato",
+            "Voltaire",
+            "Hannah Arendt",
+            "bell hooks",
+            "McLuhan",
+            "DeLillo",
+            "Joe",
+            "",
+            "Anonymous",
+        ] {
+            assert!(!is_account_name(author), "{author}");
+        }
+    }
 }
 
 #[cfg(test)]
